@@ -28,6 +28,8 @@ This is an academic decision-support tool. It does **not** perform CFD, certifie
 - Interactive 3D IFC screening view using uploaded-file geometry, connections and exits.
 - Interactive top-down IFC diagram with colored footprints, routes and exit markers.
 - Clearly labelled 3D scenario schematics for demo fire and worst-case workflows.
+- Working scenario inspection workspace with highlighted route diagram, practical
+  readiness checklist, evidence display and per-scenario download.
 - Regulation-oriented NLP/RAG workflow using spaCy, FAISS and SentenceTransformers.
 - Evacuation scenario generation with distance, time, confidence, compliance and risk.
 - Explainability panel for traceable AI reasoning.
@@ -158,6 +160,12 @@ The completed local multi-IFC audit is documented in:
 
 ```text
 docs/local_ifc_validation.md
+```
+
+The practical feature benchmark and researched future-work boundary is documented in:
+
+```text
+docs/practical_benchmark.md
 ```
 
 Then use the sidebar pages:
