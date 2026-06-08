@@ -38,18 +38,96 @@ def _space_centers(building: Any) -> Dict[str, Tuple[float, float, float]]:
     return centers
 
 
+def _element_color(space: Any) -> str:
+    """Choose a readable color from semantic type or IFC class in the name."""
+    name = space.name.lower()
+    if "stair" in name or space.space_type == "stair":
+        return "#8e24aa"
+    if "wall" in name:
+        return "#546e7a"
+    if "slab" in name:
+        return "#42a5f5"
+    if "corridor" in name or space.space_type == "corridor":
+        return "#00acc1"
+    if "proxy" in name or space.space_type == "structural_proxy":
+        return "#78909c"
+    return "#1976d2"
+
+
+def create_ifc_plan_figure(building: Any) -> go.Figure:
+    """Render a high-contrast top-down IFC footprint and egress diagram."""
+    figure = go.Figure()
+    centers = _space_centers(building)
+
+    for space_id, space in building.spaces.items():
+        if not space.bounding_box:
+            continue
+        minimum, maximum = space.bounding_box
+        color = _element_color(space)
+        figure.add_trace(go.Scatter(
+            x=[minimum.x, maximum.x, maximum.x, minimum.x, minimum.x],
+            y=[minimum.y, minimum.y, maximum.y, maximum.y, minimum.y],
+            mode="lines",
+            fill="toself",
+            fillcolor=color,
+            opacity=0.48,
+            line=dict(color=color, width=2),
+            text=(
+                f"{space.name}<br>Type: {space.space_type}<br>"
+                f"Area: {space.area:.1f} m²<br>Elevation: {minimum.z:.2f}–{maximum.z:.2f}"
+            ),
+            hoverinfo="text",
+            name=space.name,
+            showlegend=False,
+        ))
+
+    connection_x, connection_y = [], []
+    for door in building.doors.values():
+        linked = [centers[item] for item in door.connected_spaces if item in centers]
+        if len(linked) == 1:
+            linked.append((door.location.x, door.location.y, door.location.z))
+        for first, second in zip(linked, linked[1:]):
+            connection_x.extend([first[0], second[0], None])
+            connection_y.extend([first[1], second[1], None])
+    if connection_x:
+        figure.add_trace(go.Scatter(
+            x=connection_x,
+            y=connection_y,
+            mode="lines",
+            line=dict(color="#f9a825", width=3),
+            name="Evacuation connectivity",
+            hoverinfo="skip",
+        ))
+
+    if building.exits:
+        figure.add_trace(go.Scatter(
+            x=[door.location.x for door in building.exits.values()],
+            y=[door.location.y for door in building.exits.values()],
+            mode="markers+text",
+            marker=dict(size=15, color="#00c853", symbol="diamond", line=dict(color="white", width=2)),
+            text=[door.name for door in building.exits.values()],
+            textposition="top center",
+            name="Exits / inferred egress",
+            hoverinfo="text",
+        ))
+
+    figure.update_layout(
+        title="Uploaded IFC Top-Down Diagram",
+        height=700,
+        margin=dict(l=10, r=10, t=50, b=10),
+        hovermode="closest",
+        legend=dict(orientation="h", y=1.02),
+        plot_bgcolor="#f7f9fc",
+        xaxis=dict(title="X", scaleanchor="y", scaleratio=1),
+        yaxis=dict(title="Y"),
+    )
+    return figure
+
+
 def create_ifc_3d_figure(building: Any) -> go.Figure:
     """Render uploaded IFC bounding volumes, connections and exits in 3D."""
     figure = go.Figure()
     centers = _space_centers(building)
-    palette = {
-        "structural_proxy": "#607d8b",
-        "structural_element": "#78909c",
-        "corridor": "#42a5f5",
-        "stair": "#ab47bc",
-        "unknown": "#90caf9",
-    }
-
     for space_id, space in building.spaces.items():
         if not space.bounding_box:
             continue
@@ -62,13 +140,25 @@ def create_ifc_3d_figure(building: Any) -> go.Figure:
             i=[item[0] for item in BOX_TRIANGLES],
             j=[item[1] for item in BOX_TRIANGLES],
             k=[item[2] for item in BOX_TRIANGLES],
-            color=palette.get(space.space_type, "#64b5f6"),
-            opacity=0.32,
+            color=_element_color(space),
+            opacity=0.5,
             flatshading=True,
             name=space.name,
             text=f"{space.name}<br>Type: {space.space_type}<br>Area: {space.area:.1f} m²",
             hoverinfo="text",
             showscale=False,
+        ))
+
+    if centers:
+        figure.add_trace(go.Scatter3d(
+            x=[point[0] for point in centers.values()],
+            y=[point[1] for point in centers.values()],
+            z=[point[2] for point in centers.values()],
+            mode="markers",
+            marker=dict(size=5, color="#0d47a1", line=dict(color="white", width=1)),
+            text=[building.spaces[item].name for item in centers],
+            hoverinfo="text",
+            name="Element / space centers",
         ))
 
     connection_x, connection_y, connection_z = [], [], []

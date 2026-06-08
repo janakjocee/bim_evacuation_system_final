@@ -30,6 +30,9 @@ RUN python -m spacy download en_core_web_sm
 COPY src/ ./src/
 COPY config/ ./config/
 COPY data/ ./data/
+# Keep root multipage sources available for direct execution and backwards
+# compatibility. Deployed sidebar pages are self-contained under src/ui/pages.
+COPY pages/ ./pages/
 
 # Create output directory
 RUN mkdir -p outputs

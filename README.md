@@ -26,6 +26,7 @@ This is an academic decision-support tool. It does **not** perform CFD, certifie
 - IFC/openBIM parsing for spaces, doors, stairs, exits and storeys where available.
 - NetworkX spatial graph generation and evacuation routing.
 - Interactive 3D IFC screening view using uploaded-file geometry, connections and exits.
+- Interactive top-down IFC diagram with colored footprints, routes and exit markers.
 - Clearly labelled 3D scenario schematics for demo fire and worst-case workflows.
 - Regulation-oriented NLP/RAG workflow using spaCy, FAISS and SentenceTransformers.
 - Evacuation scenario generation with distance, time, confidence, compliance and risk.
