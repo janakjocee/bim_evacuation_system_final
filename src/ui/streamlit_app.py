@@ -32,7 +32,7 @@ from src.ui.ui_components import (
     create_network_graph_viz, create_risk_heatmap, render_scenario_card,
     render_explanation_panel, render_expert_review_controls, create_export_summary
 )
-from src.ui.visualization_3d import create_ifc_3d_figure
+from src.ui.visualization_3d import create_ifc_3d_figure, create_ifc_plan_figure
 
 # ==============================================================================
 # PAGE CONFIGURATION
@@ -553,10 +553,11 @@ def render_bim_insights(result):
     st.markdown("---")
     
     # Tabs for different views
-    bim_tab1, bim_tab2, bim_tab3, bim_tab4 = st.tabs([
+    bim_tab1, bim_tab2, bim_tab3, bim_tab4, bim_tab5 = st.tabs([
         "🔍 Extracted IFC Elements" if geometry_mode else "🔍 Extracted Spaces",
         "🚪 Connections & Egress" if geometry_mode else "🚪 Doors & Exits",
         "🕸️ Connectivity Graph",
+        "🗺️ Floor Plan Diagram",
         "🏙️ 3D Model & Egress",
     ])
     
@@ -656,6 +657,18 @@ def render_bim_insights(result):
                 )
 
     with bim_tab4:
+        st.markdown("### Interactive Top-Down IFC Diagram")
+        st.info(
+            "Colored footprints come from uploaded IFC bounding geometry. Yellow lines "
+            "show connectivity and green diamonds show exits or inferred egress points."
+        )
+        if any(space.bounding_box for space in building.spaces.values()):
+            st.plotly_chart(create_ifc_plan_figure(building), key="bim_floor_plan")
+            st.caption("Hover for IFC element details; drag and zoom to inspect the diagram.")
+        else:
+            st.warning("No renderable uploaded IFC geometry is available for a floor-plan diagram.")
+
+    with bim_tab5:
         st.markdown("### Interactive 3D Model and Egress View")
         if geometry_mode:
             st.warning(
