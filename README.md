@@ -25,6 +25,8 @@ This is an academic decision-support tool. It does **not** perform CFD, certifie
 
 - IFC/openBIM parsing for spaces, doors, stairs, exits and storeys where available.
 - NetworkX spatial graph generation and evacuation routing.
+- Interactive 3D IFC screening view using uploaded-file geometry, connections and exits.
+- Clearly labelled 3D scenario schematics for demo fire and worst-case workflows.
 - Regulation-oriented NLP/RAG workflow using spaCy, FAISS and SentenceTransformers.
 - Evacuation scenario generation with distance, time, confidence, compliance and risk.
 - Explainability panel for traceable AI reasoning.
@@ -175,6 +177,7 @@ Supports:
 - occupancy multiplier
 - pre-movement delay
 - graph visualisation
+- interactive 3D hazard-state schematic
 - auto-ranking of worst fire origins
 - JSON, CSV and HTML export
 
@@ -202,6 +205,7 @@ Supports:
 - safety margin table
 - indicative life-safety impact summary
 - graph visualisation
+- interactive 3D fire/smoke/exit schematic
 - FDS skeleton export for expert completion
 
 ---
@@ -371,6 +375,11 @@ Run:
 ```bash
 pytest
 ```
+
+The geometry-only regression tests run when
+`tests/fixtures/11134_V_Motebello_Heistopp_Rev.ifc` is present. Fresh GitHub
+checkouts without that optional IFC fixture skip those two tests; use
+`scripts/validate_ifcs.py` with local IFC files for the full real-model audit.
 
 Test coverage includes:
 

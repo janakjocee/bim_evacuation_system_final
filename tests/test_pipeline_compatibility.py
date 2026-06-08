@@ -2,10 +2,16 @@
 
 from pathlib import Path
 
+import pytest
+
 from src.pipeline.evacuation_pipeline import EvacuationPipeline
 
 
 IFC_PATH = Path(__file__).parent / "fixtures" / "11134_V_Motebello_Heistopp_Rev.ifc"
+pytestmark = pytest.mark.skipif(
+    not IFC_PATH.exists(),
+    reason="Optional IFC regression fixture is not included in this checkout",
+)
 
 
 def test_geometry_only_ifc_uses_file_geometry():

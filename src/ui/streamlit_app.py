@@ -32,6 +32,7 @@ from src.ui.ui_components import (
     create_network_graph_viz, create_risk_heatmap, render_scenario_card,
     render_explanation_panel, render_expert_review_controls, create_export_summary
 )
+from src.ui.visualization_3d import create_ifc_3d_figure
 
 # ==============================================================================
 # PAGE CONFIGURATION
@@ -552,10 +553,11 @@ def render_bim_insights(result):
     st.markdown("---")
     
     # Tabs for different views
-    bim_tab1, bim_tab2, bim_tab3 = st.tabs([
+    bim_tab1, bim_tab2, bim_tab3, bim_tab4 = st.tabs([
         "🔍 Extracted IFC Elements" if geometry_mode else "🔍 Extracted Spaces",
         "🚪 Connections & Egress" if geometry_mode else "🚪 Doors & Exits",
         "🕸️ Connectivity Graph",
+        "🏙️ 3D Model & Egress",
     ])
     
     with bim_tab1:
@@ -652,6 +654,28 @@ def render_bim_insights(result):
                     "Assumed Egress Capacity" if geometry_mode else "Exit Capacity",
                     f"{result.features.total_exit_capacity:,.0f} p/min",
                 )
+
+    with bim_tab4:
+        st.markdown("### Interactive 3D Model and Egress View")
+        if geometry_mode:
+            st.warning(
+                "This view uses actual uploaded IFC element bounding boxes. Yellow lines "
+                "and green egress markers are inferred screening aids and require expert review."
+            )
+        else:
+            st.info(
+                "This view uses available uploaded IFC space geometry, connections and exits."
+            )
+        if any(space.bounding_box for space in building.spaces.values()):
+            st.plotly_chart(create_ifc_3d_figure(building), key="bim_3d_model")
+            st.caption(
+                "Drag to rotate, scroll to zoom, and hover over a volume or exit for details."
+            )
+        else:
+            st.warning(
+                "The uploaded IFC contains no renderable space/element geometry for the 3D view. "
+                "The connectivity graph remains available."
+            )
 
 # ==============================================================================
 # TAB 3: REGULATION INTELLIGENCE
