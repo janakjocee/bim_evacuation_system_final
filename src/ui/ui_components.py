@@ -43,17 +43,11 @@ def get_risk_color(risk_level: RiskLevel) -> str:
 def get_risk_badge(risk_level: RiskLevel) -> str:
     """Get styled risk badge HTML."""
     color = get_risk_color(risk_level)
-    return f"""
-    <span style="
-        background-color: {color};
-        color: white;
-        padding: 4px 12px;
-        border-radius: 12px;
-        font-size: 0.75rem;
-        font-weight: bold;
-        text-transform: uppercase;
-    ">{risk_level.value}</span>
-    """
+    return (
+        f'<span style="background:{color};color:white;padding:5px 12px;'
+        f'border-radius:999px;font-size:.75rem;font-weight:700;text-transform:uppercase;">'
+        f'{risk_level.value}</span>'
+    )
 
 
 def get_compliance_badge(status: ComplianceStatus) -> str:
@@ -64,16 +58,10 @@ def get_compliance_badge(status: ComplianceStatus) -> str:
         ComplianceStatus.PARTIAL: ("#ffc107", "◐ Partial")
     }
     color, label = colors.get(status, ("#6c757d", "? Unknown"))
-    return f"""
-    <span style="
-        background-color: {color};
-        color: white;
-        padding: 4px 12px;
-        border-radius: 12px;
-        font-size: 0.75rem;
-        font-weight: bold;
-    ">{label}</span>
-    """
+    return (
+        f'<span style="background:{color};color:white;padding:5px 12px;'
+        f'border-radius:999px;font-size:.75rem;font-weight:700;">{label}</span>'
+    )
 
 
 def create_risk_pie_chart(scenarios: List[EvacuationScenario]) -> go.Figure:

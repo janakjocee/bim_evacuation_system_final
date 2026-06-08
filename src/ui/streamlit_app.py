@@ -207,6 +207,38 @@ st.markdown("""
         transform: translateY(-1px);
         box-shadow: 0 5px 16px rgba(27, 94, 170, 0.22);
     }
+    [data-testid="stSidebar"] {
+        border-right: 1px solid var(--app-border);
+        background-image: linear-gradient(180deg, rgba(63, 101, 220, .07), transparent 28%);
+    }
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h2,
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h3 {
+        letter-spacing: -.02em;
+    }
+    [data-testid="stMetric"] {
+        background: linear-gradient(145deg, var(--app-panel-strong), var(--app-panel));
+        border: 1px solid var(--app-border);
+        border-radius: 12px;
+        padding: .65rem .8rem;
+        box-shadow: 0 5px 16px rgba(20, 42, 80, .06);
+    }
+    [data-baseweb="tab-list"] {
+        background: var(--app-panel);
+        padding: 5px;
+        border-radius: 12px;
+        border: 1px solid var(--app-border);
+    }
+    [data-baseweb="tab"] {
+        transition: transform .15s ease, background-color .15s ease;
+    }
+    [data-baseweb="tab"]:hover {
+        transform: translateY(-1px);
+    }
+    [data-testid="stFileUploaderDropzone"] {
+        border-radius: 14px;
+        border: 1px dashed #6d91ef;
+        background: linear-gradient(135deg, rgba(74, 116, 225, .08), transparent);
+    }
     .scenario-detail-card {
         background: var(--app-panel-strong);
         color: var(--app-text);
@@ -218,6 +250,39 @@ st.markdown("""
     }
     .scenario-detail-card strong, .scenario-detail-card h4 {
         color: var(--app-heading);
+    }
+    .scenario-card {
+        position: relative;
+        overflow: hidden;
+        background: linear-gradient(135deg, color-mix(in srgb, var(--app-panel-strong) 92%, #4f8cff 8%), var(--app-panel-strong));
+        border: 1px solid var(--app-border);
+        border-radius: 16px;
+        padding: 1rem 1.1rem;
+        margin-top: 0.5rem;
+        box-shadow: 0 8px 28px rgba(15, 33, 57, 0.09);
+    }
+    .scenario-card::after {
+        content: "";
+        position: absolute;
+        width: 140px;
+        height: 140px;
+        right: -80px;
+        top: -85px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(85, 132, 255, .28), transparent 70%);
+        pointer-events: none;
+    }
+    .scenario-card:hover {
+        border-color: #5b8cff;
+        box-shadow: 0 14px 38px rgba(56, 103, 214, 0.16);
+    }
+    .hero-author {
+        background: linear-gradient(135deg, rgba(50, 92, 210, .12), rgba(126, 80, 220, .12));
+        border: 1px solid var(--app-border);
+        border-radius: 12px;
+        padding: .7rem .9rem;
+        text-align: right;
+        color: var(--app-text);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -372,10 +437,10 @@ def render_header():
     
     with col2:
         st.markdown(f"""
-        <div style="text-align: right; color: #666; font-size: 0.8rem;">
-            <strong>University of Greenwich</strong><br>
-            MSc Data Science<br>
-            v1.0.0
+        <div class="hero-author">
+            <strong>Janak Raj Joshi</strong><br>
+            <a href="mailto:janakjocee@gmail.com">janakjocee@gmail.com</a><br>
+            <a href="https://github.com/janakjocee/bim_evacuation_system_final" target="_blank">GitHub Repository</a>
         </div>
         """, unsafe_allow_html=True)
     
@@ -1018,6 +1083,12 @@ def render_evacuation_scenarios(result):
         risk_color = get_risk_color(scenario.risk_level)
         
         with st.container():
+            st.markdown(
+                f'<div class="scenario-card" style="border-left:6px solid {risk_color};">'
+                f'<strong>Scenario #{i + 1}</strong> · {scenario.risk_level.value.upper()} risk'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
             # Scenario header
             col_h1, col_h2, col_h3 = st.columns([3, 2, 1])
             
@@ -1030,12 +1101,12 @@ def render_evacuation_scenarios(result):
                 """, unsafe_allow_html=True)
             
             with col_h2:
-                st.markdown(f"""
-                <div style="text-align: right;">
-                    {get_risk_badge(scenario.risk_level)}
-                    {get_compliance_badge(scenario.compliance_status)}
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(
+                    get_risk_badge(scenario.risk_level)
+                    + "&nbsp;"
+                    + get_compliance_badge(scenario.compliance_status),
+                    unsafe_allow_html=True,
+                )
             
             with col_h3:
                 selected = st.session_state.selected_scenario_id == scenario.scenario_id
@@ -1069,17 +1140,12 @@ def render_evacuation_scenarios(result):
                     st.markdown("**Engineering Recommendations:**")
                     for r in scenario.recommendations:
                         st.info(f"💡 {r}")
+
+            if st.session_state.selected_scenario_id == scenario.scenario_id:
+                st.markdown("#### Scenario Inspection Workspace")
+                render_selected_scenario_details(result, scenario)
             
             st.markdown("---")
-
-    selected_scenario = next(
-        (scenario for scenario in scenarios if scenario.scenario_id == st.session_state.selected_scenario_id),
-        None,
-    )
-    if selected_scenario:
-        st.markdown("### Scenario Inspection Workspace")
-        render_selected_scenario_details(result, selected_scenario)
-        st.markdown("---")
     
     # Route comparison chart
     st.markdown("### Route Comparison")
