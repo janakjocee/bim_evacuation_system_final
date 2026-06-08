@@ -2,6 +2,10 @@
 
 **AI-Driven Generation of Evacuation Scenarios from Building Information Models**
 
+Developed by **Janak Raj Joshi**<br>
+Email: [janakjocee@gmail.com](mailto:janakjocee@gmail.com)<br>
+Repository: [janakjocee/bim_evacuation_system_final](https://github.com/janakjocee/bim_evacuation_system_final)
+
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?logo=Streamlit&logoColor=white)](https://streamlit.io)
 [![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
@@ -359,8 +363,8 @@ bim-evacuation-system-streamlit/
 ## Running Locally
 
 ```bash
-git clone https://github.com/janakjocee/bim-evacuation-system-streamlit.git
-cd bim-evacuation-system-streamlit
+git clone https://github.com/janakjocee/bim_evacuation_system_final.git
+cd bim_evacuation_system_final
 python3 -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install --upgrade pip setuptools wheel
