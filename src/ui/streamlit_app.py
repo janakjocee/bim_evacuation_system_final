@@ -19,6 +19,7 @@ import streamlit as st
 import pandas as pd
 import json
 import plotly.express as px
+import plotly.graph_objects as go
 import time
 from typing import List, Dict, Any, Optional
 
@@ -49,16 +50,59 @@ st.set_page_config(
 # ==============================================================================
 st.markdown("""
 <style>
+    :root {
+        --app-text: #172033;
+        --app-muted: #536174;
+        --app-panel: #f7f9fc;
+        --app-panel-strong: #ffffff;
+        --app-border: #d9e1ec;
+        --app-heading: #13213c;
+        --app-info: #e8f3ff;
+        --app-warning: #fff6db;
+        --app-danger: #ffe9ec;
+        --app-success: #e7f6ed;
+    }
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --app-text: #edf3fb;
+            --app-muted: #bdc9d8;
+            --app-panel: #172033;
+            --app-panel-strong: #202b3d;
+            --app-border: #3a4a61;
+            --app-heading: #f7fbff;
+            --app-info: #153653;
+            --app-warning: #4a3c13;
+            --app-danger: #4a2028;
+            --app-success: #153d2b;
+        }
+        div[style*="background-color: #f8f9fa"],
+        div[style*="background-color: white"] {
+            background-color: var(--app-panel-strong) !important;
+            color: var(--app-text) !important;
+        }
+        div[style*="color: #555"],
+        p[style*="color: #666"],
+        p[style*="color: #999"],
+        span[style*="color: #555"] {
+            color: var(--app-muted) !important;
+        }
+        strong[style*="color: #1a1a2e"],
+        h4[style*="color: #333"] {
+            color: var(--app-heading) !important;
+        }
+    }
+    .stApp, [data-testid="stAppViewContainer"] { color: var(--app-text); }
+    p, li, label, .stMarkdown { color: var(--app-text); }
     /* Main title */
     .main-title {
         font-size: 2.2rem;
         font-weight: 700;
-        color: #1a1a2e;
+        color: var(--app-heading);
         margin-bottom: 0.2rem;
     }
     .sub-title {
         font-size: 1rem;
-        color: #666;
+        color: var(--app-muted);
         margin-bottom: 1.5rem;
     }
     
@@ -66,8 +110,8 @@ st.markdown("""
     .section-header {
         font-size: 1.3rem;
         font-weight: 600;
-        color: #1a1a2e;
-        border-bottom: 2px solid #e0e0e0;
+        color: var(--app-heading);
+        border-bottom: 2px solid var(--app-border);
         padding-bottom: 0.5rem;
         margin-top: 1rem;
         margin-bottom: 1rem;
@@ -97,7 +141,8 @@ st.markdown("""
     
     /* Info boxes */
     .info-box {
-        background-color: #e7f3ff;
+        background-color: var(--app-info);
+        color: var(--app-text);
         border-left: 4px solid #2196F3;
         padding: 1rem;
         margin: 1rem 0;
@@ -105,7 +150,8 @@ st.markdown("""
     }
     
     .warning-box {
-        background-color: #fff8e1;
+        background-color: var(--app-warning);
+        color: var(--app-text);
         border-left: 4px solid #FFC107;
         padding: 1rem;
         margin: 1rem 0;
@@ -113,7 +159,8 @@ st.markdown("""
     }
     
     .danger-box {
-        background-color: #ffebee;
+        background-color: var(--app-danger);
+        color: var(--app-text);
         border-left: 4px solid #f44336;
         padding: 1rem;
         margin: 1rem 0;
@@ -121,7 +168,8 @@ st.markdown("""
     }
     
     .success-box {
-        background-color: #e8f5e9;
+        background-color: var(--app-success);
+        color: var(--app-text);
         border-left: 4px solid #4caf50;
         padding: 1rem;
         margin: 1rem 0;
@@ -133,7 +181,8 @@ st.markdown("""
         gap: 2px;
     }
     .stTabs [data-baseweb="tab"] {
-        background-color: #f8f9fa;
+        background-color: var(--app-panel);
+        color: var(--app-text);
         border-radius: 4px 4px 0 0;
         padding: 10px 16px;
         font-weight: 500;
@@ -152,6 +201,23 @@ st.markdown("""
     .stButton>button {
         border-radius: 6px;
         font-weight: 500;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .stButton>button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 5px 16px rgba(27, 94, 170, 0.22);
+    }
+    .scenario-detail-card {
+        background: var(--app-panel-strong);
+        color: var(--app-text);
+        border: 1px solid var(--app-border);
+        border-radius: 12px;
+        padding: 1rem;
+        margin: 0.75rem 0;
+        box-shadow: 0 8px 24px rgba(15, 33, 57, 0.08);
+    }
+    .scenario-detail-card strong, .scenario-detail-card h4 {
+        color: var(--app-heading);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -167,7 +233,9 @@ def init_session_state():
         'selected_scenario_index': 0,
         'expert_reviews': {},
         'regulation_text': None,
+        'rag_enabled': True,
         'active_tab': 0,
+        'selected_scenario_id': None,
         'graph_viz_enabled': True,
         'show_explanations': True,
     }
@@ -177,6 +245,119 @@ def init_session_state():
             st.session_state[key] = value
 
 init_session_state()
+
+
+def create_selected_route_figure(result, scenario):
+    """Create an interactive route diagram with the selected route highlighted."""
+    building = result.building
+    positions = {}
+    for index, (space_id, space) in enumerate(building.spaces.items()):
+        if space.bounding_box:
+            minimum, maximum = space.bounding_box
+            positions[space_id] = ((minimum.x + maximum.x) / 2, (minimum.y + maximum.y) / 2)
+        else:
+            positions[space_id] = (index, 0)
+    for door_id, door in building.doors.items():
+        positions[door_id] = (door.location.x, door.location.y)
+
+    route = scenario.evacuation_route.path
+    edge_x, edge_y = [], []
+    for first, second in zip(route, route[1:]):
+        if first in positions and second in positions:
+            edge_x.extend([positions[first][0], positions[second][0], None])
+            edge_y.extend([positions[first][1], positions[second][1], None])
+
+    figure = go.Figure()
+    if edge_x:
+        figure.add_trace(go.Scatter(
+            x=edge_x, y=edge_y, mode="lines",
+            line=dict(color="#ff8f00", width=7), name="Selected evacuation route",
+        ))
+    visible_nodes = [node for node in route if node in positions]
+    colors = [
+        "#d32f2f" if node == scenario.origin_space_id
+        else "#00c853" if node == scenario.evacuation_route.destination
+        else "#1565c0"
+        for node in visible_nodes
+    ]
+    figure.add_trace(go.Scatter(
+        x=[positions[node][0] for node in visible_nodes],
+        y=[positions[node][1] for node in visible_nodes],
+        mode="markers+text",
+        marker=dict(size=18, color=colors, line=dict(color="white", width=2)),
+        text=[building.spaces[node].name if node in building.spaces else building.doors[node].name for node in visible_nodes],
+        textposition="top center",
+        hovertext=visible_nodes,
+        hoverinfo="text",
+        name="Route nodes",
+    ))
+    figure.update_layout(
+        title="Selected Evacuation Route",
+        height=500,
+        margin=dict(l=10, r=10, t=50, b=10),
+        plot_bgcolor="#f7f9fc",
+        xaxis=dict(visible=False, scaleanchor="y", scaleratio=1),
+        yaxis=dict(visible=False),
+        showlegend=False,
+    )
+    return figure
+
+
+def render_selected_scenario_details(result, scenario):
+    """Render a practical inspection workspace for one evacuation scenario."""
+    building = result.building
+    geometry_mode = result.source_mode == "geometry_derived"
+    alternative_exits = max(0, len(building.exits) - 1)
+    st.markdown(
+        f"""
+        <div class="scenario-detail-card">
+            <h4>Selected Scenario: {scenario.name}</h4>
+            <strong>Origin:</strong> {scenario.origin_space_name}<br>
+            <strong>Destination:</strong> {scenario.evacuation_route.destination}<br>
+            <strong>Route nodes:</strong> {' → '.join(scenario.evacuation_route.path)}<br>
+            <strong>Analysis basis:</strong> {'Geometry-derived structural screening' if geometry_mode else 'Semantic IFC space and door data'}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    metrics = st.columns(5)
+    metrics[0].metric("Travel Distance", f"{scenario.evacuation_route.distance:.1f} m")
+    metrics[1].metric("Estimated Time", f"{scenario.evacuation_route.estimated_time:.1f} s")
+    metrics[2].metric("Alternative Exits", alternative_exits)
+    metrics[3].metric("Compliance", f"{scenario.compliance_score * 100:.0f}%")
+    metrics[4].metric("Confidence", f"{scenario.confidence_score * 100:.0f}%")
+
+    detail_route, detail_actions, detail_evidence = st.tabs([
+        "Route Diagram", "Operational Actions", "Evidence & Export"
+    ])
+    with detail_route:
+        st.plotly_chart(create_selected_route_figure(result, scenario), key=f"selected_route_{scenario.scenario_id}")
+        st.caption("Red = origin, orange = selected route, green = destination egress.")
+    with detail_actions:
+        st.markdown("#### Practical Readiness Checklist")
+        checks = [
+            ("Alternative escape direction available", alternative_exits > 0),
+            ("Route within default 45 m screening threshold", scenario.evacuation_route.distance <= 45),
+            ("No regulation violations detected", not scenario.violated_regulations),
+            ("Confidence above 70%", scenario.confidence_score >= 0.7),
+            ("Accessibility/refuge arrangements confirmed", False),
+            ("Exit signage, emergency lighting and door operation confirmed", False),
+        ]
+        for label, passed in checks:
+            (st.success if passed else st.warning)(f"{'PASS' if passed else 'REVIEW'}: {label}")
+        st.markdown("#### Recommendations")
+        for recommendation in scenario.recommendations or ["Confirm assumptions with a qualified fire-safety professional."]:
+            st.info(recommendation)
+    with detail_evidence:
+        st.write(scenario.explanation)
+        st.json(scenario.to_dict())
+        st.download_button(
+            "Download selected scenario evidence",
+            json.dumps(scenario.to_dict(), indent=2),
+            f"{scenario.scenario_id}_evidence.json",
+            "application/json",
+            key=f"download_scenario_{scenario.scenario_id}",
+        )
 
 # ==============================================================================
 # HEADER
@@ -190,7 +371,7 @@ def render_header():
         st.markdown('<p class="sub-title">AI-Driven Decision-Support System for Fire Safety Engineering</p>', unsafe_allow_html=True)
     
     with col2:
-        st.markdown("""
+        st.markdown(f"""
         <div style="text-align: right; color: #666; font-size: 0.8rem;">
             <strong>University of Greenwich</strong><br>
             MSc Data Science<br>
@@ -320,6 +501,7 @@ def process_files(ifc_file, regulation_file, max_scenarios, enable_rag):
     progress_bar = st.progress(0, text="Initializing pipeline...")
     
     try:
+        st.session_state.rag_enabled = enable_rag
         # Save IFC file
         progress_bar.progress(10, text="Loading IFC model...")
         ifc_path = save_uploaded_file(ifc_file, "./data/temp")
@@ -710,7 +892,11 @@ def render_regulation_intelligence(result):
     st.markdown("---")
     
     # Active Constraints
-    st.markdown("### Active Regulatory Constraints")
+    st.markdown("### Default Screening Constraints")
+    st.caption(
+        "Prototype defaults are shown below. Uploaded regulation text is parsed "
+        "separately and all thresholds require professional verification."
+    )
     
     constraints_data = [
         {'Parameter': 'Maximum Travel Distance', 'Value': '45.0 m', 'Source': 'AD B 2.2.1', 'Status': '✓ Active'},
@@ -743,28 +929,33 @@ def render_regulation_intelligence(result):
     
     # RAG Status
     st.markdown("---")
-    st.markdown("### 🤖 RAG System Status")
+    st.markdown("### RAG System Status")
+    rag_status = (
+        "Active for uploaded regulation text"
+        if st.session_state.get("rag_enabled", True) and regulation_text
+        else "Not active for this analysis"
+    )
     
     rag_col1, rag_col2 = st.columns(2)
     with rag_col1:
-        st.markdown("""
+        st.markdown(f"""
         <div class="success-box">
             <strong>Embedding Model:</strong> all-MiniLM-L6-v2<br>
             <strong>Vector DB:</strong> FAISS (Flat IP)<br>
             <strong>Similarity Threshold:</strong> 0.70<br>
-            <strong>Status:</strong> ✅ Operational
+            <strong>Status:</strong> {rag_status}
         </div>
         """, unsafe_allow_html=True)
     
     with rag_col2:
         st.markdown("""
         <div class="info-box">
-            <strong>RAG Pipeline:</strong><br>
+            <strong>Grounding Pipeline:</strong><br>
             1. Document chunking (size=512, overlap=50)<br>
             2. Sentence embedding generation<br>
             3. FAISS index construction<br>
             4. Similarity search for grounding<br>
-            5. Hallucination prevention
+            5. Expert review and source verification
         </div>
         """, unsafe_allow_html=True)
 
@@ -834,7 +1025,7 @@ def render_evacuation_scenarios(result):
                 st.markdown(f"""
                 <div style="border-left: 5px solid {risk_color}; padding-left: 10px;">
                     <h4 style="margin:0;">#{i+1} {scenario.name}</h4>
-                    <p style="margin:0;color:#666;font-size:0.8rem;">ID: {scenario.scenario_id}</p>
+                    <p style="margin:0;color:var(--app-muted);font-size:0.8rem;">ID: {scenario.scenario_id}</p>
                 </div>
                 """, unsafe_allow_html=True)
             
@@ -847,10 +1038,13 @@ def render_evacuation_scenarios(result):
                 """, unsafe_allow_html=True)
             
             with col_h3:
-                if st.button("🔍 Details", key=f"details_btn_{scenario.scenario_id}"):
-                    st.session_state.selected_scenario_index = scenarios.index(scenario)
-                    st.session_state.active_tab = 4  # Jump to explainability tab
-                    st.rerun()
+                selected = st.session_state.selected_scenario_id == scenario.scenario_id
+                if st.button(
+                    "Close Details" if selected else "View Details",
+                    key=f"details_btn_{scenario.scenario_id}",
+                    type="primary" if selected else "secondary",
+                ):
+                    st.session_state.selected_scenario_id = None if selected else scenario.scenario_id
             
             # Metrics
             col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
@@ -877,6 +1071,15 @@ def render_evacuation_scenarios(result):
                         st.info(f"💡 {r}")
             
             st.markdown("---")
+
+    selected_scenario = next(
+        (scenario for scenario in scenarios if scenario.scenario_id == st.session_state.selected_scenario_id),
+        None,
+    )
+    if selected_scenario:
+        st.markdown("### Scenario Inspection Workspace")
+        render_selected_scenario_details(result, selected_scenario)
+        st.markdown("---")
     
     # Route comparison chart
     st.markdown("### Route Comparison")
