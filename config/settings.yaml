@@ -1,0 +1,87 @@
+# BIM Evacuation System Configuration
+# MSc Data Science Dissertation - University of Greenwich
+
+# Application Settings
+app:
+  name: "BIM Evacuation Scenario Generator"
+  version: "1.0.0"
+  debug: false
+
+# Paths - Use forward slashes or double backslashes for Windows
+paths:
+  data_dir: "./data"
+  output_dir: "./outputs"
+  sample_ifc_dir: "./data/sample_ifc"
+  sample_regulations_dir: "./data/sample_regulations"
+
+# Logging Configuration
+logging:
+  level: "INFO"
+  format: "{time:YYYY-MM-DD HH:mm:ss} | {level} | {name} | {message}"
+  file: "./outputs/bim_evacuation.log"
+
+# BIM Processing Settings
+bim:
+  entities:
+    - "IfcSpace"
+    - "IfcDoor"
+    - "IfcStair"
+    - "IfcBuildingStorey"
+  
+  # Occupancy density (persons per square meter)
+  occupancy_density:
+    office: 0.1
+    corridor: 0.5
+    stair: 0.3
+    lobby: 0.5
+    retail: 0.5
+    industrial: 0.1
+    residential: 0.05
+    default: 0.1
+  
+  # Travel speeds (meters per second)
+  travel_speed:
+    level: 1.2
+    stair_down: 0.8
+    stair_up: 0.5
+    door_passage: 1.0
+
+# NLP Settings
+nlp:
+  model: "en_core_web_sm"
+  chunk_size: 512
+  chunk_overlap: 50
+
+# RAG Settings
+rag:
+  embedding_model: "all-MiniLM-L6-v2"
+  top_k: 5
+  similarity_threshold: 0.7
+
+# Regulation Constraints (UK Approved Document B - Sample)
+regulations:
+  max_travel_distance: 45.0
+  min_door_width: 0.75
+  min_exit_width: 1.05
+  min_corridor_width: 1.2
+  max_riser_height: 0.19
+  min_tread_length: 0.25
+  min_stair_width: 1.0
+  
+  # Exit capacity (persons per minute per meter width)
+  exit_capacity_per_minute: 90
+  stair_capacity_per_minute: 60
+
+# Scenario Generation Settings
+scenario:
+  max_scenarios: 10
+  risk_thresholds:
+    low: 0.8
+    medium: 0.5
+    high: 0.0
+
+# Export Settings
+export:
+  formats:
+    - "json"
+    - "csv"

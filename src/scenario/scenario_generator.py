@@ -1,0 +1,252 @@
+"""
+Evacuation scenario generator.
+"""
+from typing import Dict, List, Any, Optional
+from dataclasses import dataclass, field
+
+from ..utils.logger import get_logger
+from ..utils.config_loader import get_config
+from ..utils.helpers import RiskLevel, ComplianceStatus, generate_id
+from ..bim_processing.ifc_parser import BuildingData, SpaceData, DoorData
+from ..bim_processing.spatial_graph import SpatialGraphBuilder, Route
+from ..nlp.regulation_parser import RegulationClause
+from .compliance_checker import ComplianceChecker, ComplianceCheck
+from .risk_classifier import RiskClassifier, RiskFactors
+
+logger = get_logger("scenario_generator")
+
+
+@dataclass
+class EvacuationScenario:
+    """Evacuation scenario."""
+    scenario_id: str
+    name: str
+    origin_space_id: str
+    origin_space_name: str
+    risk_level: RiskLevel
+    evacuation_route: Route
+    compliance_status: ComplianceStatus
+    compliance_score: float
+    violated_regulations: List[str] = field(default_factory=list)
+    recommendations: List[str] = field(default_factory=list)
+    confidence_score: float = 0.0
+    explanation: str = ""
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary."""
+        return {
+            'scenario_id': self.scenario_id,
+            'name': self.name,
+            'origin_space_id': self.origin_space_id,
+            'origin_space_name': self.origin_space_name,
+            'risk_level': self.risk_level.value,
+            'evacuation_route': {
+                'origin': self.evacuation_route.origin,
+                'destination': self.evacuation_route.destination,
+                'distance_m': round(self.evacuation_route.distance, 2),
+                'estimated_time_s': round(self.evacuation_route.estimated_time, 1),
+                'path': self.evacuation_route.path
+            },
+            'compliance_status': self.compliance_status.value,
+            'compliance_score': round(self.compliance_score, 2),
+            'violated_regulations': self.violated_regulations,
+            'recommendations': self.recommendations,
+            'confidence_score': round(self.confidence_score, 2),
+            'explanation': self.explanation
+        }
+
+
+class ScenarioGenerator:
+    """Generate evacuation scenarios from building data."""
+    
+    def __init__(self, building: BuildingData, graph_builder: SpatialGraphBuilder):
+        """Initialize scenario generator."""
+        self.building = building
+        self.graph_builder = graph_builder
+        self.config = get_config()
+        
+        self.compliance_checker = ComplianceChecker()
+        self.risk_classifier = RiskClassifier()
+        
+        self.scenarios: List[EvacuationScenario] = []
+    
+    def set_regulations(self, clauses: List[RegulationClause]) -> None:
+        """Set regulations from parsed clauses."""
+        self.compliance_checker.update_regulations(clauses)
+    
+    def generate(self, max_scenarios: int = None) -> List[EvacuationScenario]:
+        """
+        Generate evacuation scenarios.
+        
+        Args:
+            max_scenarios: Maximum number of scenarios to generate
+            
+        Returns:
+            List of evacuation scenarios
+        """
+        if max_scenarios is None:
+            max_scenarios = self.config.get('scenario.max_scenarios', 10)
+        
+        logger.info(f"Generating up to {max_scenarios} scenarios")
+        
+        self.scenarios = []
+        
+        # Generate scenario for each space
+        for space_id, space in self.building.spaces.items():
+            if len(self.scenarios) >= max_scenarios:
+                break
+            
+            scenario = self._generate_space_scenario(space)
+            if scenario:
+                self.scenarios.append(scenario)
+        
+        # Sort by confidence score
+        self.scenarios.sort(key=lambda s: s.confidence_score, reverse=True)
+        
+        logger.info(f"Generated {len(self.scenarios)} scenarios")
+        return self.scenarios
+    
+    def _generate_space_scenario(self, space: SpaceData) -> Optional[EvacuationScenario]:
+        """Generate scenario for a single space."""
+        # Find paths to exits
+        routes = self.graph_builder.find_paths_to_exits(space.id)
+        
+        if not routes:
+            logger.warning(f"No evacuation routes found for {space.name}")
+            return None
+        
+        # Use shortest route
+        best_route = routes[0]
+        
+        # Run compliance checks
+        compliance_checks = []
+        
+        # Check route distance
+        route_checks = self.compliance_checker.check_route(space, best_route.distance)
+        compliance_checks.extend(route_checks)
+        
+        # Check exit door
+        exit_door = self.building.exits.get(best_route.destination)
+        if exit_door:
+            door_checks = self.compliance_checker.check_door(exit_door)
+            compliance_checks.extend(door_checks)
+        
+        # Calculate compliance score
+        compliance_score = self.compliance_checker.calculate_compliance_score(compliance_checks)
+        
+        # Determine compliance status
+        violations = self.compliance_checker.get_violations(compliance_checks)
+        compliance_status = ComplianceStatus.COMPLIANT if not violations else ComplianceStatus.NON_COMPLIANT
+        
+        # Generate recommendations
+        recommendations = self.compliance_checker.generate_recommendations(violations)
+        
+        # Classify risk
+        risk_factors = RiskFactors(
+            travel_distance=best_route.distance,
+            evacuation_time=best_route.estimated_time,
+            compliance_score=compliance_score,
+            exit_capacity_ratio=1.0,  # Simplified
+            bottleneck_count=0
+        )
+        
+        risk_level = self.risk_classifier.classify(risk_factors)
+        
+        # Calculate confidence
+        confidence = self._calculate_confidence(compliance_score, best_route)
+        if self.building.extraction_mode == "geometry_derived":
+            confidence = min(confidence, 0.5)
+        
+        # Generate explanation
+        explanation = self._generate_explanation(
+            space, best_route, compliance_checks, violations, risk_level
+        )
+        
+        # Create scenario
+        scenario = EvacuationScenario(
+            scenario_id=generate_id("SCEN"),
+            name=f"Evacuation from {space.name}",
+            origin_space_id=space.id,
+            origin_space_name=space.name,
+            risk_level=risk_level,
+            evacuation_route=best_route,
+            compliance_status=compliance_status,
+            compliance_score=compliance_score,
+            violated_regulations=[v.regulation_id for v in violations],
+            recommendations=recommendations,
+            confidence_score=confidence,
+            explanation=explanation
+        )
+        
+        return scenario
+    
+    def _calculate_confidence(self, compliance_score: float, route: Route) -> float:
+        """Calculate confidence score."""
+        # Base confidence on compliance
+        confidence = compliance_score
+        
+        # Penalize long routes
+        if route.distance > 100:
+            confidence *= 0.9
+        
+        # Penalize long evacuation times
+        if route.estimated_time > 300:
+            confidence *= 0.8
+        
+        return min(confidence, 1.0)
+    
+    def _generate_explanation(self, space: SpaceData, route: Route,
+                              checks: List[ComplianceCheck], violations: List[ComplianceCheck],
+                              risk_level: RiskLevel) -> str:
+        """Generate natural language explanation."""
+        parts = []
+        
+        # Introduction
+        parts.append(f"Evacuation scenario for {space.name}.")
+        if self.building.extraction_mode == "geometry_derived":
+            parts.append(
+                "This is geometry-derived structural screening, not a verified room-level route."
+            )
+        parts.append(f"Route to exit: {route.distance:.1f} meters, "
+                    f"estimated evacuation time: {route.estimated_time:.1f} seconds.")
+        
+        # Compliance
+        compliant_count = sum(1 for c in checks if c.status == ComplianceStatus.COMPLIANT)
+        total_checks = len(checks)
+        parts.append(f"Compliance: {compliant_count}/{total_checks} checks passed.")
+        
+        # Violations
+        if violations:
+            parts.append("Violations identified:")
+            for v in violations:
+                parts.append(f"  - {v.message}")
+        
+        # Risk level
+        parts.append(f"Risk level: {risk_level.value.upper()}.")
+        
+        return " ".join(parts)
+    
+    def get_scenarios_by_risk(self, risk_level: RiskLevel) -> List[EvacuationScenario]:
+        """Filter scenarios by risk level."""
+        return [s for s in self.scenarios if s.risk_level == risk_level]
+    
+    def get_summary(self) -> Dict[str, Any]:
+        """Get summary of generated scenarios."""
+        if not self.scenarios:
+            return {'total': 0}
+        
+        risk_counts = {
+            'low': len(self.get_scenarios_by_risk(RiskLevel.LOW)),
+            'medium': len(self.get_scenarios_by_risk(RiskLevel.MEDIUM)),
+            'high': len(self.get_scenarios_by_risk(RiskLevel.HIGH))
+        }
+        
+        avg_compliance = sum(s.compliance_score for s in self.scenarios) / len(self.scenarios)
+        avg_confidence = sum(s.confidence_score for s in self.scenarios) / len(self.scenarios)
+        
+        return {
+            'total': len(self.scenarios),
+            'risk_distribution': risk_counts,
+            'avg_compliance_score': round(avg_compliance, 2),
+            'avg_confidence_score': round(avg_confidence, 2)
+        }

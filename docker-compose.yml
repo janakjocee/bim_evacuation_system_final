@@ -1,0 +1,56 @@
+# Docker Compose Configuration
+# BIM Evacuation System - University of Greenwich
+
+version: '3.8'
+
+services:
+  bim-evacuation:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bim-evacuation-system:latest
+    container_name: bim-evacuation-app
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data
+      - ./outputs:/app/outputs
+      - ./logs:/app/logs
+    environment:
+      - DEBUG=false
+      - LOG_LEVEL=INFO
+      - DATA_DIR=/app/data
+      - OUTPUT_DIR=/app/outputs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Jupyter notebook service for development
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bim-evacuation-system:latest
+    container_name: bim-evacuation-jupyter
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./:/app
+      - ./notebooks:/app/notebooks
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+    command: >
+      bash -c "pip install jupyter jupyterlab &&
+               jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root
+               --NotebookApp.token='' --NotebookApp.password=''"
+    profiles:
+      - dev
+
+volumes:
+  data:
+  outputs:
+  logs:
