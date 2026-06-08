@@ -187,7 +187,8 @@ class IFCParser:
                     name=ifc_space.Name or "Unnamed Space",
                     area=self._calculate_area(ifc_space),
                     level=self._get_level(ifc_space),
-                    space_type=self._get_space_type(ifc_space)
+                    space_type=self._get_space_type(ifc_space),
+                    bounding_box=self._get_bounding_box(ifc_space),
                 )
                 building.spaces[space.id] = space
             except Exception as e:
@@ -289,6 +290,21 @@ class IFCParser:
         except:
             pass
         return Point3D()
+
+    def _get_bounding_box(self, element) -> Optional[Tuple[Point3D, Point3D]]:
+        """Extract a world-coordinate bounding box when IFC geometry is available."""
+        try:
+            settings = ifcopenshell.geom.settings()
+            settings.set(settings.USE_WORLD_COORDS, True)
+            shape = ifcopenshell.geom.create_shape(settings, element)
+            vertices = shape.geometry.verts
+            points = list(zip(vertices[0::3], vertices[1::3], vertices[2::3]))
+            if not points:
+                return None
+            xs, ys, zs = zip(*points)
+            return Point3D(min(xs), min(ys), min(zs)), Point3D(max(xs), max(ys), max(zs))
+        except Exception:
+            return None
     
     def _extract_geometry_topology(self, building: BuildingData) -> None:
         """Derive a bounded analysis topology from real geometry-only IFC elements."""

@@ -23,6 +23,7 @@ from src.scenario.worst_case_engine import (
     load_worst_case_dataset,
     validate_scenario_dataset,
 )
+from src.ui.visualization_3d import create_dataset_3d_figure
 
 
 st.set_page_config(
@@ -234,6 +235,12 @@ st.warning(
 with st.expander("Active dataset provenance and structure", expanded=True):
     st.json(summary)
     st.caption("Review or download the dataset before using its results in an assessment.")
+with st.expander("Explore 3D dataset overview", expanded=True):
+    st.plotly_chart(create_dataset_3d_figure(engine))
+    st.caption(
+        "Schematic connectivity overview, not BIM geometry. Hover to inspect room "
+        "names, types and occupancies; green nodes are exits."
+    )
 
 col_intro1, col_intro2, col_intro3 = st.columns(3)
 with col_intro1:
@@ -314,8 +321,21 @@ if result:
         st.dataframe(pd.DataFrame(result.compliance_checks), height=360)
 
     with tab4:
-        st.plotly_chart(_draw_graph(engine, result))
-        st.caption("Legend: dark red = fire origin, black = blocked, orange = smoke affected, green = exits, blue = other rooms/spaces.")
+        graph_2d, graph_3d = st.tabs(["2D graph", "3D schematic"])
+        with graph_2d:
+            st.plotly_chart(_draw_graph(engine, result))
+            st.caption("Legend: dark red = fire origin, black = blocked, orange = smoke affected, green = exits, blue = other rooms/spaces.")
+        with graph_3d:
+            st.plotly_chart(create_dataset_3d_figure(
+                engine,
+                fire_origin=result.fire_origin,
+                smoke_nodes=result.smoke_affected_nodes,
+                blocked_nodes=result.blocked_nodes,
+            ))
+            st.caption(
+                "Schematic only, not BIM geometry. Rotate and zoom to understand "
+                "scenario connectivity and hazard states."
+            )
 
     with tab5:
         st.subheader("Export Worst-Case Results")

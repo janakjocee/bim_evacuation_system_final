@@ -13,6 +13,7 @@ import plotly.express as px
 import streamlit as st
 
 from src.fire.fire_scenario_engine import FireScenarioEngine
+from src.ui.visualization_3d import create_dataset_3d_figure
 from src.scenario.worst_case_engine import (
     DEFAULT_DATASET_PATH,
     dataset_summary,
@@ -99,6 +100,12 @@ st.warning(
 with st.expander("Active dataset provenance and structure", expanded=True):
     st.json(summary)
     st.caption("Review or download the dataset before using its results in an assessment.")
+with st.expander("Explore 3D dataset overview", expanded=True):
+    st.plotly_chart(create_dataset_3d_figure(engine))
+    st.caption(
+        "Schematic connectivity overview, not BIM geometry. Hover to inspect room "
+        "names, types and occupancies; green nodes are exits."
+    )
 st.subheader(selected_label)
 st.write(
     f"Fire origin: **{scenario.get('fire_origin_name', scenario['fire_origin'])}**  |  "
@@ -133,8 +140,8 @@ k4.metric("Trapped Occupants", impact.get("trapped_occupants", 0))
 
 st.write(result["explanation"])
 
-growth_tab, aset_tab, checks_tab, export_tab = st.tabs(
-    ["Fire Growth", "ASET / RSET", "Compliance Screening", "Export"]
+growth_tab, aset_tab, checks_tab, visual_tab, export_tab = st.tabs(
+    ["Fire Growth", "ASET / RSET", "Compliance Screening", "3D Scenario View", "Export"]
 )
 
 with growth_tab:
@@ -150,6 +157,22 @@ with aset_tab:
 
 with checks_tab:
     st.dataframe(pd.DataFrame(result["compliance_oriented_checks"]))
+
+with visual_tab:
+    smoke = result.get("smoke_spread", {})
+    st.plotly_chart(create_dataset_3d_figure(
+        engine,
+        fire_origin=result.get("fire_origin"),
+        smoke_nodes=smoke.get("final_smoke_affected_nodes", []),
+        high_risk_nodes=(
+            smoke.get("final_high_risk_nodes", [])
+            + smoke.get("final_untenable_nodes", [])
+        ),
+    ))
+    st.caption(
+        "Schematic only, not BIM geometry. Red = fire origin, orange = smoke affected, "
+        "purple = high risk/untenable, green = exit."
+    )
 
 with export_tab:
     st.download_button(
