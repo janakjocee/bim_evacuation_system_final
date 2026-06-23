@@ -46,6 +46,26 @@ This is an academic decision-support tool. It does **not** perform CFD, certifie
 
 ---
 
+## Explainability and Black-Box Control
+
+The project avoids treating the AI layer as an unexplained black box. Each
+generated evacuation scenario exports:
+
+- the IFC extraction basis used for the scenario;
+- the route search method, selected path, distance and evacuation time;
+- the compliance checks that passed or failed;
+- the deterministic risk score and weighted factor breakdown;
+- confidence score and data-quality notes;
+- a human-readable explanation and expert-review recommendations.
+
+The Explainability tab and each scenario's **View Details** workspace show this
+decision trace directly. Risk classification is rule/score based and
+deterministic, not a hidden neural-network prediction. RAG is used only when a
+regulation document is uploaded and grounding is enabled; otherwise the app
+clearly states that built-in default screening constraints were used.
+
+---
+
 ## Fire-Safety-Inspired Modelling Layer
 
 The upgraded fire layer is located in:

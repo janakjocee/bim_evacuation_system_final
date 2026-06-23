@@ -31,6 +31,10 @@ class EvacuationScenario:
     recommendations: List[str] = field(default_factory=list)
     confidence_score: float = 0.0
     explanation: str = ""
+    risk_score: float = 0.0
+    risk_factors: Dict[str, Any] = field(default_factory=dict)
+    decision_trace: List[Dict[str, Any]] = field(default_factory=list)
+    data_quality_notes: List[str] = field(default_factory=list)
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -52,7 +56,11 @@ class EvacuationScenario:
             'violated_regulations': self.violated_regulations,
             'recommendations': self.recommendations,
             'confidence_score': round(self.confidence_score, 2),
-            'explanation': self.explanation
+            'explanation': self.explanation,
+            'risk_score': round(self.risk_score, 3),
+            'risk_factors': self.risk_factors,
+            'decision_trace': self.decision_trace,
+            'data_quality_notes': self.data_quality_notes,
         }
 
 
@@ -151,11 +159,22 @@ class ScenarioGenerator:
         )
         
         risk_level = self.risk_classifier.classify(risk_factors)
+        risk_score = self.risk_classifier.calculate_score(risk_factors)
+        risk_factor_dict = self.risk_classifier.get_risk_factors_dict(risk_factors)
+        risk_factor_dict["weighted_breakdown"] = self.risk_classifier.risk_contribution_breakdown(risk_factors)
         
         # Calculate confidence
         confidence = self._calculate_confidence(compliance_score, best_route)
+        data_quality_notes = []
         if self.building.extraction_mode == "geometry_derived":
             confidence = min(confidence, 0.5)
+            data_quality_notes.append(
+                "Geometry-derived mode caps confidence at 50% because semantic IfcSpace/IfcDoor data is incomplete."
+            )
+        if not violations:
+            data_quality_notes.append("No regulatory violations were detected by the active rule set.")
+        else:
+            data_quality_notes.append(f"{len(violations)} regulatory violation(s) affected compliance scoring.")
         
         # Generate explanation
         explanation = self._generate_explanation(
@@ -175,10 +194,79 @@ class ScenarioGenerator:
             violated_regulations=[v.regulation_id for v in violations],
             recommendations=recommendations,
             confidence_score=confidence,
-            explanation=explanation
+            explanation=explanation,
+            risk_score=risk_score,
+            risk_factors=risk_factor_dict,
+            decision_trace=self._build_decision_trace(
+                space=space,
+                route=best_route,
+                compliance_checks=compliance_checks,
+                violations=violations,
+                risk_level=risk_level,
+                risk_score=risk_score,
+                confidence=confidence,
+            ),
+            data_quality_notes=data_quality_notes,
         )
         
         return scenario
+
+    def _build_decision_trace(self, space: SpaceData, route: Route,
+                              compliance_checks: List[ComplianceCheck],
+                              violations: List[ComplianceCheck],
+                              risk_level: RiskLevel, risk_score: float,
+                              confidence: float) -> List[Dict[str, Any]]:
+        """Build a transparent audit trail for why the scenario was produced."""
+        extraction_basis = (
+            "geometry-derived IFC element topology"
+            if self.building.extraction_mode == "geometry_derived"
+            else "semantic IFC spaces, doors and exits"
+        )
+        return [
+            {
+                "step": "IFC extraction",
+                "input": space.id,
+                "method": extraction_basis,
+                "output": f"Origin candidate '{space.name}' with area {space.area:.1f} m2.",
+            },
+            {
+                "step": "Route search",
+                "input": route.origin,
+                "method": "Shortest path to available exit using the spatial graph.",
+                "output": {
+                    "destination": route.destination,
+                    "path": route.path,
+                    "distance_m": round(route.distance, 2),
+                    "estimated_time_s": round(route.estimated_time, 1),
+                },
+            },
+            {
+                "step": "Compliance checks",
+                "input": len(compliance_checks),
+                "method": "Rule checks for route distance and selected exit/door width.",
+                "output": {
+                    "passed": len(compliance_checks) - len(violations),
+                    "failed": len(violations),
+                    "violations": [v.message for v in violations],
+                },
+            },
+            {
+                "step": "Risk classification",
+                "input": self.risk_classifier.get_risk_factors_dict(RiskFactors(
+                    travel_distance=route.distance,
+                    evacuation_time=route.estimated_time,
+                    compliance_score=self.compliance_checker.calculate_compliance_score(compliance_checks),
+                    exit_capacity_ratio=1.0,
+                    bottleneck_count=0,
+                )),
+                "method": "Weighted deterministic score, not an opaque machine-learning prediction.",
+                "output": {
+                    "risk_score": round(risk_score, 3),
+                    "risk_level": risk_level.value,
+                    "confidence": round(confidence, 3),
+                },
+            },
+        ]
     
     def _calculate_confidence(self, compliance_score: float, route: Route) -> float:
         """Calculate confidence score."""
