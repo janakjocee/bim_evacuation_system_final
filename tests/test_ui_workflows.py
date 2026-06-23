@@ -26,3 +26,12 @@ def test_badges_do_not_use_fragile_multiline_html():
     source = (Path(__file__).resolve().parents[1] / "src/ui/ui_components.py").read_text()
 
     assert "return f\\\"\\\"\\\"" not in source[source.index("def get_risk_badge"):source.index("def create_risk_pie_chart")]
+
+
+def test_explainability_ui_is_not_black_box_or_overclaiming_rag():
+    source = (Path(__file__).resolve().parents[1] / "src/ui/streamlit_app.py").read_text()
+
+    assert "Anti-Black-Box Decision Trace" in source
+    assert "deterministic weighted score" in source
+    assert "Retrieved relevant building safety regulations via RAG" not in source
+    assert "not as final regulatory approval" in source

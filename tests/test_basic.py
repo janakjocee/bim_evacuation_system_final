@@ -18,6 +18,7 @@ from src.bim_processing.ifc_parser import (
     StairData,
 )
 from src.bim_processing.spatial_graph import SpatialGraphBuilder
+from src.scenario.scenario_generator import ScenarioGenerator
 
 
 class TestConfigLoader:
@@ -129,6 +130,35 @@ def test_geometry_derived_graph_does_not_add_disconnected_stair_nodes():
     assert graph.build()
     assert graph.get_graph_stats()["is_connected"]
     assert "STAIR1" not in graph.graph
+
+
+def test_generated_scenario_exports_explainability_trace():
+    building = BuildingData(id="B1", name="Explainability Test")
+    building.spaces["S1"] = SpaceData(id="S1", name="Room A", area=20)
+    exit_door = DoorData(
+        id="E1",
+        name="Main Exit",
+        width=1.2,
+        height=2.1,
+        location=Point3D(),
+        is_exit=True,
+        connected_spaces=["S1"],
+    )
+    building.doors = {"E1": exit_door}
+    building.exits = {"E1": exit_door}
+
+    graph = SpatialGraphBuilder(building)
+    assert graph.build()
+
+    scenarios = ScenarioGenerator(building, graph).generate(max_scenarios=1)
+    assert scenarios
+    payload = scenarios[0].to_dict()
+
+    assert payload["risk_score"] >= 0
+    assert payload["risk_factors"]["weighted_breakdown"]["total_score"] == payload["risk_score"]
+    assert payload["decision_trace"]
+    assert payload["decision_trace"][-1]["method"] == "Weighted deterministic score, not an opaque machine-learning prediction."
+    assert payload["data_quality_notes"]
 
 
 if __name__ == "__main__":

@@ -34,6 +34,9 @@ class PipelineResult:
     source_file_name: str = ""
     source_file_sha256: str = ""
     ifc_schema: str = "UNKNOWN"
+    regulation_source: str = "default_rules"
+    regulation_clause_count: int = 0
+    rag_enabled: bool = False
 
 
 class EvacuationPipeline:
@@ -163,6 +166,7 @@ class EvacuationPipeline:
             self.scenario_generator.set_regulations(regulation_clauses)
         
         scenarios = self.scenario_generator.generate(max_scenarios=max_scenarios)
+        regulation_source = "uploaded_regulations" if regulation_clauses else "default_rules"
         
         if not scenarios:
             errors.append("No scenarios generated")
@@ -186,6 +190,9 @@ class EvacuationPipeline:
             source_file_name=source_file_name,
             source_file_sha256=source_file_sha256,
             ifc_schema=readiness["schema"],
+            regulation_source=regulation_source,
+            regulation_clause_count=len(regulation_clauses),
+            rag_enabled=bool(regulation_clauses and enable_rag),
         )
 
     
@@ -219,6 +226,9 @@ class EvacuationPipeline:
                 'source_file_sha256': result.source_file_sha256,
                 'ifc_schema': result.ifc_schema,
                 'source_mode': result.source_mode,
+                'regulation_source': result.regulation_source,
+                'regulation_clause_count': result.regulation_clause_count,
+                'rag_enabled': result.rag_enabled,
                 'scenarios': [s.to_dict() for s in result.scenarios],
                 'summary': self.scenario_generator.get_summary() if self.scenario_generator else {}
             }

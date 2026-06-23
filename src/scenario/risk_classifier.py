@@ -39,7 +39,7 @@ class RiskClassifier:
         Returns:
             Risk level
         """
-        score = self._calculate_risk_score(factors)
+        score = self.calculate_score(factors)
         
         low_threshold = self.thresholds.get('low', 0.8)
         medium_threshold = self.thresholds.get('medium', 0.5)
@@ -51,7 +51,7 @@ class RiskClassifier:
         else:
             return RiskLevel.HIGH
     
-    def _calculate_risk_score(self, factors: RiskFactors) -> float:
+    def calculate_score(self, factors: RiskFactors) -> float:
         """
         Calculate composite risk score.
         
@@ -80,6 +80,18 @@ class RiskClassifier:
         scores.append(bottleneck_score)
         
         return sum(scores)
+
+    def risk_contribution_breakdown(self, factors: RiskFactors) -> Dict[str, Any]:
+        """Return the weighted score components used for traceable risk decisions."""
+        time_score = max(0, 1 - (factors.evacuation_time / 300)) * 0.2
+        return {
+            "compliance_component": round(factors.compliance_score * 0.4, 3),
+            "exit_capacity_component": round(min(factors.exit_capacity_ratio, 1.0) * 0.3, 3),
+            "evacuation_time_component": round(time_score, 3),
+            "bottleneck_component": round(max(0, 1 - (factors.bottleneck_count * 0.1)) * 0.1, 3),
+            "total_score": round(self.calculate_score(factors), 3),
+            "interpretation": "Higher score means lower risk; thresholds are low>=0.8, medium>=0.5, otherwise high.",
+        }
     
     def get_risk_description(self, level: RiskLevel) -> str:
         """Get human-readable risk description."""

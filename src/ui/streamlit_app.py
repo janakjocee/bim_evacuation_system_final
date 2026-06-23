@@ -415,6 +415,15 @@ def render_selected_scenario_details(result, scenario):
             st.info(recommendation)
     with detail_evidence:
         st.write(scenario.explanation)
+        st.markdown("#### Anti-Black-Box Decision Trace")
+        st.caption("The scenario score is deterministic and traceable; it is not an opaque AI prediction.")
+        for item in scenario.decision_trace:
+            with st.expander(item["step"], expanded=False):
+                st.json(item)
+        if scenario.data_quality_notes:
+            st.markdown("#### Data Quality Notes")
+            for note in scenario.data_quality_notes:
+                st.warning(note)
         st.json(scenario.to_dict())
         st.download_button(
             "Download selected scenario evidence",
@@ -1172,6 +1181,16 @@ def render_explainability(result):
     selected = st.selectbox("Scenario", options=range(len(scenarios)), format_func=lambda i: scenario_options[i])
     
     scenario = scenarios[selected]
+    regulation_phrase = (
+        f"Parsed {result.regulation_clause_count} uploaded regulation clause(s)"
+        if result.regulation_source == "uploaded_regulations"
+        else "Used built-in default screening constraints because no regulation file was uploaded"
+    )
+    rag_phrase = (
+        "RAG grounding was enabled for uploaded regulation evidence."
+        if result.rag_enabled
+        else "RAG grounding was not used for this run."
+    )
     
     st.markdown("---")
     
@@ -1198,9 +1217,9 @@ def render_explainability(result):
             ("1. Building Analysis", f"Analyzed **{len(result.building.spaces)} {analysis_subject}**. {occupancy_phrase}"),
             ("2. Spatial Graph Construction", f"Built a NetworkX graph representing building topology and each {route_phrase}."),
             ("3. Route Calculation", f"Applied Dijkstra's shortest path algorithm from **{scenario.origin_space_name}** to the nearest {'inferred egress point' if geometry_mode else 'exit'}. Route length: **{scenario.evacuation_route.distance:.1f}m**."),
-            ("4. Regulation Retrieval", f"Retrieved relevant building safety regulations via RAG (FAISS + SentenceTransformers) for constraint validation."),
+            ("4. Regulation Evidence", f"{regulation_phrase}. {rag_phrase}"),
             ("5. Compliance Validation", f"Checked {len(scenario.violated_regulations) + 2} regulatory constraints. **{len(scenario.violated_regulations)} violations** identified."),
-            ("6. Risk Classification", f"Classified as **{scenario.risk_level.value.upper()} RISK** based on travel distance, compliance score, and exit capacity analysis."),
+            ("6. Risk Classification", f"Classified as **{scenario.risk_level.value.upper()} RISK** using deterministic weighted factors. Score: **{scenario.risk_score:.3f}**."),
             ("7. Explanation Generation", f"Generated natural language explanation with traceable regulation references and improvement recommendations."),
         ]
         
@@ -1251,13 +1270,17 @@ def render_explainability(result):
         # Model Confidence
         st.markdown("""
         <div class="success-box">
-            <strong>🎯 Model Confidence</strong><br>
+            <strong>🎯 Confidence & Transparency</strong><br>
             <small>
             • Score: {:.1f}%<br>
-            • Based on: route feasibility, regulation coverage, data completeness
+            • Based on: route feasibility, regulation coverage, data completeness<br>
+            • Method: deterministic weighted score, not a hidden black-box model
             </small>
         </div>
         """.format(scenario.confidence_score * 100), unsafe_allow_html=True)
+
+        st.markdown("### Risk Factors")
+        st.json(scenario.risk_factors)
     
     # Natural Language Explanation
     st.markdown("---")
@@ -1270,6 +1293,16 @@ def render_explainability(result):
         </p>
     </div>
     """, unsafe_allow_html=True)
+
+    st.markdown("### Anti-Black-Box Decision Trace")
+    st.caption("This is the audit trail used to explain how the scenario was generated and classified.")
+    for item in scenario.decision_trace:
+        with st.expander(item["step"], expanded=False):
+            st.json(item)
+    if scenario.data_quality_notes:
+        st.markdown("### Data Quality Notes")
+        for note in scenario.data_quality_notes:
+            st.warning(note)
     
     # Example reasoning format
     st.markdown("---")
@@ -1590,8 +1623,8 @@ def render_export(result):
         <strong>Report Ready for Export</strong><br>
         <small>
         This report contains all AI-generated scenarios, risk assessments, compliance checks, 
-        and expert review decisions. It is suitable for fire strategy documentation and 
-        regulatory submission.
+        explainability traces and expert review decisions. It is suitable as an expert-review
+        package for fire strategy documentation, not as final regulatory approval.
         </small>
     </div>
     """, unsafe_allow_html=True)
