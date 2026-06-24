@@ -619,6 +619,15 @@ def process_files(ifc_file, regulation_file, max_scenarios, enable_rag):
                 "Connectivity and boundary egress points were inferred only from the "
                 "file's actual elements, geometry, and properties."
             )
+        elif result.source_mode == "semantic_spaces_inferred_topology":
+            st.success(
+                f"✅ Analysis Complete! Generated **{len(result.scenarios)}** evacuation scenarios."
+            )
+            st.info(
+                "The uploaded IFC supplied real IfcSpace room geometry, but did not provide "
+                "usable door/exit route semantics. The route graph was inferred from those "
+                "actual room bounds and should be reviewed by the fire-safety expert."
+            )
         elif result.success:
             st.success(f"✅ Analysis Complete! Generated **{len(result.scenarios)}** evacuation scenarios.")
         else:
@@ -655,6 +664,12 @@ def render_dashboard(result):
         st.warning(
             "GEOMETRY-DERIVED STRUCTURAL SCREENING: elements and connectivity come from "
             "the uploaded IFC only. These are not verified rooms, doors, or evacuation routes."
+        )
+    elif result.source_mode == "semantic_spaces_inferred_topology":
+        st.warning(
+            "IFCSPACE-INFERRED ROUTE SCREENING: room geometry comes from uploaded IfcSpace "
+            "entities, while route links and boundary exits are inferred because semantic "
+            "IfcDoor/exit connectivity was not available."
         )
     
     if not result or not result.scenarios:

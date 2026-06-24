@@ -140,6 +140,8 @@ class IFCParser:
             # Derive a bounded topology only from real elements in the file.
             if not building.spaces:
                 self._extract_geometry_topology(building)
+            elif not building.doors or not building.exits:
+                self._infer_space_topology(building)
             
             logger.info(f"Successfully parsed building: {building.name}")
             logger.info(f"  Spaces: {len(building.spaces)}")
@@ -404,6 +406,42 @@ class IFCParser:
             f"{len(building.spaces)} elements, "
             f"{len(building.doors)} inferred connections, {len(building.exits)} inferred exits"
         )
+
+    def _infer_space_topology(self, building: BuildingData) -> None:
+        """Infer route links for IFCs that include spaces but omit door semantics."""
+        centers = {}
+        missing_geometry = 0
+        for space_id, space in building.spaces.items():
+            if not space.bounding_box:
+                missing_geometry += 1
+                continue
+            minimum, maximum = space.bounding_box
+            centers[space_id] = Point3D(
+                (minimum.x + maximum.x) / 2,
+                (minimum.y + maximum.y) / 2,
+                (minimum.z + maximum.z) / 2,
+            )
+
+        if len(centers) < 2:
+            return
+
+        existing_door_count = len(building.doors)
+        if not building.doors:
+            self._add_proxy_connectivity(building, centers)
+        if not building.exits:
+            self._add_inferred_proxy_exits(building, centers)
+
+        if len(building.doors) > existing_door_count or building.exits:
+            building.extraction_mode = "semantic_spaces_inferred_topology"
+            building.geometry_source_types = ["IfcSpace"]
+            building.geometry_elements_available = len(building.spaces)
+            building.geometry_elements_used = len(centers)
+            logger.info(
+                "Inferred route topology from IfcSpace geometry: "
+                f"{len(centers)} spaces with usable bounds, "
+                f"{len(building.doors) - existing_door_count} inferred connections/exits, "
+                f"{missing_geometry} spaces without bounds"
+            )
 
     @staticmethod
     def _evenly_sample(elements: List[Any], limit: int) -> List[Any]:
