@@ -4,18 +4,6 @@ Retrieval-Augmented Generation engine using FAISS and SentenceTransformers.
 from typing import Dict, List, Optional, Any, Tuple
 import numpy as np
 
-try:
-    from sentence_transformers import SentenceTransformer
-    SENTENCE_TRANSFORMERS_AVAILABLE = True
-except ImportError:
-    SENTENCE_TRANSFORMERS_AVAILABLE = False
-
-try:
-    import faiss
-    FAISS_AVAILABLE = True
-except ImportError:
-    FAISS_AVAILABLE = False
-
 from ..utils.logger import get_logger
 from ..utils.config_loader import get_config
 from .regulation_parser import RegulationClause
@@ -34,20 +22,31 @@ class RAGEngine:
         self.index = None
         self.clauses: List[RegulationClause] = []
         self.chunk_texts: List[str] = []
+        self.faiss = None
         
-        self._initialize()
+        # Heavy ML libraries are loaded lazily in build_index(). This keeps the
+        # Streamlit app shell responsive on Community Cloud before users upload
+        # regulations or explicitly use RAG grounding.
     
     def _initialize(self) -> None:
         """Initialize embedding model and FAISS."""
-        if SENTENCE_TRANSFORMERS_AVAILABLE:
-            try:
-                model_name = self.config.get('rag.embedding_model', 'all-MiniLM-L6-v2')
-                self.embedding_model = SentenceTransformer(model_name)
-                logger.info(f"Loaded embedding model: {model_name}")
-            except Exception as e:
-                logger.warning(f"Could not load embedding model: {e}")
-        else:
-            logger.warning("SentenceTransformers not available")
+        if self.embedding_model is not None and self.faiss is not None:
+            return
+
+        try:
+            from sentence_transformers import SentenceTransformer
+            import faiss
+        except ImportError:
+            logger.warning("RAG dependencies not available. Using keyword search.")
+            return
+
+        self.faiss = faiss
+        try:
+            model_name = self.config.get('rag.embedding_model', 'all-MiniLM-L6-v2')
+            self.embedding_model = SentenceTransformer(model_name)
+            logger.info(f"Loaded embedding model: {model_name}")
+        except Exception as e:
+            logger.warning(f"Could not load embedding model: {e}")
     
     def build_index(self, clauses: List[RegulationClause]) -> bool:
         """
@@ -60,13 +59,10 @@ class RAGEngine:
             True if successful
         """
         self.clauses = clauses
+        self._initialize()
         
-        if not SENTENCE_TRANSFORMERS_AVAILABLE or not FAISS_AVAILABLE:
+        if self.embedding_model is None or self.faiss is None:
             logger.warning("RAG dependencies not available. Using keyword search.")
-            return False
-        
-        if self.embedding_model is None:
-            logger.warning("Embedding model not available")
             return False
         
         try:
@@ -89,11 +85,11 @@ class RAGEngine:
             )
             
             # Normalize embeddings
-            faiss.normalize_L2(embeddings)
+            self.faiss.normalize_L2(embeddings)
             
             # Build FAISS index
             dimension = embeddings.shape[1]
-            self.index = faiss.IndexFlatIP(dimension)
+            self.index = self.faiss.IndexFlatIP(dimension)
             self.index.add(embeddings)
             
             logger.info(f"Built index with {len(self.chunk_texts)} clauses")
@@ -129,7 +125,7 @@ class RAGEngine:
         try:
             # Encode query
             query_embedding = self.embedding_model.encode([query])
-            faiss.normalize_L2(query_embedding)
+            self.faiss.normalize_L2(query_embedding)
             
             # Search
             scores, indices = self.index.search(query_embedding, top_k)
