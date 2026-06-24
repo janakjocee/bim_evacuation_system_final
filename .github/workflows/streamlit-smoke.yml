@@ -1,0 +1,50 @@
+name: Streamlit smoke test
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  streamlit-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install apt dependencies
+        run: |
+          sudo apt-get update
+          xargs -a packages.txt sudo apt-get install -y
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install -r requirements.txt
+
+      - name: Run tests
+        run: python -m pytest -q
+
+      - name: Compile Python sources
+        run: python -m py_compile $(find src pages scripts tests -name '*.py' -print)
+
+      - name: Streamlit AppTest smoke
+        run: |
+          python - <<'PY'
+          from streamlit.testing.v1 import AppTest
+
+          for path in [
+              "src/ui/streamlit_app.py",
+              "src/ui/pages/Fire_Scenario_Testing.py",
+              "src/ui/pages/Worst_Case_Testing.py",
+          ]:
+              app = AppTest.from_file(path, default_timeout=30)
+              app.run(timeout=30)
+              if app.exception:
+                  raise RuntimeError(f"{path} failed: {[exc.value for exc in app.exception]}")
+              print(f"{path}: OK")
+          PY
