@@ -1,5 +1,6 @@
 """Tests for IFC compatibility/readiness validation."""
 
+from src.bim_processing.ifc_parser import BuildingData, IFCParser, Point3D, SpaceData
 from src.bim_processing.ifc_validation import validate_ifc_model
 
 
@@ -33,3 +34,34 @@ def test_ifc_validation_good_model_gets_high_score():
     })
     assert result["model_readiness_score"] >= 90
     assert result["readiness_label"] == "Ready for scenario generation"
+
+
+def test_parser_infers_topology_for_spaces_without_doors():
+    building = BuildingData(id="B1", name="Space-only IFC")
+    building.spaces = {
+        "S1": SpaceData(
+            id="S1",
+            name="Room 1",
+            area=20,
+            bounding_box=(Point3D(0, 0, 0), Point3D(4, 4, 3)),
+        ),
+        "S2": SpaceData(
+            id="S2",
+            name="Room 2",
+            area=20,
+            bounding_box=(Point3D(6, 0, 0), Point3D(10, 4, 3)),
+        ),
+        "S3": SpaceData(
+            id="S3",
+            name="Room 3",
+            area=20,
+            bounding_box=(Point3D(12, 0, 0), Point3D(16, 4, 3)),
+        ),
+    }
+
+    IFCParser()._infer_space_topology(building)
+
+    assert building.extraction_mode == "semantic_spaces_inferred_topology"
+    assert len(building.doors) >= 3
+    assert len(building.exits) == 2
+    assert all(door.connected_spaces for door in building.doors.values())

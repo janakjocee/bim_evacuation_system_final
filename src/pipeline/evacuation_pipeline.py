@@ -89,6 +89,18 @@ class EvacuationPipeline:
         
         errors = []
         
+        if _looks_like_git_lfs_pointer(source_path):
+            errors.append(
+                "The uploaded .ifc file is a Git LFS pointer, not the actual IFC model. "
+                "Download the real LFS file contents and upload that IFC again."
+            )
+            return PipelineResult(
+                success=False,
+                errors=errors,
+                source_file_name=source_file_name,
+                source_file_sha256=source_file_sha256,
+            )
+
         # Step 1: Parse IFC
         logger.info("Step 1: Parsing IFC file")
         self.building = self.ifc_parser.parse(ifc_path)
@@ -105,7 +117,11 @@ class EvacuationPipeline:
         readiness = validate_ifc_model(
             self.ifc_parser.ifc_file,
             extracted_data={
+                "space_count": len(self.building.spaces),
+                "door_count": len(self.building.doors),
+                "stair_count": len(self.building.stairs),
                 "possible_exits_count": len(self.building.exits),
+                "graph_connectivity_complete": bool(self.building.doors and self.building.exits),
             },
         )
         source_mode = "uploaded_ifc"
@@ -114,6 +130,11 @@ class EvacuationPipeline:
             source_mode = "geometry_derived"
             readiness["readiness_label"] = (
                 "Geometry-derived structural screening available; semantic room/door review required"
+            )
+        elif self.building.extraction_mode == "semantic_spaces_inferred_topology":
+            source_mode = "semantic_spaces_inferred_topology"
+            readiness["readiness_label"] = (
+                "Semantic spaces with inferred route topology; door/exit assumptions require review"
             )
         elif readiness["critical_issues"]:
             errors.extend(readiness["critical_issues"])
@@ -255,3 +276,15 @@ class EvacuationPipeline:
             logger.info(f"Exported CSV: {csv_path}")
         
         return exported
+
+
+def _looks_like_git_lfs_pointer(path: Path) -> bool:
+    """Return True when a file is a Git LFS pointer instead of real IFC SPF text."""
+    try:
+        header = path.read_text(encoding="utf-8", errors="ignore")[:200]
+    except OSError:
+        return False
+    return (
+        "version https://git-lfs.github.com/spec/v1" in header
+        and "oid sha256:" in header
+    )
