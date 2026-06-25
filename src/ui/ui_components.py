@@ -383,7 +383,7 @@ def render_scenario_card(scenario: EvacuationScenario, index: int):
 
 def render_explanation_panel(scenario: EvacuationScenario):
     """Render explainability panel for a scenario."""
-    st.markdown("### 🧠 AI Reasoning Chain")
+    st.markdown("### 🧠 Deterministic Decision Trace")
     
     # Reasoning steps
     steps = [

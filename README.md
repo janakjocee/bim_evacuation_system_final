@@ -16,6 +16,16 @@ Repository: [janakjocee/bim_evacuation_system_final](https://github.com/janakjoc
 
 This MSc research prototype turns IFC/BIM building data into evacuation scenario suggestions for expert review. It combines openBIM parsing, spatial graph analysis, NLP/RAG-assisted regulation interpretation, compliance-oriented screening, explainable scenario generation, human-in-the-loop review and export.
 
+### What “AI” Means in This Prototype
+
+This project does **not** use GPT, OpenAI, an autonomous agent, CFD, or a certified evacuation simulator to make fire-engineering decisions. The AI-assisted parts are:
+
+- **spaCy NLP** to split uploaded regulation text into clauses and detect simple constraints such as widths and travel distances.
+- **SentenceTransformers + FAISS RAG** to retrieve relevant uploaded regulation clauses when RAG grounding is enabled.
+- **Deterministic graph/rule algorithms** for route search, compliance screening, risk scoring and explanation traces.
+
+The system is fast because it performs lightweight BIM parsing, NetworkX shortest-path checks, simplified fire/smoke approximations and rule-based scoring. It is a screening and explanation prototype, not a final legal or professional fire-safety decision system.
+
 The project now includes two fire-safety scenario layers:
 
 1. **Fire-Origin Worst-Case Scenario Engine** — tests blocked nodes, blocked doors, smoke-affected routes, rerouting, trapped rooms, bottlenecks and affected occupants.
@@ -36,7 +46,7 @@ This is an academic decision-support tool. It does **not** perform CFD, certifie
   readiness checklist, evidence display and per-scenario download.
 - Regulation-oriented NLP/RAG workflow using spaCy, FAISS and SentenceTransformers.
 - Evacuation scenario generation with distance, time, confidence, compliance and risk.
-- Explainability panel for traceable AI reasoning.
+- Explainability panel for traceable deterministic decision reasoning.
 - Human-in-the-loop expert review workflow.
 - Fire-origin worst-case scenario testing.
 - ASET/RSET fire scenario testing.

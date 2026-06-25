@@ -18,6 +18,9 @@ from src.bim_processing.ifc_parser import (
     StairData,
 )
 from src.bim_processing.spatial_graph import SpatialGraphBuilder
+from src.nlp.regulation_parser import RegulationClause
+from src.nlp.regulation_parser import RegulationParser
+from src.scenario.compliance_checker import ComplianceChecker
 from src.scenario.scenario_generator import ScenarioGenerator
 
 
@@ -159,6 +162,82 @@ def test_generated_scenario_exports_explainability_trace():
     assert payload["decision_trace"]
     assert payload["decision_trace"][-1]["method"] == "Weighted deterministic score, not an opaque machine-learning prediction."
     assert payload["data_quality_notes"]
+
+
+def test_uploaded_regulation_values_drive_compliance_rules():
+    checker = ComplianceChecker()
+    checker.update_regulations([
+        RegulationClause(
+            clause_id="R1",
+            text="The travel distance to an exit must not exceed 30 metres.",
+            applies_to="route",
+            constraint_type="max_distance",
+            value=30.0,
+            unit="metres",
+        ),
+        RegulationClause(
+            clause_id="R2",
+            text="Final exit doors shall have a minimum clear opening width of 1200mm.",
+            applies_to="door",
+            constraint_type="min_width",
+            value=1.2,
+            unit="mm",
+        ),
+    ])
+
+    route_check = checker.check_route(SpaceData(id="S1", name="Room", area=10), 35.0)[0]
+    exit_check = checker.check_door(DoorData(
+        id="E1",
+        name="Final Exit",
+        width=1.05,
+        height=2.1,
+        location=Point3D(),
+        is_exit=True,
+    ))[0]
+
+    assert route_check.required_value == 30.0
+    assert route_check.status == ComplianceStatus.NON_COMPLIANT
+    assert exit_check.required_value == 1.2
+    assert exit_check.status == ComplianceStatus.NON_COMPLIANT
+
+
+def test_regulation_parser_recognizes_not_exceed_maximum_language():
+    clauses = RegulationParser().parse(
+        "1.1 Travel Distance\n"
+        "The travel distance to the nearest exit must not exceed 30 metres."
+    )
+
+    assert clauses
+    assert clauses[0].constraint_type == "max_distance"
+    assert clauses[0].value == 30.0
+
+
+def test_ifcspace_inferred_topology_caps_confidence():
+    building = BuildingData(
+        id="B1",
+        name="Inferred Spaces",
+        extraction_mode="semantic_spaces_inferred_topology",
+    )
+    building.spaces["S1"] = SpaceData(id="S1", name="Room A", area=20)
+    exit_door = DoorData(
+        id="E1",
+        name="Inferred Exit",
+        width=1.2,
+        height=2.1,
+        location=Point3D(),
+        is_exit=True,
+        connected_spaces=["S1"],
+    )
+    building.doors = {"E1": exit_door}
+    building.exits = {"E1": exit_door}
+
+    graph = SpatialGraphBuilder(building)
+    assert graph.build()
+
+    scenario = ScenarioGenerator(building, graph).generate(max_scenarios=1)[0]
+
+    assert scenario.confidence_score <= 0.65
+    assert "route links and exits were inferred" in " ".join(scenario.data_quality_notes)
 
 
 if __name__ == "__main__":
