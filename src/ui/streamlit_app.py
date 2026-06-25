@@ -3,7 +3,7 @@ Professional Streamlit UI for BIM Evacuation System.
 
 A Fire Strategy decision-support system with:
 - Human-in-the-Loop (HITL)
-- Explainable AI (xAI)
+- Explainability and decision trace
 - Multi-tab engineering workflow
 - Interactive visualizations
 
@@ -442,7 +442,7 @@ def render_header():
     
     with col1:
         st.markdown('<p class="main-title">🏗️ BIM Evacuation Fire Strategy Platform</p>', unsafe_allow_html=True)
-        st.markdown('<p class="sub-title">AI-Driven Decision-Support System for Fire Safety Engineering</p>', unsafe_allow_html=True)
+        st.markdown('<p class="sub-title">Rule-Based BIM + NLP/RAG Decision-Support for Fire Safety Review</p>', unsafe_allow_html=True)
     
     with col2:
         st.markdown(f"""
@@ -455,8 +455,8 @@ def render_header():
     
     # Disclaimer
     st.info("""
-    🎓 **Research Prototype** | This system implements Human-in-the-Loop (HITL) AI for evacuation scenario generation. 
-    All AI-generated scenarios require expert review and validation. **This system does NOT replace professional fire engineering judgement.**
+    🎓 **Research Prototype** | This system uses deterministic graph/rule calculations, spaCy regulation parsing, and optional FAISS/SentenceTransformers retrieval.
+    Outputs are **screening scenarios for expert review**, not legal compliance approval and not a replacement for professional fire engineering judgement.
     """)
 
 # ==============================================================================
@@ -1177,11 +1177,11 @@ def render_evacuation_scenarios(result):
     st.plotly_chart(fig_comp, key="scenario_route_comp")
 
 # ==============================================================================
-# TAB 5: EXPLAINABILITY (xAI)
+# TAB 5: EXPLAINABILITY / DECISION TRACE
 # ==============================================================================
 def render_explainability(result):
     """Render Explainability panel."""
-    st.markdown('<div class="section-header">🧠 Explainable AI (xAI)</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-header">🧠 Explainability & Decision Trace</div>', unsafe_allow_html=True)
     
     if not result or not result.scenarios:
         st.info("📋 No scenarios available. Run analysis first.")
@@ -1213,7 +1213,7 @@ def render_explainability(result):
     col_left, col_right = st.columns([2, 1])
     
     with col_left:
-        st.markdown("### AI Reasoning Chain")
+        st.markdown("### Deterministic Decision Trace")
         geometry_mode = result.source_mode == "geometry_derived"
         analysis_subject = "screened IFC elements" if geometry_mode else "spaces"
         occupancy_phrase = (
@@ -1326,9 +1326,9 @@ def render_explainability(result):
     example = """
     **Why this scenario was generated:**
     
-    > The AI system analyzed the building topology and identified that Office 101 has a direct 
-    > connection to the Main Corridor. The shortest path to the nearest exit (Main Exit) was 
-    > calculated at 32.5 meters, which is within the maximum allowed travel distance of 45 meters 
+    > The rule-based system analyzed the building topology and identified that Office 101 has a direct
+    > connection to the Main Corridor. The shortest path to the nearest exit (Main Exit) was
+    > calculated at 32.5 meters, which is within the maximum allowed travel distance of 45 meters
     > per Approved Document B Section 2.2.1.
     
     **Which regulation triggered the risk assessment:**
@@ -1486,7 +1486,7 @@ def render_expert_review(result):
     <div class="warning-box">
         <strong>Human-in-the-Loop (HITL) Protocol</strong><br>
         <small>
-        As a fire safety engineer, your review is critical. Please assess each AI-generated scenario 
+        As a fire safety engineer, your review is critical. Please assess each system-generated screening scenario
         and provide your professional judgement. Your decisions will be recorded for audit and validation.
         </small>
     </div>
@@ -1542,7 +1542,7 @@ def render_expert_review(result):
         
         # Recommendations
         if scenario.recommendations:
-            st.markdown("**AI Recommendations:**")
+            st.markdown("**System Recommendations:**")
             for r in scenario.recommendations:
                 st.info(f"💡 {r}")
     
@@ -1637,7 +1637,7 @@ def render_export(result):
     <div class="success-box">
         <strong>Report Ready for Export</strong><br>
         <small>
-        This report contains all AI-generated scenarios, risk assessments, compliance checks, 
+        This report contains all system-generated screening scenarios, risk assessments, compliance checks,
         explainability traces and expert review decisions. It is suitable as an expert-review
         package for fire strategy documentation, not as final regulatory approval.
         </small>
@@ -1856,8 +1856,8 @@ def main():
         <div style="text-align: center; padding: 3rem;">
             <h2>👋 Welcome to the BIM Evacuation Fire Strategy Platform</h2>
             <p style="color: #666; font-size: 1.1rem;">
-                This AI-powered decision-support system generates evacuation scenarios from BIM models,<br>
-                validates them against building safety regulations, and provides explainable recommendations<br>
+                This rule-based decision-support system generates evacuation screening scenarios from BIM models,<br>
+                checks them against parsed/default safety constraints, and provides explainable recommendations<br>
                 for fire safety engineering review.
             </p>
             <br>
@@ -1868,7 +1868,7 @@ def main():
                     <li>Optionally upload <strong>safety regulations</strong> (e.g., Approved Document B)</li>
                     <li>Configure analysis settings</li>
                     <li>Click <strong>"Generate Fire Strategy Scenarios"</strong></li>
-                    <li>Review AI-generated scenarios across all tabs</li>
+                    <li>Review system-generated screening scenarios across all tabs</li>
                     <li>Provide <strong>expert engineering review</strong> in the HITL panel</li>
                     <li>Export the complete fire strategy report</li>
                 </ol>

@@ -171,6 +171,11 @@ class ScenarioGenerator:
             data_quality_notes.append(
                 "Geometry-derived mode caps confidence at 50% because semantic IfcSpace/IfcDoor data is incomplete."
             )
+        elif self.building.extraction_mode == "semantic_spaces_inferred_topology":
+            confidence = min(confidence, 0.65)
+            data_quality_notes.append(
+                "IfcSpace-inferred topology caps confidence at 65% because route links and exits were inferred from room geometry."
+            )
         if not violations:
             data_quality_notes.append("No regulatory violations were detected by the active rule set.")
         else:
@@ -217,11 +222,12 @@ class ScenarioGenerator:
                               risk_level: RiskLevel, risk_score: float,
                               confidence: float) -> List[Dict[str, Any]]:
         """Build a transparent audit trail for why the scenario was produced."""
-        extraction_basis = (
-            "geometry-derived IFC element topology"
-            if self.building.extraction_mode == "geometry_derived"
-            else "semantic IFC spaces, doors and exits"
-        )
+        if self.building.extraction_mode == "geometry_derived":
+            extraction_basis = "geometry-derived IFC element topology"
+        elif self.building.extraction_mode == "semantic_spaces_inferred_topology":
+            extraction_basis = "semantic IfcSpace geometry with inferred route links and egress points"
+        else:
+            extraction_basis = "semantic IFC spaces, doors and exits"
         return [
             {
                 "step": "IFC extraction",
@@ -294,6 +300,10 @@ class ScenarioGenerator:
         if self.building.extraction_mode == "geometry_derived":
             parts.append(
                 "This is geometry-derived structural screening, not a verified room-level route."
+            )
+        elif self.building.extraction_mode == "semantic_spaces_inferred_topology":
+            parts.append(
+                "This uses real IfcSpace geometry with inferred route links and egress points, not verified IfcDoor connectivity."
             )
         parts.append(f"Route to exit: {route.distance:.1f} meters, "
                     f"estimated evacuation time: {route.estimated_time:.1f} seconds.")

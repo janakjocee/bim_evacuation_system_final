@@ -1,8 +1,8 @@
 """
 Compliance checker for validating scenarios against regulations.
 """
-from typing import Dict, List, Any, Optional
-from dataclasses import dataclass, field
+from typing import Dict, List, Any
+from dataclasses import dataclass
 
 from ..utils.logger import get_logger
 from ..utils.config_loader import get_config
@@ -53,16 +53,39 @@ class ComplianceChecker:
         Args:
             clauses: Parsed regulation clauses
         """
+        applied = 0
         for clause in clauses:
             if clause.value is not None:
-                key = f"{clause.applies_to}_{clause.constraint_type}"
-                self.regulations[key] = {
-                    'value': clause.value,
-                    'unit': clause.unit,
-                    'clause_id': clause.clause_id
-                }
-        
-        logger.info(f"Updated regulations with {len(clauses)} clauses")
+                key = self._map_clause_to_rule_key(clause)
+                if key:
+                    self.regulations[key] = clause.value
+                    applied += 1
+
+        logger.info(f"Updated regulations with {len(clauses)} clauses; applied {applied} numeric constraints")
+
+    def _map_clause_to_rule_key(self, clause: RegulationClause) -> str:
+        """Map parsed regulation clauses onto the checker rule keys actually used."""
+        text = clause.text.lower()
+        constraint = clause.constraint_type
+        applies_to = clause.applies_to
+
+        if constraint == "max_distance" and ("travel" in text or applies_to == "route"):
+            return "max_travel_distance"
+        if constraint == "min_width":
+            if "final exit" in text or ("exit" in text and applies_to == "door"):
+                return "min_exit_width"
+            if "corridor" in text or applies_to == "corridor":
+                return "min_corridor_width"
+            if "stair" in text or applies_to == "stair":
+                return "min_stair_width"
+            if "door" in text or applies_to == "door":
+                return "min_door_width"
+        if constraint == "max_height" and "riser" in text:
+            return "max_riser_height"
+        if constraint in {"min_width", "min_height"} and "tread" in text:
+            return "min_tread_length"
+
+        return ""
     
     def check_door(self, door: DoorData) -> List[ComplianceCheck]:
         """

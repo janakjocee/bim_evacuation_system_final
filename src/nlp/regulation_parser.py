@@ -144,7 +144,17 @@ class RegulationParser:
         
         # Check for minimum/maximum
         has_minimum = any(word in text_lower for word in ['minimum', 'min', 'at least', 'not less than'])
-        has_maximum = any(word in text_lower for word in ['maximum', 'max', 'not more than', 'no more than'])
+        has_maximum = any(word in text_lower for word in [
+            'maximum',
+            'max',
+            'not more than',
+            'no more than',
+            'not exceed',
+            'must not exceed',
+            'shall not exceed',
+            'should not exceed',
+            'exceeding',
+        ])
         
         # Check what is being constrained
         if 'width' in text_lower:
