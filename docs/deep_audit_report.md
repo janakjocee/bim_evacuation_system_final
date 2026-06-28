@@ -103,7 +103,7 @@ exported JSON under `regulation_application`.
 
 ```text
 python3 -m pytest -q
-55 passed, 3 skipped
+56 passed, 3 skipped
 ```
 
 The skipped tests are optional environment-dependent tests, such as PDF fixture

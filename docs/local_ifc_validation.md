@@ -41,7 +41,7 @@ labels are capped when topology/data quality is insufficient.
 
 Additional checks completed:
 
-- 55 automated tests pass, 3 optional tests skip when local optional fixtures or
+- 56 automated tests pass, 3 optional tests skip when local optional fixtures or
   PDF generation dependencies are unavailable.
 - The five structural/Montebello IFCs generate valid JSON and CSV exports.
 - The five structural/Montebello IFCs render network, risk, performance,
