@@ -30,6 +30,7 @@ class PipelineResult:
     errors: List[str] = field(default_factory=list)
     processing_time: float = 0.0
     readiness: Dict[str, Any] = field(default_factory=dict)
+    graph_stats: Dict[str, Any] = field(default_factory=dict)
     source_mode: str = "uploaded_ifc"
     source_file_name: str = ""
     source_file_sha256: str = ""
@@ -37,6 +38,7 @@ class PipelineResult:
     regulation_source: str = "default_rules"
     regulation_clause_count: int = 0
     regulation_rule_count: int = 0
+    regulation_application: Dict[str, Any] = field(default_factory=dict)
     rag_enabled: bool = False
 
 
@@ -125,7 +127,7 @@ class EvacuationPipeline:
                 "graph_connectivity_complete": bool(self.building.doors and self.building.exits),
             },
         )
-        source_mode = "uploaded_ifc"
+        source_mode = "semantic_ifc"
 
         if self.building.extraction_mode == "geometry_derived":
             source_mode = "geometry_derived"
@@ -165,6 +167,7 @@ class EvacuationPipeline:
         
         if not graph_success:
             logger.warning("Graph building had issues, continuing with limited functionality")
+        graph_stats = self.graph_builder.get_graph_stats() if self.graph_builder else {}
         
         # Step 4: Parse regulations (if provided)
         regulation_clauses = []
@@ -192,6 +195,7 @@ class EvacuationPipeline:
                 rules=regulation_rules,
                 rag_engine=self.rag_engine if enable_rag else None,
             )
+        regulation_application = self.scenario_generator.compliance_checker.get_rule_application_summary()
         
         scenarios = self.scenario_generator.generate(max_scenarios=max_scenarios)
         regulation_source = "uploaded_regulations" if regulation_clauses else "default_rules"
@@ -214,6 +218,7 @@ class EvacuationPipeline:
             errors=errors,
             processing_time=processing_time,
             readiness=readiness,
+            graph_stats=graph_stats,
             source_mode=source_mode,
             source_file_name=source_file_name,
             source_file_sha256=source_file_sha256,
@@ -221,6 +226,7 @@ class EvacuationPipeline:
             regulation_source=regulation_source,
             regulation_clause_count=len(regulation_clauses),
             regulation_rule_count=len(regulation_rules),
+            regulation_application=regulation_application,
             rag_enabled=bool(regulation_clauses and enable_rag),
         )
 
@@ -258,6 +264,8 @@ class EvacuationPipeline:
                 'regulation_source': result.regulation_source,
                 'regulation_clause_count': result.regulation_clause_count,
                 'regulation_rule_count': result.regulation_rule_count,
+                'regulation_application': result.regulation_application,
+                'graph_stats': result.graph_stats,
                 'rag_enabled': result.rag_enabled,
                 'scenarios': [s.to_dict() for s in result.scenarios],
                 'summary': self.scenario_generator.get_summary() if self.scenario_generator else {}

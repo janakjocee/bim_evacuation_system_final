@@ -201,6 +201,13 @@ The completed local multi-IFC audit is documented in:
 docs/local_ifc_validation.md
 ```
 
+The deeper current audit, including raw IFC entity counts, graph diagnostics,
+regulation application and reliability classification, is documented in:
+
+```text
+docs/deep_audit_report.md
+```
+
 The practical feature benchmark and researched future-work boundary is documented in:
 
 ```text

@@ -54,6 +54,7 @@ nlp:
 
 # RAG Settings
 rag:
+  vector_enabled: false
   embedding_model: "all-MiniLM-L6-v2"
   top_k: 5
   similarity_threshold: 0.7

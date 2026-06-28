@@ -145,6 +145,7 @@ class IFCParser:
 
             # Connect doors to spaces using IFC semantic relationships where available.
             self._connect_doors_to_spaces_from_boundaries(building)
+            self._connect_doors_to_spaces_by_proximity(building)
             
             # Extract stairs
             self._extract_stairs(building)
@@ -271,10 +272,24 @@ class IFCParser:
     
     def _identify_exits(self, building: BuildingData) -> None:
         """Identify exit doors."""
+        space_bounds = [space.bounding_box for space in building.spaces.values() if space.bounding_box]
+        perimeter = self._combined_bounds(space_bounds)
         for door_id, door in building.doors.items():
-            # Simple heuristic: external doors are exits
-            if door.is_external or "exit" in door.name.lower():
+            name = door.name.lower()
+            keyword_exit = any(word in name for word in ["exit", "final exit", "egress", "external", "entrance", "entry"])
+            property_exit = (
+                self._property_bool(door.properties, "FireExit")
+                or self._property_bool(door.properties, "Exit")
+                or self._property_bool(door.properties, "EmergencyExit")
+            )
+            perimeter_exit = perimeter is not None and self._point_near_bounds_perimeter(door.location, perimeter)
+            if door.is_external or keyword_exit or property_exit or perimeter_exit:
                 door.is_exit = True
+                if perimeter_exit and not (door.is_external or keyword_exit or property_exit):
+                    door.data_quality_flags.append("exit_inferred_from_perimeter_location")
+                    door.assumptions["exit_detection"] = (
+                        "Door treated as a possible exit because it is near the building space perimeter."
+                    )
                 building.exits[door_id] = door
     
     def _extract_space_area(self, ifc_space) -> Tuple[float, str, float, List[str]]:
@@ -285,7 +300,9 @@ class IFCParser:
                     prop_set = rel.RelatingPropertyDefinition
                     if hasattr(prop_set, 'Quantities'):
                         for quantity in prop_set.Quantities:
-                            if hasattr(quantity, 'AreaValue'):
+                            if hasattr(quantity, 'AreaValue') and str(getattr(quantity, "Name", "")).lower() in {
+                                "netfloorarea", "grossfloorarea", "area", "netarea"
+                            }:
                                 return float(quantity.AreaValue), "IFC quantity AreaValue", 1.0, []
 
             bounding_box = self._get_bounding_box(ifc_space)
@@ -313,7 +330,7 @@ class IFCParser:
         width_source = "IfcDoor.OverallWidth"
         if not width:
             width = self._first_numeric_property(properties, [
-                "ClearWidth", "Width", "NominalWidth", "OverallWidth", "EffectiveWidth"
+                "ClearWidth", "Width", "NominalWidth", "OverallWidth", "EffectiveWidth", "GrossWidth"
             ])
             width_source = "door property set"
 
@@ -355,8 +372,13 @@ class IFCParser:
         value = next((v for k, v in properties.items() if str(k).lower() == name.lower()), None)
         if isinstance(value, bool):
             return value
+        if isinstance(value, (int, float)):
+            return bool(value)
         if isinstance(value, str):
-            return value.strip().lower() in {"true", "t", "yes", "1", "external", "fire rated"}
+            normalized = value.strip().lower()
+            if normalized in {"false", "f", "no", "0", "none", "n/a", ""}:
+                return False
+            return normalized in {"true", "t", "yes", "1", "external", "fire rated", "exit"} or bool(normalized)
         return False
 
     def _connect_doors_to_spaces_from_boundaries(self, building: BuildingData) -> None:
@@ -373,6 +395,33 @@ class IFCParser:
                         if door_id not in building.spaces[space_id].connected_doors:
                             building.spaces[space_id].connected_doors.append(door_id)
                         door.connection_source = "IfcRelSpaceBoundary"
+
+    def _connect_doors_to_spaces_by_proximity(self, building: BuildingData) -> None:
+        """Infer door-space links from door locations and space bounding boxes."""
+        if not building.spaces or not building.doors:
+            return
+
+        for door_id, door in building.doors.items():
+            if door.connected_spaces:
+                continue
+            candidates = []
+            for space_id, space in building.spaces.items():
+                if not space.bounding_box:
+                    continue
+                distance = self._point_to_box_distance(door.location, space.bounding_box)
+                if distance <= 2.5:
+                    candidates.append((distance, space_id))
+
+            candidates.sort(key=lambda item: item[0])
+            for _, space_id in candidates[:2]:
+                door.connected_spaces.append(space_id)
+                building.spaces[space_id].connected_doors.append(door_id)
+            if candidates:
+                door.connection_source = "inferred_proximity"
+                door.data_quality_flags.append("door_space_connection_inferred_by_proximity")
+                door.assumptions["connectivity"] = (
+                    "Door-space relationship inferred from door location and space bounding boxes."
+                )
 
     def _door_ids_from_boundary_element(self, element) -> List[str]:
         """Resolve a boundary element or opening element to one or more door ids."""
@@ -668,6 +717,13 @@ class IFCParser:
             for prop in getattr(prop_set, "HasProperties", []):
                 value = getattr(getattr(prop, "NominalValue", None), "wrappedValue", None)
                 properties[getattr(prop, "Name", "")] = value
+            for quantity in getattr(prop_set, "Quantities", []):
+                name = getattr(quantity, "Name", "")
+                for attr in ("LengthValue", "AreaValue", "VolumeValue", "CountValue", "WeightValue"):
+                    if hasattr(quantity, attr):
+                        properties[name] = getattr(quantity, attr)
+                        properties[f"{name}_{attr}"] = getattr(quantity, attr)
+                        break
         return properties
 
     def _get_containing_level(self, element) -> str:
@@ -683,4 +739,35 @@ class IFCParser:
             (first.x - second.x) ** 2
             + (first.y - second.y) ** 2
             + (first.z - second.z) ** 2
+        )
+
+    @staticmethod
+    def _point_to_box_distance(point: Point3D, bounds: Tuple[Point3D, Point3D]) -> float:
+        minimum, maximum = bounds
+        dx = max(minimum.x - point.x, 0, point.x - maximum.x)
+        dy = max(minimum.y - point.y, 0, point.y - maximum.y)
+        dz = max(minimum.z - point.z, 0, point.z - maximum.z)
+        return math.sqrt(dx * dx + dy * dy + dz * dz)
+
+    @staticmethod
+    def _combined_bounds(bounds: List[Tuple[Point3D, Point3D]]) -> Optional[Tuple[Point3D, Point3D]]:
+        if not bounds:
+            return None
+        mins, maxes = zip(*bounds)
+        return (
+            Point3D(min(point.x for point in mins), min(point.y for point in mins), min(point.z for point in mins)),
+            Point3D(max(point.x for point in maxes), max(point.y for point in maxes), max(point.z for point in maxes)),
+        )
+
+    @staticmethod
+    def _point_near_bounds_perimeter(point: Point3D, bounds: Tuple[Point3D, Point3D], tolerance: float = 1.0) -> bool:
+        minimum, maximum = bounds
+        within_xy = minimum.x - tolerance <= point.x <= maximum.x + tolerance and minimum.y - tolerance <= point.y <= maximum.y + tolerance
+        if not within_xy:
+            return False
+        return (
+            abs(point.x - minimum.x) <= tolerance
+            or abs(point.x - maximum.x) <= tolerance
+            or abs(point.y - minimum.y) <= tolerance
+            or abs(point.y - maximum.y) <= tolerance
         )

@@ -49,7 +49,11 @@ class EvacuationScenario:
                 'destination': self.evacuation_route.destination,
                 'distance_m': round(self.evacuation_route.distance, 2),
                 'estimated_time_s': round(self.evacuation_route.estimated_time, 1),
-                'path': self.evacuation_route.path
+                'path': self.evacuation_route.path,
+                'verified_edge_count': self.evacuation_route.verified_edge_count,
+                'inferred_edge_count': self.evacuation_route.inferred_edge_count,
+                'route_confidence': round(self.evacuation_route.route_confidence, 2),
+                'edge_sources': self.evacuation_route.edge_sources or [],
             },
             'compliance_status': self.compliance_status.value,
             'compliance_score': round(self.compliance_score, 2),
@@ -141,6 +145,28 @@ class ScenarioGenerator:
         # Check route distance
         route_checks = self.compliance_checker.check_route(space, best_route.distance)
         compliance_checks.extend(route_checks)
+
+        if best_route.inferred_edge_count:
+            compliance_checks.append(ComplianceCheck(
+                element_id=space.id,
+                element_type="route",
+                regulation_id="route_connectivity_confidence",
+                regulation_text="Route connectivity must be based on verifiable IFC topology for automated compliance claims.",
+                status=ComplianceStatus.REQUIRES_REVIEW,
+                measured_value=best_route.route_confidence,
+                required_value=1.0,
+                unit="confidence",
+                message=(
+                    f"Route uses {best_route.inferred_edge_count} inferred edge(s); "
+                    "expert review is required before treating it as a verified evacuation path."
+                ),
+                evidence_source="ifc_graph_validation",
+                evidence=[{
+                    "source": "ifc_graph_validation",
+                    "text": f"Route edge sources: {', '.join(best_route.edge_sources or [])}",
+                    "score": best_route.route_confidence,
+                }],
+            ))
         
         # Check exit door
         exit_door = self.building.exits.get(best_route.destination)
@@ -171,8 +197,8 @@ class ScenarioGenerator:
             travel_distance=best_route.distance,
             evacuation_time=best_route.estimated_time,
             compliance_score=compliance_score,
-            exit_capacity_ratio=1.0,  # Simplified
-            bottleneck_count=0,
+            exit_capacity_ratio=self._estimate_exit_capacity_ratio(),
+            bottleneck_count=self._estimate_bottleneck_count(),
             **data_quality_factors,
         )
         
@@ -183,6 +209,7 @@ class ScenarioGenerator:
         
         # Calculate confidence
         confidence = self._calculate_confidence(compliance_score, best_route)
+        confidence = min(confidence, best_route.route_confidence)
         data_quality_notes = []
         if self.building.extraction_mode == "geometry_derived":
             confidence = min(confidence, 0.5)
@@ -268,6 +295,10 @@ class ScenarioGenerator:
                     "path": route.path,
                     "distance_m": round(route.distance, 2),
                     "estimated_time_s": round(route.estimated_time, 1),
+                    "verified_edge_count": route.verified_edge_count,
+                    "inferred_edge_count": route.inferred_edge_count,
+                    "route_confidence": round(route.route_confidence, 2),
+                    "edge_sources": route.edge_sources or [],
                 },
             },
             {
@@ -298,8 +329,8 @@ class ScenarioGenerator:
                     travel_distance=route.distance,
                     evacuation_time=route.estimated_time,
                     compliance_score=self.compliance_checker.calculate_compliance_score(compliance_checks),
-                    exit_capacity_ratio=1.0,
-                    bottleneck_count=0,
+                    exit_capacity_ratio=self._estimate_exit_capacity_ratio(),
+                    bottleneck_count=self._estimate_bottleneck_count(),
                     **self._build_data_quality_risk_factors(
                         self.graph_builder.get_graph_stats() if self.graph_builder else {}
                     ),
@@ -357,6 +388,32 @@ class ScenarioGenerator:
             "missing_exit_count": 0 if self.building.exits else 1,
             "assumed_measurement_count": assumed_measurements,
         }
+
+    def _estimate_exit_capacity_ratio(self) -> float:
+        """Estimate exit capacity against area-derived occupancy when available."""
+        total_exit_width = sum(door.width for door in self.building.exits.values())
+        occupancy = self._estimate_total_occupancy()
+        if occupancy <= 0:
+            return 0.5
+        exit_capacity_per_minute = self.config.get('regulations.exit_capacity_per_minute', 90)
+        return max(0.0, min((total_exit_width * exit_capacity_per_minute) / occupancy, 1.5))
+
+    def _estimate_total_occupancy(self) -> int:
+        """Estimate occupancy from space area/type using configured densities."""
+        densities = self.config.get('bim.occupancy_density', {})
+        total = 0
+        for space in self.building.spaces.values():
+            if space.space_type in {"structural_proxy", "structural_element"}:
+                continue
+            total += int(space.area * densities.get(space.space_type, 0.1))
+        return total
+
+    def _estimate_bottleneck_count(self) -> int:
+        """Count meaningful graph bottlenecks from betweenness centrality."""
+        if not self.graph_builder:
+            return 0
+        bottlenecks = self.graph_builder.identify_bottlenecks(top_n=10)
+        return sum(1 for item in bottlenecks if item.get("centrality", 0) >= 0.2)
     
     def _generate_explanation(self, space: SpaceData, route: Route,
                               checks: List[ComplianceCheck], violations: List[ComplianceCheck],
