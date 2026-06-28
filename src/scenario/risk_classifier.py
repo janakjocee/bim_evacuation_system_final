@@ -19,6 +19,11 @@ class RiskFactors:
     compliance_score: float = 1.0
     exit_capacity_ratio: float = 1.0
     bottleneck_count: int = 0
+    graph_confidence: float = 1.0
+    data_quality_confidence: float = 1.0
+    inferred_edge_ratio: float = 0.0
+    missing_exit_count: int = 0
+    assumed_measurement_count: int = 0
 
 
 class RiskClassifier:
@@ -40,11 +45,21 @@ class RiskClassifier:
             Risk level
         """
         score = self.calculate_score(factors)
+
+        if factors.missing_exit_count > 0 or factors.graph_confidence < 0.25:
+            return RiskLevel.HIGH
         
         low_threshold = self.thresholds.get('low', 0.8)
         medium_threshold = self.thresholds.get('medium', 0.5)
         
         if score >= low_threshold:
+            if (
+                factors.graph_confidence < 0.5
+                or factors.data_quality_confidence < 0.5
+                or factors.inferred_edge_ratio > 0.75
+                or factors.assumed_measurement_count > 0
+            ):
+                return RiskLevel.MEDIUM
             return RiskLevel.LOW
         elif score >= medium_threshold:
             return RiskLevel.MEDIUM
@@ -63,34 +78,50 @@ class RiskClassifier:
         """
         scores = []
         
-        # Compliance score (weight: 0.4)
-        scores.append(factors.compliance_score * 0.4)
+        # Compliance score (weight: 0.35)
+        scores.append(factors.compliance_score * 0.35)
         
-        # Exit capacity ratio (weight: 0.3)
-        capacity_score = min(factors.exit_capacity_ratio, 1.0) * 0.3
+        # Exit capacity ratio (weight: 0.25)
+        capacity_score = min(factors.exit_capacity_ratio, 1.0) * 0.25
         scores.append(capacity_score)
         
-        # Evacuation time score (weight: 0.2)
+        # Evacuation time score (weight: 0.15)
         # Assume 300 seconds (5 minutes) is maximum acceptable
-        time_score = max(0, 1 - (factors.evacuation_time / 300)) * 0.2
+        time_score = max(0, 1 - (factors.evacuation_time / 300)) * 0.15
         scores.append(time_score)
         
         # Bottleneck penalty (weight: 0.1)
         bottleneck_score = max(0, 1 - (factors.bottleneck_count * 0.1)) * 0.1
         scores.append(bottleneck_score)
+
+        # IFC topology/data quality (weight: 0.15)
+        topology_score = max(0.0, min(factors.graph_confidence, 1.0)) * 0.1
+        data_quality_score = max(0.0, min(factors.data_quality_confidence, 1.0)) * 0.05
+        inferred_penalty = min(max(factors.inferred_edge_ratio, 0.0), 1.0) * 0.05
+        assumption_penalty = min(factors.assumed_measurement_count * 0.02, 0.08)
+        scores.append(max(0.0, topology_score + data_quality_score - inferred_penalty - assumption_penalty))
         
         return sum(scores)
 
     def risk_contribution_breakdown(self, factors: RiskFactors) -> Dict[str, Any]:
         """Return the weighted score components used for traceable risk decisions."""
-        time_score = max(0, 1 - (factors.evacuation_time / 300)) * 0.2
+        time_score = max(0, 1 - (factors.evacuation_time / 300)) * 0.15
+        topology_score = max(0.0, min(factors.graph_confidence, 1.0)) * 0.1
+        data_quality_score = max(0.0, min(factors.data_quality_confidence, 1.0)) * 0.05
+        inferred_penalty = min(max(factors.inferred_edge_ratio, 0.0), 1.0) * 0.05
+        assumption_penalty = min(factors.assumed_measurement_count * 0.02, 0.08)
+        topology_component = max(0.0, topology_score + data_quality_score - inferred_penalty - assumption_penalty)
         return {
-            "compliance_component": round(factors.compliance_score * 0.4, 3),
-            "exit_capacity_component": round(min(factors.exit_capacity_ratio, 1.0) * 0.3, 3),
+            "compliance_component": round(factors.compliance_score * 0.35, 3),
+            "exit_capacity_component": round(min(factors.exit_capacity_ratio, 1.0) * 0.25, 3),
             "evacuation_time_component": round(time_score, 3),
             "bottleneck_component": round(max(0, 1 - (factors.bottleneck_count * 0.1)) * 0.1, 3),
+            "topology_data_quality_component": round(topology_component, 3),
             "total_score": round(self.calculate_score(factors), 3),
-            "interpretation": "Higher score means lower risk; thresholds are low>=0.8, medium>=0.5, otherwise high.",
+            "interpretation": (
+                "Higher score means lower risk; thresholds are low>=0.8, medium>=0.5, otherwise high. "
+                "Low-confidence or heavily inferred IFC topology can cap the displayed level at medium/high."
+            ),
         }
     
     def get_risk_description(self, level: RiskLevel) -> str:
@@ -109,5 +140,10 @@ class RiskClassifier:
             'evacuation_time_s': round(factors.evacuation_time, 1),
             'compliance_score': round(factors.compliance_score, 2),
             'exit_capacity_ratio': round(factors.exit_capacity_ratio, 2),
-            'bottleneck_count': factors.bottleneck_count
+            'bottleneck_count': factors.bottleneck_count,
+            'graph_confidence': round(factors.graph_confidence, 2),
+            'data_quality_confidence': round(factors.data_quality_confidence, 2),
+            'inferred_edge_ratio': round(factors.inferred_edge_ratio, 2),
+            'missing_exit_count': factors.missing_exit_count,
+            'assumed_measurement_count': factors.assumed_measurement_count,
         }

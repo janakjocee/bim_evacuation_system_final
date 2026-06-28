@@ -22,6 +22,7 @@ from src.nlp.regulation_parser import RegulationClause, RegulationRule
 from src.nlp.regulation_parser import RegulationParser
 from src.scenario.compliance_checker import ComplianceChecker
 from src.scenario.scenario_generator import ScenarioGenerator
+from src.scenario.risk_classifier import RiskClassifier, RiskFactors
 
 
 class TestConfigLoader:
@@ -168,6 +169,7 @@ def test_generated_scenario_exports_explainability_trace():
         location=Point3D(),
         is_exit=True,
         connected_spaces=["S1"],
+        connection_source="inferred_geometry",
     )
     building.doors = {"E1": exit_door}
     building.exits = {"E1": exit_door}
@@ -293,6 +295,36 @@ def test_assumed_door_width_requires_review():
     assert "requires expert confirmation" in result.message
 
 
+def test_low_confidence_topology_cannot_be_low_risk():
+    classifier = RiskClassifier()
+    factors = RiskFactors(
+        travel_distance=5.0,
+        evacuation_time=4.0,
+        compliance_score=1.0,
+        exit_capacity_ratio=1.0,
+        graph_confidence=0.35,
+        data_quality_confidence=0.4,
+        inferred_edge_ratio=1.0,
+    )
+
+    assert classifier.classify(factors) == RiskLevel.MEDIUM
+
+
+def test_missing_exit_forces_high_risk():
+    classifier = RiskClassifier()
+    factors = RiskFactors(
+        travel_distance=5.0,
+        evacuation_time=4.0,
+        compliance_score=1.0,
+        exit_capacity_ratio=1.0,
+        graph_confidence=1.0,
+        data_quality_confidence=1.0,
+        missing_exit_count=1,
+    )
+
+    assert classifier.classify(factors) == RiskLevel.HIGH
+
+
 def test_regulation_parser_recognizes_not_exceed_maximum_language():
     clauses = RegulationParser().parse(
         "1.1 Travel Distance\n"
@@ -319,6 +351,7 @@ def test_ifcspace_inferred_topology_caps_confidence():
         location=Point3D(),
         is_exit=True,
         connected_spaces=["S1"],
+        connection_source="inferred_geometry",
     )
     building.doors = {"E1": exit_door}
     building.exits = {"E1": exit_door}
@@ -329,6 +362,8 @@ def test_ifcspace_inferred_topology_caps_confidence():
     scenario = ScenarioGenerator(building, graph).generate(max_scenarios=1)[0]
 
     assert scenario.confidence_score <= 0.65
+    assert scenario.risk_level != RiskLevel.LOW
+    assert scenario.risk_factors["inferred_edge_ratio"] > 0
     assert "route links and exits were inferred" in " ".join(scenario.data_quality_notes)
 
 
