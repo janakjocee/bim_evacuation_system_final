@@ -18,7 +18,7 @@ from src.bim_processing.ifc_parser import (
     StairData,
 )
 from src.bim_processing.spatial_graph import SpatialGraphBuilder
-from src.nlp.regulation_parser import RegulationClause
+from src.nlp.regulation_parser import RegulationClause, RegulationRule
 from src.nlp.regulation_parser import RegulationParser
 from src.scenario.compliance_checker import ComplianceChecker
 from src.scenario.scenario_generator import ScenarioGenerator
@@ -219,8 +219,62 @@ def test_uploaded_regulation_values_drive_compliance_rules():
 
     assert route_check.required_value == 30.0
     assert route_check.status == ComplianceStatus.NON_COMPLIANT
+    assert route_check.evidence_source == "uploaded_regulation_rule"
     assert exit_check.required_value == 1.2
     assert exit_check.status == ComplianceStatus.NON_COMPLIANT
+    assert exit_check.evidence_source == "uploaded_regulation_rule"
+
+
+def test_structured_parser_extracts_multiple_rules_from_one_clause():
+    parser = RegulationParser()
+    parser.parse(
+        "2.1 Means of Escape\n"
+        "Travel distance to the nearest exit must not exceed 30 metres. "
+        "Final exit doors shall have a minimum clear opening width of 1200mm."
+    )
+
+    metrics = {rule.metric: rule.value for rule in parser.rules}
+
+    assert metrics["max_travel_distance"] == 30.0
+    assert metrics["min_exit_width"] == 1.2
+
+
+def test_structured_rules_override_defaults_and_attach_evidence():
+    checker = ComplianceChecker()
+    checker.update_regulation_rules([
+        RegulationRule(
+            rule_id="2.1-R1",
+            source_section="2.1",
+            source_text="Travel distance to the nearest exit must not exceed 30 metres.",
+            applies_to="route",
+            condition="general",
+            metric="max_travel_distance",
+            operator="<=",
+            value=30.0,
+            unit="metres",
+        )
+    ])
+
+    check = checker.check_route(SpaceData(id="S1", name="Room", area=10), 35.0)[0]
+
+    assert check.required_value == 30.0
+    assert check.status == ComplianceStatus.NON_COMPLIANT
+    assert check.evidence_source == "uploaded_regulation_rule"
+    assert check.evidence[0]["rule_id"] == "2.1-R1"
+
+
+def test_rag_evidence_is_attached_to_default_rule_checks():
+    checker = ComplianceChecker()
+
+    class Clause:
+        clause_id = "A1"
+        text = "Approved guidance discusses maximum travel distance to an exit."
+
+    checker.set_evidence_provider(lambda query, top_k: [(Clause(), 0.82)])
+    check = checker.check_route(SpaceData(id="S1", name="Room", area=10), 10.0)[0]
+
+    assert check.evidence_source == "rag_uploaded_regulation"
+    assert check.evidence[0]["clause_id"] == "A1"
 
 
 def test_assumed_door_width_requires_review():

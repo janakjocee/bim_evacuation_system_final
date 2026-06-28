@@ -9,7 +9,7 @@ from ..utils.config_loader import get_config
 from ..utils.helpers import RiskLevel, ComplianceStatus, generate_id
 from ..bim_processing.ifc_parser import BuildingData, SpaceData, DoorData
 from ..bim_processing.spatial_graph import SpatialGraphBuilder, Route
-from ..nlp.regulation_parser import RegulationClause
+from ..nlp.regulation_parser import RegulationClause, RegulationRule
 from .compliance_checker import ComplianceChecker, ComplianceCheck
 from .risk_classifier import RiskClassifier, RiskFactors
 
@@ -78,9 +78,18 @@ class ScenarioGenerator:
         
         self.scenarios: List[EvacuationScenario] = []
     
-    def set_regulations(self, clauses: List[RegulationClause]) -> None:
+    def set_regulations(
+        self,
+        clauses: List[RegulationClause],
+        rules: Optional[List[RegulationRule]] = None,
+        rag_engine: Any = None,
+    ) -> None:
         """Set regulations from parsed clauses."""
         self.compliance_checker.update_regulations(clauses)
+        if rules:
+            self.compliance_checker.update_regulation_rules(rules)
+        if rag_engine:
+            self.compliance_checker.set_evidence_provider(rag_engine.retrieve)
     
     def generate(self, max_scenarios: int = None) -> List[EvacuationScenario]:
         """
@@ -266,6 +275,18 @@ class ScenarioGenerator:
                     "passed": len(compliance_checks) - len(violations),
                     "failed": len(violations),
                     "violations": [v.message for v in violations],
+                    "checks": [
+                        {
+                            "element_id": check.element_id,
+                            "regulation_id": check.regulation_id,
+                            "status": check.status.value,
+                            "measured_value": round(check.measured_value, 3),
+                            "required_value": round(check.required_value, 3),
+                            "evidence_source": check.evidence_source,
+                            "evidence": check.evidence[:3],
+                        }
+                        for check in compliance_checks
+                    ],
                 },
             },
             {

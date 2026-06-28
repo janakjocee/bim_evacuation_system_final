@@ -1197,7 +1197,8 @@ def render_explainability(result):
     
     scenario = scenarios[selected]
     regulation_phrase = (
-        f"Parsed {result.regulation_clause_count} uploaded regulation clause(s)"
+        f"Parsed {result.regulation_clause_count} uploaded regulation clause(s) "
+        f"and {getattr(result, 'regulation_rule_count', 0)} structured numeric rule(s)"
         if result.regulation_source == "uploaded_regulations"
         else "Used built-in default screening constraints because no regulation file was uploaded"
     )
