@@ -12,6 +12,8 @@ def test_scenario_details_use_inline_inspection_workspace():
     assert "st.session_state.active_tab = 4" not in source
     assert "render_selected_scenario_details(result, scenario)" in source
     assert "selected_scenario = next(" not in source
+    assert "Download selected scenario evidence" in source
+    assert "scenario.decision_trace" in source
 
 
 def test_dark_mode_uses_adaptive_theme_variables():
