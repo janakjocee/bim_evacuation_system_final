@@ -24,8 +24,10 @@ import time
 from typing import List, Dict, Any, Optional
 
 from src.pipeline.evacuation_pipeline import EvacuationPipeline, PipelineResult
+from src.pipeline.manual_corrections import apply_manual_corrections
 from src.bim_processing.ifc_validation import SUPPORTED_SCHEMA_LABEL
 from src.nlp.document_loader import RegulationDocumentError, extract_regulation_text
+from src.scenario.ifc_dataset_exporter import building_to_worst_case_dataset
 from src.utils.logger import get_logger
 from src.utils.helpers import RiskLevel, ComplianceStatus
 from src.ui.ui_components import (
@@ -1023,6 +1025,85 @@ def render_bim_insights(result):
             "Download IFC diagnostic report",
             json.dumps(diagnostic, indent=2),
             file_name=f"ifc_diagnostic_{result.source_file_name or 'analysis'}.json",
+            mime="application/json",
+            width='stretch',
+        )
+
+        st.markdown("---")
+        st.markdown("### Manual Correction Layer")
+        st.caption(
+            "Use this when IFC door widths, exits or connectivity are missing/incorrect. "
+            "Corrections are marked as manual review and the graph/scenarios are regenerated."
+        )
+        correction_rows = []
+        for door_id, door in building.doors.items():
+            correction_rows.append({
+                "id": door_id,
+                "name": door.name,
+                "width": float(door.width),
+                "is_exit": bool(door.is_exit),
+                "connected_spaces": ", ".join(door.connected_spaces),
+                "connection_source": door.connection_source,
+                "width_confidence": door.width_confidence,
+                "flags": ", ".join(door.data_quality_flags),
+            })
+        if correction_rows:
+            edited = st.data_editor(
+                pd.DataFrame(correction_rows),
+                disabled=["id", "name", "connection_source", "width_confidence", "flags"],
+                width='stretch',
+                height=300,
+                key=f"manual_corrections_{result.source_file_sha256}",
+            )
+            col_apply, col_export = st.columns(2)
+            with col_apply:
+                if st.button("Apply manual corrections and rerun", type="primary", width='stretch'):
+                    corrections = {"doors": edited.to_dict(orient="records")}
+                    st.session_state.manual_corrections = corrections
+                    st.session_state.pipeline_result = apply_manual_corrections(
+                        result,
+                        corrections,
+                        max_scenarios=max(10, len(result.scenarios)),
+                    )
+                    st.success("Manual corrections applied. Graph and scenarios regenerated.")
+                    st.rerun()
+            with col_export:
+                corrections_payload = {
+                    "source_file_name": result.source_file_name,
+                    "source_file_sha256": result.source_file_sha256,
+                    "corrections": edited.to_dict(orient="records"),
+                }
+                st.download_button(
+                    "Download manual corrections JSON",
+                    json.dumps(corrections_payload, indent=2),
+                    file_name=f"manual_corrections_{result.source_file_name or 'ifc'}.json",
+                    mime="application/json",
+                    width='stretch',
+                )
+        else:
+            st.info("No doors/connections are available for manual correction.")
+
+        st.markdown("---")
+        st.markdown("### Fire/Worst-Case Dataset Bridge")
+        st.caption(
+            "Exports the uploaded IFC-derived graph into the JSON schema used by the "
+            "Worst Case Testing page. Inferred data remains labelled for review."
+        )
+        fire_dataset = building_to_worst_case_dataset(
+            building,
+            graph_builder=None,
+            features=result.features,
+            source_file_name=result.source_file_name,
+            ifc_schema=result.ifc_schema,
+        )
+        bridge_cols = st.columns(3)
+        bridge_cols[0].metric("Dataset Spaces", len(fire_dataset.get("spaces", [])))
+        bridge_cols[1].metric("Dataset Connections", len(fire_dataset.get("connections", [])))
+        bridge_cols[2].metric("Hazard Scenarios", len(fire_dataset.get("hazard_scenarios", [])))
+        st.download_button(
+            "Export IFC-derived graph as fire scenario dataset",
+            json.dumps(fire_dataset, indent=2),
+            file_name=f"ifc_fire_dataset_{result.source_file_name or 'analysis'}.json",
             mime="application/json",
             width='stretch',
         )

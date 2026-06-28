@@ -46,3 +46,13 @@ def test_bim_insights_has_exportable_diagnostics():
     assert "Diagnostics Export" in source
     assert "Download IFC diagnostic report" in source
     assert "graph_stats" in pipeline
+
+
+def test_bim_insights_has_manual_corrections_and_fire_dataset_bridge():
+    source = (Path(__file__).resolve().parents[1] / "src/ui/streamlit_app.py").read_text()
+
+    assert "Manual Correction Layer" in source
+    assert "Apply manual corrections and rerun" in source
+    assert "Download manual corrections JSON" in source
+    assert "Fire/Worst-Case Dataset Bridge" in source
+    assert "Export IFC-derived graph as fire scenario dataset" in source

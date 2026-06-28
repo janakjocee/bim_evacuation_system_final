@@ -24,6 +24,10 @@ from src.nlp.document_loader import extract_regulation_text
 from src.scenario.compliance_checker import ComplianceChecker
 from src.scenario.scenario_generator import ScenarioGenerator
 from src.scenario.risk_classifier import RiskClassifier, RiskFactors
+from src.scenario.ifc_dataset_exporter import building_to_worst_case_dataset
+from src.scenario.worst_case_engine import validate_scenario_dataset
+from src.pipeline.evacuation_pipeline import PipelineResult
+from src.pipeline.manual_corrections import apply_manual_corrections
 
 
 class TestConfigLoader:
@@ -422,6 +426,104 @@ def test_ifcspace_inferred_topology_caps_confidence():
     assert scenario.risk_level != RiskLevel.LOW
     assert scenario.risk_factors["inferred_edge_ratio"] > 0
     assert "route links and exits were inferred" in " ".join(scenario.data_quality_notes)
+
+
+def test_manual_corrections_update_exit_width_and_connectivity():
+    building = BuildingData(id="B1", name="Manual Correction")
+    building.spaces["S1"] = SpaceData(id="S1", name="Room", area=20)
+    building.doors["D1"] = DoorData(
+        id="D1",
+        name="Door",
+        width=0.9,
+        height=2.1,
+        location=Point3D(),
+        assumptions={"width": "assumed"},
+        width_confidence=0.25,
+    )
+    result = PipelineResult(
+        success=False,
+        building=building,
+        regulation_application={
+            "active_thresholds": [
+                {"rule_key": "min_exit_width", "value": 1.1},
+                {"rule_key": "max_travel_distance", "value": 30.0},
+            ]
+        },
+    )
+
+    corrected = apply_manual_corrections(
+        result,
+        {"doors": [{"id": "D1", "width": 1.2, "is_exit": True, "connected_spaces": "S1"}]},
+        max_scenarios=1,
+    )
+
+    door = corrected.building.doors["D1"]
+    assert door.is_exit
+    assert door.width == 1.2
+    assert door.width_confidence == 1.0
+    assert door.connected_spaces == ["S1"]
+    assert corrected.graph_stats["edge_count"] == 1
+    assert corrected.scenarios
+    assert corrected.scenarios[0].evacuation_route.destination == "D1"
+
+
+def test_ifc_derived_worst_case_dataset_validates():
+    building = BuildingData(id="B1", name="Dataset Export")
+    building.spaces["S1"] = SpaceData(id="S1", name="Room", area=20, space_type="office")
+    building.spaces["S2"] = SpaceData(id="S2", name="Corridor", area=10, space_type="corridor")
+    exit_door = DoorData(
+        id="E1",
+        name="Exit",
+        width=1.2,
+        height=2.1,
+        location=Point3D(),
+        is_exit=True,
+        connected_spaces=["S2"],
+    )
+    connector = DoorData(
+        id="D1",
+        name="Door",
+        width=0.9,
+        height=2.1,
+        location=Point3D(),
+        connected_spaces=["S1", "S2"],
+    )
+    building.doors = {"D1": connector, "E1": exit_door}
+    building.exits = {"E1": exit_door}
+
+    graph = SpatialGraphBuilder(building)
+    assert graph.build()
+    dataset = building_to_worst_case_dataset(building, graph_builder=graph, source_file_name="test.ifc")
+
+    validate_scenario_dataset(dataset)
+    assert dataset["dataset_kind"] == "ifc_derived_requires_review"
+    assert any(space["type"] == "exit" for space in dataset["spaces"])
+    assert dataset["connections"]
+
+
+def test_ifc_dataset_exporter_adds_review_occupancy_for_geometry_spaces():
+    building = BuildingData(id="B1", name="Geometry Dataset", extraction_mode="geometry_derived")
+    building.spaces["G1"] = SpaceData(id="G1", name="Geometry Element", area=20, space_type="structural_element")
+    exit_door = DoorData(
+        id="E1",
+        name="Inferred Exit",
+        width=1.2,
+        height=2.1,
+        location=Point3D(),
+        is_exit=True,
+        connected_spaces=["G1"],
+        connection_source="inferred_geometry",
+        width_confidence=0.25,
+    )
+    building.doors = {"E1": exit_door}
+    building.exits = {"E1": exit_door}
+
+    dataset = building_to_worst_case_dataset(building)
+    exported_space = next(space for space in dataset["spaces"] if space["id"] == "G1")
+
+    assert exported_space["occupancy"] >= 1
+    assert exported_space["occupancy_confidence"] == 0.25
+    assert "Low-confidence review occupancy" in exported_space["assumptions"]["occupancy"]
 
 
 if __name__ == "__main__":
