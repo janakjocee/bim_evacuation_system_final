@@ -18,10 +18,11 @@ from src.bim_processing.ifc_parser import (
     StairData,
 )
 from src.bim_processing.spatial_graph import SpatialGraphBuilder
-from src.nlp.regulation_parser import RegulationClause
+from src.nlp.regulation_parser import RegulationClause, RegulationRule
 from src.nlp.regulation_parser import RegulationParser
 from src.scenario.compliance_checker import ComplianceChecker
 from src.scenario.scenario_generator import ScenarioGenerator
+from src.scenario.risk_classifier import RiskClassifier, RiskFactors
 
 
 class TestConfigLoader:
@@ -135,6 +136,28 @@ def test_geometry_derived_graph_does_not_add_disconnected_stair_nodes():
     assert "STAIR1" not in graph.graph
 
 
+def test_graph_does_not_fabricate_cyclic_connectivity():
+    building = BuildingData(id="B1", name="No Connectivity")
+    building.spaces["S1"] = SpaceData(id="S1", name="Room A", area=20)
+    building.spaces["S2"] = SpaceData(id="S2", name="Room B", area=20)
+    building.doors["D1"] = DoorData(
+        id="D1",
+        name="Unconnected Door",
+        width=0.9,
+        height=2.1,
+        location=Point3D(),
+    )
+
+    graph = SpatialGraphBuilder(building)
+    assert graph.build()
+    stats = graph.get_graph_stats()
+
+    assert stats["edge_count"] == 0
+    assert set(stats["disconnected_spaces"]) == {"S1", "S2"}
+    assert stats["doors_without_connected_spaces"] == ["D1"]
+    assert stats["graph_confidence_score"] == 0.0
+
+
 def test_generated_scenario_exports_explainability_trace():
     building = BuildingData(id="B1", name="Explainability Test")
     building.spaces["S1"] = SpaceData(id="S1", name="Room A", area=20)
@@ -146,6 +169,7 @@ def test_generated_scenario_exports_explainability_trace():
         location=Point3D(),
         is_exit=True,
         connected_spaces=["S1"],
+        connection_source="inferred_geometry",
     )
     building.doors = {"E1": exit_door}
     building.exits = {"E1": exit_door}
@@ -197,8 +221,108 @@ def test_uploaded_regulation_values_drive_compliance_rules():
 
     assert route_check.required_value == 30.0
     assert route_check.status == ComplianceStatus.NON_COMPLIANT
+    assert route_check.evidence_source == "uploaded_regulation_rule"
     assert exit_check.required_value == 1.2
     assert exit_check.status == ComplianceStatus.NON_COMPLIANT
+    assert exit_check.evidence_source == "uploaded_regulation_rule"
+
+
+def test_structured_parser_extracts_multiple_rules_from_one_clause():
+    parser = RegulationParser()
+    parser.parse(
+        "2.1 Means of Escape\n"
+        "Travel distance to the nearest exit must not exceed 30 metres. "
+        "Final exit doors shall have a minimum clear opening width of 1200mm."
+    )
+
+    metrics = {rule.metric: rule.value for rule in parser.rules}
+
+    assert metrics["max_travel_distance"] == 30.0
+    assert metrics["min_exit_width"] == 1.2
+
+
+def test_structured_rules_override_defaults_and_attach_evidence():
+    checker = ComplianceChecker()
+    checker.update_regulation_rules([
+        RegulationRule(
+            rule_id="2.1-R1",
+            source_section="2.1",
+            source_text="Travel distance to the nearest exit must not exceed 30 metres.",
+            applies_to="route",
+            condition="general",
+            metric="max_travel_distance",
+            operator="<=",
+            value=30.0,
+            unit="metres",
+        )
+    ])
+
+    check = checker.check_route(SpaceData(id="S1", name="Room", area=10), 35.0)[0]
+
+    assert check.required_value == 30.0
+    assert check.status == ComplianceStatus.NON_COMPLIANT
+    assert check.evidence_source == "uploaded_regulation_rule"
+    assert check.evidence[0]["rule_id"] == "2.1-R1"
+
+
+def test_rag_evidence_is_attached_to_default_rule_checks():
+    checker = ComplianceChecker()
+
+    class Clause:
+        clause_id = "A1"
+        text = "Approved guidance discusses maximum travel distance to an exit."
+
+    checker.set_evidence_provider(lambda query, top_k: [(Clause(), 0.82)])
+    check = checker.check_route(SpaceData(id="S1", name="Room", area=10), 10.0)[0]
+
+    assert check.evidence_source == "rag_uploaded_regulation"
+    assert check.evidence[0]["clause_id"] == "A1"
+
+
+def test_assumed_door_width_requires_review():
+    checker = ComplianceChecker()
+    result = checker.check_door(DoorData(
+        id="D1",
+        name="Assumed Door",
+        width=0.9,
+        height=2.1,
+        location=Point3D(),
+        assumptions={"width": "Assumed test width"},
+        width_confidence=0.35,
+    ))[0]
+
+    assert result.status == ComplianceStatus.REQUIRES_REVIEW
+    assert "requires expert confirmation" in result.message
+
+
+def test_low_confidence_topology_cannot_be_low_risk():
+    classifier = RiskClassifier()
+    factors = RiskFactors(
+        travel_distance=5.0,
+        evacuation_time=4.0,
+        compliance_score=1.0,
+        exit_capacity_ratio=1.0,
+        graph_confidence=0.35,
+        data_quality_confidence=0.4,
+        inferred_edge_ratio=1.0,
+    )
+
+    assert classifier.classify(factors) == RiskLevel.MEDIUM
+
+
+def test_missing_exit_forces_high_risk():
+    classifier = RiskClassifier()
+    factors = RiskFactors(
+        travel_distance=5.0,
+        evacuation_time=4.0,
+        compliance_score=1.0,
+        exit_capacity_ratio=1.0,
+        graph_confidence=1.0,
+        data_quality_confidence=1.0,
+        missing_exit_count=1,
+    )
+
+    assert classifier.classify(factors) == RiskLevel.HIGH
 
 
 def test_regulation_parser_recognizes_not_exceed_maximum_language():
@@ -227,6 +351,7 @@ def test_ifcspace_inferred_topology_caps_confidence():
         location=Point3D(),
         is_exit=True,
         connected_spaces=["S1"],
+        connection_source="inferred_geometry",
     )
     building.doors = {"E1": exit_door}
     building.exits = {"E1": exit_door}
@@ -237,6 +362,8 @@ def test_ifcspace_inferred_topology_caps_confidence():
     scenario = ScenarioGenerator(building, graph).generate(max_scenarios=1)[0]
 
     assert scenario.confidence_score <= 0.65
+    assert scenario.risk_level != RiskLevel.LOW
+    assert scenario.risk_factors["inferred_edge_ratio"] > 0
     assert "route links and exits were inferred" in " ".join(scenario.data_quality_notes)
 
 

@@ -9,7 +9,7 @@ from ..utils.config_loader import get_config
 from ..utils.helpers import RiskLevel, ComplianceStatus, generate_id
 from ..bim_processing.ifc_parser import BuildingData, SpaceData, DoorData
 from ..bim_processing.spatial_graph import SpatialGraphBuilder, Route
-from ..nlp.regulation_parser import RegulationClause
+from ..nlp.regulation_parser import RegulationClause, RegulationRule
 from .compliance_checker import ComplianceChecker, ComplianceCheck
 from .risk_classifier import RiskClassifier, RiskFactors
 
@@ -78,9 +78,18 @@ class ScenarioGenerator:
         
         self.scenarios: List[EvacuationScenario] = []
     
-    def set_regulations(self, clauses: List[RegulationClause]) -> None:
+    def set_regulations(
+        self,
+        clauses: List[RegulationClause],
+        rules: Optional[List[RegulationRule]] = None,
+        rag_engine: Any = None,
+    ) -> None:
         """Set regulations from parsed clauses."""
         self.compliance_checker.update_regulations(clauses)
+        if rules:
+            self.compliance_checker.update_regulation_rules(rules)
+        if rag_engine:
+            self.compliance_checker.set_evidence_provider(rag_engine.retrieve)
     
     def generate(self, max_scenarios: int = None) -> List[EvacuationScenario]:
         """
@@ -144,18 +153,27 @@ class ScenarioGenerator:
         
         # Determine compliance status
         violations = self.compliance_checker.get_violations(compliance_checks)
-        compliance_status = ComplianceStatus.COMPLIANT if not violations else ComplianceStatus.NON_COMPLIANT
+        if any(v.status == ComplianceStatus.INSUFFICIENT_DATA for v in violations):
+            compliance_status = ComplianceStatus.INSUFFICIENT_DATA
+        elif any(v.status == ComplianceStatus.REQUIRES_REVIEW for v in violations):
+            compliance_status = ComplianceStatus.REQUIRES_REVIEW
+        else:
+            compliance_status = ComplianceStatus.COMPLIANT if not violations else ComplianceStatus.NON_COMPLIANT
         
         # Generate recommendations
         recommendations = self.compliance_checker.generate_recommendations(violations)
         
+        graph_stats = self.graph_builder.get_graph_stats() if self.graph_builder else {}
+        data_quality_factors = self._build_data_quality_risk_factors(graph_stats)
+
         # Classify risk
         risk_factors = RiskFactors(
             travel_distance=best_route.distance,
             evacuation_time=best_route.estimated_time,
             compliance_score=compliance_score,
             exit_capacity_ratio=1.0,  # Simplified
-            bottleneck_count=0
+            bottleneck_count=0,
+            **data_quality_factors,
         )
         
         risk_level = self.risk_classifier.classify(risk_factors)
@@ -180,6 +198,12 @@ class ScenarioGenerator:
             data_quality_notes.append("No regulatory violations were detected by the active rule set.")
         else:
             data_quality_notes.append(f"{len(violations)} regulatory violation(s) affected compliance scoring.")
+        if graph_stats:
+            data_quality_notes.append(
+                f"Graph confidence {graph_stats.get('graph_confidence_score', 0):.2f}; "
+                f"verified edges={graph_stats.get('verified_edges_count', 0)}, "
+                f"inferred edges={graph_stats.get('inferred_edges_count', 0)}."
+            )
         
         # Generate explanation
         explanation = self._generate_explanation(
@@ -254,6 +278,18 @@ class ScenarioGenerator:
                     "passed": len(compliance_checks) - len(violations),
                     "failed": len(violations),
                     "violations": [v.message for v in violations],
+                    "checks": [
+                        {
+                            "element_id": check.element_id,
+                            "regulation_id": check.regulation_id,
+                            "status": check.status.value,
+                            "measured_value": round(check.measured_value, 3),
+                            "required_value": round(check.required_value, 3),
+                            "evidence_source": check.evidence_source,
+                            "evidence": check.evidence[:3],
+                        }
+                        for check in compliance_checks
+                    ],
                 },
             },
             {
@@ -264,6 +300,9 @@ class ScenarioGenerator:
                     compliance_score=self.compliance_checker.calculate_compliance_score(compliance_checks),
                     exit_capacity_ratio=1.0,
                     bottleneck_count=0,
+                    **self._build_data_quality_risk_factors(
+                        self.graph_builder.get_graph_stats() if self.graph_builder else {}
+                    ),
                 )),
                 "method": "Weighted deterministic score, not an opaque machine-learning prediction.",
                 "output": {
@@ -288,6 +327,36 @@ class ScenarioGenerator:
             confidence *= 0.8
         
         return min(confidence, 1.0)
+
+    def _build_data_quality_risk_factors(self, graph_stats: Dict[str, Any]) -> Dict[str, Any]:
+        """Build risk model inputs from IFC extraction and graph validation quality."""
+        total_edges = graph_stats.get("edge_count", 0)
+        inferred_edges = graph_stats.get("inferred_edges_count", 0)
+        inferred_edge_ratio = inferred_edges / total_edges if total_edges else 0.0
+
+        assumed_measurements = 0
+        for door in self.building.doors.values():
+            assumed_measurements += len(door.assumptions)
+        for space in self.building.spaces.values():
+            assumed_measurements += len(space.assumptions)
+
+        if self.building.extraction_mode == "geometry_derived":
+            data_quality_confidence = 0.4
+        elif self.building.extraction_mode == "semantic_spaces_inferred_topology":
+            data_quality_confidence = 0.45
+        else:
+            data_quality_confidence = 1.0
+
+        if assumed_measurements:
+            data_quality_confidence = min(data_quality_confidence, 0.65)
+
+        return {
+            "graph_confidence": graph_stats.get("graph_confidence_score", 1.0),
+            "data_quality_confidence": data_quality_confidence,
+            "inferred_edge_ratio": inferred_edge_ratio,
+            "missing_exit_count": 0 if self.building.exits else 1,
+            "assumed_measurement_count": assumed_measurements,
+        }
     
     def _generate_explanation(self, space: SpaceData, route: Route,
                               checks: List[ComplianceCheck], violations: List[ComplianceCheck],

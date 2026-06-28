@@ -40,6 +40,13 @@ class DoorData:
     is_external: bool = False
     is_exit: bool = False
     connected_spaces: List[str] = field(default_factory=list)
+    properties: Dict[str, Any] = field(default_factory=dict)
+    data_quality_flags: List[str] = field(default_factory=list)
+    assumptions: Dict[str, str] = field(default_factory=dict)
+    connection_source: str = "unconnected"
+    width_confidence: float = 1.0
+    is_fire_door: Optional[bool] = None
+    is_smoke_stop: Optional[bool] = None
 
 
 @dataclass
@@ -52,6 +59,9 @@ class SpaceData:
     space_type: str = "unknown"
     connected_doors: List[str] = field(default_factory=list)
     bounding_box: Optional[Tuple[Point3D, Point3D]] = None
+    data_quality_flags: List[str] = field(default_factory=list)
+    assumptions: Dict[str, str] = field(default_factory=dict)
+    area_confidence: float = 1.0
 
 
 @dataclass
@@ -63,6 +73,8 @@ class StairData:
     riser_height: float
     tread_length: float
     connected_levels: List[str] = field(default_factory=list)
+    data_quality_flags: List[str] = field(default_factory=list)
+    assumptions: Dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -79,6 +91,7 @@ class BuildingData:
     geometry_source_types: List[str] = field(default_factory=list)
     geometry_elements_available: int = 0
     geometry_elements_used: int = 0
+    data_quality_flags: List[str] = field(default_factory=list)
 
 
 class IFCParser:
@@ -129,6 +142,9 @@ class IFCParser:
             
             # Extract doors
             self._extract_doors(building)
+
+            # Connect doors to spaces using IFC semantic relationships where available.
+            self._connect_doors_to_spaces_from_boundaries(building)
             
             # Extract stairs
             self._extract_stairs(building)
@@ -184,13 +200,17 @@ class IFCParser:
         
         for ifc_space in spaces:
             try:
+                area, area_source, area_confidence, area_flags = self._extract_space_area(ifc_space)
                 space = SpaceData(
                     id=ifc_space.GlobalId,
                     name=ifc_space.Name or "Unnamed Space",
-                    area=self._calculate_area(ifc_space),
+                    area=area,
                     level=self._get_level(ifc_space),
                     space_type=self._get_space_type(ifc_space),
                     bounding_box=self._get_bounding_box(ifc_space),
+                    data_quality_flags=area_flags,
+                    assumptions={} if area_confidence >= 1 else {"area": area_source},
+                    area_confidence=area_confidence,
                 )
                 building.spaces[space.id] = space
             except Exception as e:
@@ -202,12 +222,21 @@ class IFCParser:
         
         for ifc_door in doors:
             try:
+                properties = self._get_properties(ifc_door)
+                width, height, assumptions, confidence, flags = self._extract_door_dimensions(ifc_door, properties)
                 door = DoorData(
                     id=ifc_door.GlobalId,
                     name=ifc_door.Name or "Unnamed Door",
-                    width=getattr(ifc_door, 'OverallWidth', 0.9) or 0.9,
-                    height=getattr(ifc_door, 'OverallHeight', 2.1) or 2.1,
-                    location=self._get_location(ifc_door)
+                    width=width,
+                    height=height,
+                    location=self._get_location(ifc_door),
+                    is_external=self._property_bool(properties, "IsExternal"),
+                    properties=properties,
+                    data_quality_flags=flags,
+                    assumptions=assumptions,
+                    width_confidence=confidence,
+                    is_fire_door=self._property_bool(properties, "FireRating") or self._property_bool(properties, "FireExit"),
+                    is_smoke_stop=self._property_bool(properties, "SmokeStop") or self._property_bool(properties, "SmokeSeal"),
                 )
                 building.doors[door.id] = door
             except Exception as e:
@@ -219,12 +248,22 @@ class IFCParser:
         
         for ifc_stair in stairs:
             try:
+                properties = self._get_properties(ifc_stair)
+                width = self._first_numeric_property(properties, ["Width", "ClearWidth", "NominalWidth"])
+                assumptions = {}
+                flags = []
+                if width is None:
+                    width = 1.2
+                    assumptions["width"] = "Assumed 1.2m because no stair width property was found."
+                    flags.append("missing_stair_width_assumed")
                 stair = StairData(
                     id=ifc_stair.GlobalId,
                     name=ifc_stair.Name or "Unnamed Stair",
-                    width=1.2,  # Default width
-                    riser_height=0.17,  # Default
-                    tread_length=0.25  # Default
+                    width=width,
+                    riser_height=0.17,
+                    tread_length=0.25,
+                    assumptions=assumptions,
+                    data_quality_flags=flags,
                 )
                 building.stairs[stair.id] = stair
             except Exception as e:
@@ -238,22 +277,120 @@ class IFCParser:
                 door.is_exit = True
                 building.exits[door_id] = door
     
-    def _calculate_area(self, ifc_space) -> float:
-        """Calculate space area."""
+    def _extract_space_area(self, ifc_space) -> Tuple[float, str, float, List[str]]:
+        """Extract space area with source/confidence metadata."""
         try:
-            # Try to get from quantity sets
             for rel in getattr(ifc_space, 'IsDefinedBy', []):
                 if hasattr(rel, 'RelatingPropertyDefinition'):
                     prop_set = rel.RelatingPropertyDefinition
                     if hasattr(prop_set, 'Quantities'):
                         for quantity in prop_set.Quantities:
                             if hasattr(quantity, 'AreaValue'):
-                                return float(quantity.AreaValue)
-            
-            # Default area
-            return 20.0
-        except:
-            return 20.0
+                                return float(quantity.AreaValue), "IFC quantity AreaValue", 1.0, []
+
+            bounding_box = self._get_bounding_box(ifc_space)
+            if bounding_box:
+                minimum, maximum = bounding_box
+                area = max(1.0, (maximum.x - minimum.x) * (maximum.y - minimum.y))
+                return area, "Estimated from geometry bounding box footprint", 0.6, [
+                    "space_area_estimated_from_geometry"
+                ]
+        except Exception:
+            pass
+
+        return 20.0, "Assumed 20m2 because no area quantity or geometry was available", 0.25, [
+            "missing_space_area_assumed"
+        ]
+
+    def _extract_door_dimensions(
+        self, ifc_door, properties: Dict[str, Any]
+    ) -> Tuple[float, float, Dict[str, str], float, List[str]]:
+        """Extract door dimensions with assumption metadata."""
+        assumptions: Dict[str, str] = {}
+        flags: List[str] = []
+
+        width = getattr(ifc_door, "OverallWidth", None)
+        width_source = "IfcDoor.OverallWidth"
+        if not width:
+            width = self._first_numeric_property(properties, [
+                "ClearWidth", "Width", "NominalWidth", "OverallWidth", "EffectiveWidth"
+            ])
+            width_source = "door property set"
+
+        confidence = 1.0
+        if not width:
+            width = 0.9
+            confidence = 0.35
+            assumptions["width"] = "Assumed 0.9m because no IFC door width or property-set width was found."
+            flags.append("missing_door_width_assumed")
+        else:
+            assumptions["width_source"] = width_source
+
+        height = getattr(ifc_door, "OverallHeight", None)
+        if not height:
+            height = self._first_numeric_property(properties, ["Height", "NominalHeight", "OverallHeight"])
+        if not height:
+            height = 2.1
+            assumptions["height"] = "Assumed 2.1m because no IFC door height was found."
+            flags.append("missing_door_height_assumed")
+
+        return float(width), float(height), assumptions, confidence, flags
+
+    @staticmethod
+    def _first_numeric_property(properties: Dict[str, Any], names: List[str]) -> Optional[float]:
+        lower_map = {str(key).lower(): value for key, value in properties.items()}
+        for name in names:
+            value = lower_map.get(name.lower())
+            if isinstance(value, (int, float)):
+                return float(value)
+            if isinstance(value, str):
+                try:
+                    return float(value)
+                except ValueError:
+                    continue
+        return None
+
+    @staticmethod
+    def _property_bool(properties: Dict[str, Any], name: str) -> bool:
+        value = next((v for k, v in properties.items() if str(k).lower() == name.lower()), None)
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in {"true", "t", "yes", "1", "external", "fire rated"}
+        return False
+
+    def _connect_doors_to_spaces_from_boundaries(self, building: BuildingData) -> None:
+        """Connect doors to spaces using IfcRelSpaceBoundary / opening fillings."""
+        for ifc_space in self.ifc_file.by_type("IfcSpace"):
+            space_id = ifc_space.GlobalId
+            for boundary in getattr(ifc_space, "BoundedBy", []) or []:
+                element = getattr(boundary, "RelatedBuildingElement", None)
+                for door_id in self._door_ids_from_boundary_element(element):
+                    if door_id in building.doors and space_id in building.spaces:
+                        door = building.doors[door_id]
+                        if space_id not in door.connected_spaces:
+                            door.connected_spaces.append(space_id)
+                        if door_id not in building.spaces[space_id].connected_doors:
+                            building.spaces[space_id].connected_doors.append(door_id)
+                        door.connection_source = "IfcRelSpaceBoundary"
+
+    def _door_ids_from_boundary_element(self, element) -> List[str]:
+        """Resolve a boundary element or opening element to one or more door ids."""
+        if element is None:
+            return []
+        try:
+            if element.is_a("IfcDoor"):
+                return [element.GlobalId]
+            if element.is_a("IfcOpeningElement"):
+                door_ids = []
+                for filling in getattr(element, "HasFillings", []) or []:
+                    related = getattr(filling, "RelatedBuildingElement", None)
+                    if related is not None and related.is_a("IfcDoor"):
+                        door_ids.append(related.GlobalId)
+                return door_ids
+        except Exception:
+            return []
+        return []
     
     def _get_level(self, ifc_space) -> str:
         """Get space level."""
@@ -480,6 +617,13 @@ class IFCParser:
                 height=2.1,
                 location=midpoint,
                 connected_spaces=[source, target],
+                data_quality_flags=["inferred_topology_edge", "missing_door_width_assumed"],
+                assumptions={
+                    "topology": "Connection inferred from nearest-neighbour geometry, not verified IFC door semantics.",
+                    "width": "Assumed 0.9m for inferred route connector.",
+                },
+                connection_source="inferred_geometry",
+                width_confidence=0.25,
             )
             building.spaces[source].connected_doors.append(door_id)
             building.spaces[target].connected_doors.append(door_id)
@@ -505,6 +649,13 @@ class IFCParser:
                 is_external=True,
                 is_exit=True,
                 connected_spaces=[space_id],
+                data_quality_flags=["inferred_egress", "missing_exit_width_assumed"],
+                assumptions={
+                    "topology": "Boundary egress inferred from farthest geometry points, not verified final-exit semantics.",
+                    "width": "Assumed 1.2m for inferred egress marker.",
+                },
+                connection_source="inferred_geometry",
+                width_confidence=0.25,
             )
             building.doors[exit_id] = exit_door
             building.exits[exit_id] = exit_door

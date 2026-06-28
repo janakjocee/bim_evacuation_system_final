@@ -36,6 +36,7 @@ class PipelineResult:
     ifc_schema: str = "UNKNOWN"
     regulation_source: str = "default_rules"
     regulation_clause_count: int = 0
+    regulation_rule_count: int = 0
     rag_enabled: bool = False
 
 
@@ -167,9 +168,11 @@ class EvacuationPipeline:
         
         # Step 4: Parse regulations (if provided)
         regulation_clauses = []
+        regulation_rules = []
         if regulation_text:
             logger.info("Step 4: Parsing regulations")
             regulation_clauses = self.regulation_parser.parse(regulation_text)
+            regulation_rules = self.regulation_parser.rules
             
             # Build the optional retrieval index only when enabled.
             if regulation_clauses and enable_rag:
@@ -184,7 +187,11 @@ class EvacuationPipeline:
         self.scenario_generator = ScenarioGenerator(self.building, self.graph_builder)
         
         if regulation_clauses:
-            self.scenario_generator.set_regulations(regulation_clauses)
+            self.scenario_generator.set_regulations(
+                regulation_clauses,
+                rules=regulation_rules,
+                rag_engine=self.rag_engine if enable_rag else None,
+            )
         
         scenarios = self.scenario_generator.generate(max_scenarios=max_scenarios)
         regulation_source = "uploaded_regulations" if regulation_clauses else "default_rules"
@@ -213,6 +220,7 @@ class EvacuationPipeline:
             ifc_schema=readiness["schema"],
             regulation_source=regulation_source,
             regulation_clause_count=len(regulation_clauses),
+            regulation_rule_count=len(regulation_rules),
             rag_enabled=bool(regulation_clauses and enable_rag),
         )
 
@@ -249,6 +257,7 @@ class EvacuationPipeline:
                 'source_mode': result.source_mode,
                 'regulation_source': result.regulation_source,
                 'regulation_clause_count': result.regulation_clause_count,
+                'regulation_rule_count': result.regulation_rule_count,
                 'rag_enabled': result.rag_enabled,
                 'scenarios': [s.to_dict() for s in result.scenarios],
                 'summary': self.scenario_generator.get_summary() if self.scenario_generator else {}

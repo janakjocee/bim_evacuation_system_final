@@ -19,6 +19,9 @@ class ComplianceStatus(str, Enum):
     COMPLIANT = "compliant"
     NON_COMPLIANT = "non_compliant"
     PARTIAL = "partial"
+    UNKNOWN = "unknown"
+    REQUIRES_REVIEW = "requires_review"
+    INSUFFICIENT_DATA = "insufficient_data"
 
 
 def generate_id(prefix: str = "ID") -> str:

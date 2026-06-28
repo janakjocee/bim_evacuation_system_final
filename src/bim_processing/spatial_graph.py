@@ -1,7 +1,7 @@
 """
 Spatial graph construction using NetworkX.
 """
-from typing import Dict, List, Optional, Tuple, Set
+from typing import Any, Dict, List, Optional, Tuple, Set
 from dataclasses import dataclass
 import math
 
@@ -38,6 +38,7 @@ class SpatialGraphBuilder:
         
         self.graph = None
         self.exit_nodes: Set[str] = set()
+        self.validation: Dict[str, Any] = {}
         
         if not NETWORKX_AVAILABLE:
             logger.warning("NetworkX not available. Graph features will be limited.")
@@ -92,8 +93,9 @@ class SpatialGraphBuilder:
                         width=stair.width
                     )
             
-            # Add edges (simplified connectivity)
+            # Add edges from verified or explicitly inferred connectivity only.
             self._add_connectivity_edges()
+            self.validation = self.validate_graph()
             
             logger.info(f"Graph built: {self.graph.number_of_nodes()} nodes, "
                        f"{self.graph.number_of_edges()} edges")
@@ -116,36 +118,16 @@ class SpatialGraphBuilder:
                 for space_id in door.connected_spaces:
                     if space_id in self.graph:
                         distance = self._space_to_door_distance(space_id, door)
+                        edge_type = door.connection_source or "explicit_connection"
                         self.graph.add_edge(
                             space_id,
                             door_id,
                             weight=distance,
-                            edge_type="file_geometry_connection",
+                            edge_type=edge_type,
+                            inferred=edge_type.startswith("inferred"),
                         )
             return
-
-        # Simple heuristic: connect spaces to nearby doors
-        spaces = list(self.building.spaces.keys())
-        doors = list(self.building.doors.keys())
-        
-        # Connect each space to at least one door
-        for i, space_id in enumerate(spaces):
-            if doors:
-                # Connect to a door (cyclic for simplicity)
-                door_id = doors[i % len(doors)]
-                self.graph.add_edge(
-                    space_id, door_id,
-                    weight=5.0,  # Default distance in meters
-                    edge_type='space_door'
-                )
-        
-        # Connect doors to each other (for corridors)
-        for i in range(len(doors) - 1):
-            self.graph.add_edge(
-                doors[i], doors[i + 1],
-                weight=10.0,
-                edge_type='door_door'
-            )
+        logger.warning("No verified or explicitly inferred door-space connectivity found; graph edges were not fabricated.")
 
     def _space_to_door_distance(self, space_id: str, door: DoorData) -> float:
         """Calculate distance from a file-derived space center to a connection."""
@@ -277,10 +259,57 @@ class SpatialGraphBuilder:
         """Get graph statistics."""
         if not NETWORKX_AVAILABLE or self.graph is None:
             return {}
-        
-        return {
+
+        stats = {
             'node_count': self.graph.number_of_nodes(),
             'edge_count': self.graph.number_of_edges(),
             'exit_count': len(self.exit_nodes),
             'is_connected': nx.is_connected(self.graph) if self.graph.number_of_nodes() > 0 else False
+        }
+        stats.update(self.validation or self.validate_graph())
+        return stats
+
+    def validate_graph(self) -> Dict[str, Any]:
+        """Validate route graph completeness and confidence."""
+        if not NETWORKX_AVAILABLE or self.graph is None:
+            return {}
+
+        space_ids = set(self.building.spaces)
+        door_ids = set(self.building.doors)
+        inferred_edges = 0
+        verified_edges = 0
+        for _, _, data in self.graph.edges(data=True):
+            if data.get("inferred") or str(data.get("edge_type", "")).startswith("inferred"):
+                inferred_edges += 1
+            else:
+                verified_edges += 1
+
+        disconnected_spaces = sorted(space_id for space_id in space_ids if self.graph.degree(space_id) == 0)
+        doors_without_spaces = sorted(
+            door_id for door_id in door_ids if not self.building.doors[door_id].connected_spaces
+        )
+        spaces_without_exit_route = []
+        for space_id in space_ids:
+            if not self.find_paths_to_exits(space_id):
+                spaces_without_exit_route.append(space_id)
+
+        topology_confidence = 1.0
+        if self.building.extraction_mode == "geometry_derived":
+            topology_confidence = 0.35
+        elif self.building.extraction_mode == "semantic_spaces_inferred_topology":
+            topology_confidence = 0.55
+        elif inferred_edges:
+            topology_confidence = 0.7
+        if disconnected_spaces or spaces_without_exit_route:
+            topology_confidence = min(topology_confidence, 0.4)
+        if not self.exit_nodes:
+            topology_confidence = 0.0
+
+        return {
+            "verified_edges_count": verified_edges,
+            "inferred_edges_count": inferred_edges,
+            "disconnected_spaces": disconnected_spaces,
+            "doors_without_connected_spaces": doors_without_spaces,
+            "spaces_without_exit_route": sorted(spaces_without_exit_route),
+            "graph_confidence_score": round(topology_confidence, 2),
         }
