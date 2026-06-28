@@ -20,6 +20,7 @@ from src.bim_processing.ifc_parser import (
 from src.bim_processing.spatial_graph import SpatialGraphBuilder
 from src.nlp.regulation_parser import RegulationClause, RegulationRule
 from src.nlp.regulation_parser import RegulationParser
+from src.nlp.document_loader import extract_regulation_text
 from src.scenario.compliance_checker import ComplianceChecker
 from src.scenario.scenario_generator import ScenarioGenerator
 from src.scenario.risk_classifier import RiskClassifier, RiskFactors
@@ -186,6 +187,8 @@ def test_generated_scenario_exports_explainability_trace():
     assert payload["decision_trace"]
     assert payload["decision_trace"][-1]["method"] == "Weighted deterministic score, not an opaque machine-learning prediction."
     assert payload["data_quality_notes"]
+    assert payload["evacuation_route"]["inferred_edge_count"] == 1
+    assert payload["compliance_status"] == ComplianceStatus.REQUIRES_REVIEW.value
 
 
 def test_uploaded_regulation_values_drive_compliance_rules():
@@ -265,6 +268,40 @@ def test_structured_rules_override_defaults_and_attach_evidence():
     assert check.evidence[0]["rule_id"] == "2.1-R1"
 
 
+def test_rule_application_summary_reports_defaults_and_unsupported_rules():
+    checker = ComplianceChecker()
+    checker.update_regulation_rules([
+        RegulationRule(
+            rule_id="2.1-R1",
+            source_section="2.1",
+            source_text="Travel distance must not exceed 30 metres.",
+            applies_to="route",
+            condition="general",
+            metric="max_travel_distance",
+            operator="<=",
+            value=30.0,
+            unit="metres",
+        ),
+        RegulationRule(
+            rule_id="2.2-R1",
+            source_section="2.2",
+            source_text="Smoke reservoirs shall be provided where required.",
+            applies_to="general",
+            condition="general",
+            metric="smoke_reservoir_required",
+            operator="==",
+            value=1.0,
+            unit="boolean",
+        ),
+    ])
+
+    summary = checker.get_rule_application_summary()
+
+    assert summary["uploaded_rule_count"] == 1
+    assert summary["unsupported_rule_count"] == 1
+    assert any(row["rule_key"] == "max_travel_distance" and row["source"] == "uploaded_regulation_rule" for row in summary["active_thresholds"])
+
+
 def test_rag_evidence_is_attached_to_default_rule_checks():
     checker = ComplianceChecker()
 
@@ -323,6 +360,26 @@ def test_missing_exit_forces_high_risk():
     )
 
     assert classifier.classify(factors) == RiskLevel.HIGH
+
+
+def test_regulation_text_loader_supports_txt_docx_and_pdf(tmp_path):
+    txt_path = tmp_path / "rules.txt"
+    txt_path.write_text("Travel distance must not exceed 30 metres.", encoding="utf-8")
+    assert "30 metres" in extract_regulation_text(txt_path)
+
+    docx = pytest.importorskip("docx")
+    docx_path = tmp_path / "rules.docx"
+    document = docx.Document()
+    document.add_paragraph("Final exit doors shall be 1200mm wide.")
+    document.save(docx_path)
+    assert "1200mm" in extract_regulation_text(docx_path)
+
+    reportlab_canvas = pytest.importorskip("reportlab.pdfgen.canvas")
+    pdf_path = tmp_path / "rules.pdf"
+    canvas = reportlab_canvas.Canvas(str(pdf_path))
+    canvas.drawString(72, 720, "Corridor width shall be at least 1200mm.")
+    canvas.save()
+    assert "1200mm" in extract_regulation_text(pdf_path)
 
 
 def test_regulation_parser_recognizes_not_exceed_maximum_language():

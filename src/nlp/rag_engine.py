@@ -32,6 +32,9 @@ class RAGEngine:
         """Initialize embedding model and FAISS."""
         if self.embedding_model is not None and self.faiss is not None:
             return
+        if not self.config.get("rag.vector_enabled", False):
+            logger.info("Vector RAG disabled; using stable keyword evidence retrieval.")
+            return
 
         try:
             from sentence_transformers import SentenceTransformer
@@ -62,7 +65,7 @@ class RAGEngine:
         self._initialize()
         
         if self.embedding_model is None or self.faiss is None:
-            logger.warning("RAG dependencies not available. Using keyword search.")
+            logger.info("Using keyword search for regulation evidence retrieval.")
             return False
         
         try:

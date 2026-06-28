@@ -36,7 +36,9 @@ class ComplianceChecker:
         """Initialize compliance checker."""
         self.config = get_config()
         self.regulations = self._load_default_regulations()
+        self.default_regulations = dict(self.regulations)
         self.rule_sources: Dict[str, RegulationRule] = {}
+        self.unsupported_rules: List[RegulationRule] = []
         self.evidence_provider: Optional[Callable[[str, int], List[Any]]] = None
     
     def _load_default_regulations(self) -> Dict[str, Any]:
@@ -88,12 +90,15 @@ class ComplianceChecker:
         multiple measurements from the same paragraph and carry source evidence.
         """
         applied = 0
+        self.unsupported_rules = []
         for rule in rules:
             key = self._map_rule_to_rule_key(rule)
             if key:
                 self.regulations[key] = rule.value
                 self.rule_sources[key] = rule
                 applied += 1
+            else:
+                self.unsupported_rules.append(rule)
 
         logger.info(f"Updated regulations with {len(rules)} structured rules; applied {applied} constraints")
 
@@ -124,6 +129,39 @@ class ComplianceChecker:
             return "min_tread_length"
 
         return ""
+
+    def get_rule_application_summary(self) -> Dict[str, Any]:
+        """Return active thresholds and whether each came from upload or defaults."""
+        active_thresholds = []
+        for key, value in sorted(self.regulations.items()):
+            rule = self.rule_sources.get(key)
+            active_thresholds.append({
+                "rule_key": key,
+                "value": value,
+                "source": "uploaded_regulation_rule" if rule else "default_config",
+                "rule_id": rule.rule_id if rule else "",
+                "source_text": rule.source_text[:300] if rule else "",
+            })
+
+        return {
+            "active_threshold_count": len(active_thresholds),
+            "uploaded_rule_count": len(self.rule_sources),
+            "default_threshold_count": sum(1 for item in active_thresholds if item["source"] == "default_config"),
+            "unsupported_rule_count": len(self.unsupported_rules),
+            "active_thresholds": active_thresholds,
+            "unsupported_rules": [
+                {
+                    "rule_id": rule.rule_id,
+                    "metric": rule.metric,
+                    "operator": rule.operator,
+                    "value": rule.value,
+                    "unit": rule.unit,
+                    "source_text": rule.source_text[:300],
+                    "reason": "Extracted, but this prototype does not currently enforce that metric.",
+                }
+                for rule in self.unsupported_rules
+            ],
+        }
 
     def _map_rule_to_rule_key(self, rule: RegulationRule) -> str:
         """Map structured regulation rules onto checker rule keys."""

@@ -26,6 +26,10 @@ class Route:
     path: List[str]
     distance: float
     estimated_time: float
+    verified_edge_count: int = 0
+    inferred_edge_count: int = 0
+    route_confidence: float = 1.0
+    edge_sources: List[str] = None
 
 
 class SpatialGraphBuilder:
@@ -178,13 +182,24 @@ class SpatialGraphBuilder:
             # Calculate estimated time
             travel_speed = self.config.get('bim.travel_speed.level', 1.2)
             estimated_time = distance / travel_speed
+            verified_edges, inferred_edges, edge_sources = self._route_edge_quality(path)
+            total_edges = max(verified_edges + inferred_edges, 1)
+            route_confidence = max(0.15, verified_edges / total_edges)
+            if self.building.extraction_mode == "geometry_derived":
+                route_confidence = min(route_confidence, 0.35)
+            elif self.building.extraction_mode == "semantic_spaces_inferred_topology":
+                route_confidence = min(route_confidence, 0.55)
             
             return Route(
                 origin=origin,
                 destination=destination,
                 path=path,
                 distance=distance,
-                estimated_time=estimated_time
+                estimated_time=estimated_time,
+                verified_edge_count=verified_edges,
+                inferred_edge_count=inferred_edges,
+                route_confidence=route_confidence,
+                edge_sources=edge_sources,
             )
             
         except nx.NetworkXNoPath:
@@ -193,6 +208,21 @@ class SpatialGraphBuilder:
         except Exception as e:
             logger.error(f"Error finding path: {e}")
             return None
+
+    def _route_edge_quality(self, path: List[str]) -> Tuple[int, int, List[str]]:
+        """Summarize verified/inferred edge quality along a path."""
+        verified_edges = 0
+        inferred_edges = 0
+        edge_sources: List[str] = []
+        for first, second in zip(path, path[1:]):
+            edge_data = self.graph.get_edge_data(first, second, default={}) if self.graph else {}
+            source = str(edge_data.get("edge_type", "unknown"))
+            edge_sources.append(source)
+            if edge_data.get("inferred") or source.startswith("inferred"):
+                inferred_edges += 1
+            else:
+                verified_edges += 1
+        return verified_edges, inferred_edges, edge_sources
     
     def find_paths_to_exits(self, origin: str) -> List[Route]:
         """

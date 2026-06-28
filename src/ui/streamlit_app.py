@@ -25,6 +25,7 @@ from typing import List, Dict, Any, Optional
 
 from src.pipeline.evacuation_pipeline import EvacuationPipeline, PipelineResult
 from src.bim_processing.ifc_validation import SUPPORTED_SCHEMA_LABEL
+from src.nlp.document_loader import RegulationDocumentError, extract_regulation_text
 from src.utils.logger import get_logger
 from src.utils.helpers import RiskLevel, ComplianceStatus
 from src.ui.ui_components import (
@@ -489,9 +490,9 @@ def render_sidebar():
         st.markdown("<p style='font-size:0.8rem;color:#666;'>Upload building safety codes</p>", unsafe_allow_html=True)
         
         regulation_file = st.file_uploader(
-            "Select regulation text",
-            type=['txt', 'md'],
-            help="Building safety regulations (e.g., Approved Document B)",
+            "Select regulation document",
+            type=['txt', 'md', 'pdf', 'docx'],
+            help="Building safety regulations (TXT, MD, PDF or DOCX, e.g., Approved Document B)",
             label_visibility="collapsed"
         )
         
@@ -584,7 +585,8 @@ def process_files(ifc_file, regulation_file, max_scenarios, enable_rag):
         regulation_text = None
         if regulation_file:
             progress_bar.progress(20, text="Loading regulations...")
-            regulation_text = regulation_file.read().decode('utf-8')
+            regulation_path = save_uploaded_file(regulation_file, "./data/temp")
+            regulation_text = extract_regulation_text(regulation_path, regulation_file.name)
             st.session_state['regulation_text'] = regulation_text
         
         # Run pipeline
@@ -981,11 +983,29 @@ def render_regulation_intelligence(result):
     st.markdown("---")
     
     # Active Constraints
-    st.markdown("### Default Screening Constraints")
+    st.markdown("### Active Screening Constraints")
     st.caption(
-        "Prototype defaults are shown below. Uploaded regulation text is parsed "
-        "separately and all thresholds require professional verification."
+        "This table shows which thresholds came from uploaded regulation parsing "
+        "and which remain prototype defaults. All thresholds require professional verification."
     )
+    application = getattr(result, "regulation_application", {}) if result else {}
+    if application:
+        cols = st.columns(4)
+        cols[0].metric("Extracted Clauses", getattr(result, "regulation_clause_count", 0))
+        cols[1].metric("Numeric Rules", getattr(result, "regulation_rule_count", 0))
+        cols[2].metric("Applied Uploaded Rules", application.get("uploaded_rule_count", 0))
+        cols[3].metric("Unsupported Rules", application.get("unsupported_rule_count", 0))
+
+        active_rows = application.get("active_thresholds", [])
+        if active_rows:
+            st.dataframe(pd.DataFrame(active_rows), height=260, width='stretch')
+
+        unsupported_rows = application.get("unsupported_rules", [])
+        if unsupported_rows:
+            with st.expander("Extracted but not currently enforceable", expanded=False):
+                st.dataframe(pd.DataFrame(unsupported_rows), height=220, width='stretch')
+    else:
+        st.info("No pipeline result is available yet.")
     
     constraints_data = [
         {'Parameter': 'Maximum Travel Distance', 'Value': '45.0 m', 'Source': 'AD B 2.2.1', 'Status': '✓ Active'},
@@ -998,7 +1018,8 @@ def render_regulation_intelligence(result):
     ]
     
     df_constraints = pd.DataFrame(constraints_data)
-    st.dataframe(df_constraints, height=250)
+    with st.expander("Built-in default reference values", expanded=False):
+        st.dataframe(df_constraints, height=250, width='stretch')
     
     # Search regulations
     st.markdown("---")
@@ -1029,9 +1050,9 @@ def render_regulation_intelligence(result):
     with rag_col1:
         st.markdown(f"""
         <div class="success-box">
-            <strong>Embedding Model:</strong> all-MiniLM-L6-v2<br>
-            <strong>Vector DB:</strong> FAISS (Flat IP)<br>
-            <strong>Similarity Threshold:</strong> 0.70<br>
+            <strong>Default Retrieval:</strong> keyword evidence search<br>
+            <strong>Optional Vector Mode:</strong> SentenceTransformers + FAISS when enabled in config<br>
+            <strong>Reason:</strong> stable deployment first; native vector libraries are opt-in<br>
             <strong>Status:</strong> {rag_status}
         </div>
         """, unsafe_allow_html=True)
@@ -1041,9 +1062,9 @@ def render_regulation_intelligence(result):
         <div class="info-box">
             <strong>Grounding Pipeline:</strong><br>
             1. Document chunking (size=512, overlap=50)<br>
-            2. Sentence embedding generation<br>
-            3. FAISS index construction<br>
-            4. Similarity search for grounding<br>
+            2. Keyword retrieval by compliance-check query<br>
+            3. Optional vector retrieval if enabled<br>
+            4. Evidence snippets attached to each check<br>
             5. Expert review and source verification
         </div>
         """, unsafe_allow_html=True)
