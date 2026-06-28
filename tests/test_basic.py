@@ -22,7 +22,7 @@ from src.nlp.regulation_parser import RegulationClause, RegulationRule
 from src.nlp.regulation_parser import RegulationParser
 from src.nlp.document_loader import extract_regulation_text
 from src.scenario.compliance_checker import ComplianceChecker
-from src.scenario.scenario_generator import ScenarioGenerator
+from src.scenario.scenario_generator import ScenarioGenerator, classify_route_reliability
 from src.scenario.risk_classifier import RiskClassifier, RiskFactors
 from src.scenario.ifc_dataset_exporter import building_to_worst_case_dataset
 from src.scenario.worst_case_engine import validate_scenario_dataset
@@ -524,6 +524,59 @@ def test_ifc_dataset_exporter_adds_review_occupancy_for_geometry_spaces():
     assert exported_space["occupancy"] >= 1
     assert exported_space["occupancy_confidence"] == 0.25
     assert "Low-confidence review occupancy" in exported_space["assumptions"]["occupancy"]
+
+
+def test_scenario_exports_alternative_routes_and_reliability():
+    building = BuildingData(id="B1", name="Alternatives")
+    building.spaces["S1"] = SpaceData(id="S1", name="Room", area=20)
+    exit_a = DoorData(
+        id="E1",
+        name="Exit A",
+        width=1.2,
+        height=2.1,
+        location=Point3D(x=0),
+        is_exit=True,
+        connected_spaces=["S1"],
+        connection_source="IfcRelSpaceBoundary",
+    )
+    exit_b = DoorData(
+        id="E2",
+        name="Exit B",
+        width=1.2,
+        height=2.1,
+        location=Point3D(x=10),
+        is_exit=True,
+        connected_spaces=["S1"],
+        connection_source="IfcRelSpaceBoundary",
+    )
+    building.doors = {"E1": exit_a, "E2": exit_b}
+    building.exits = {"E1": exit_a, "E2": exit_b}
+
+    graph = SpatialGraphBuilder(building)
+    assert graph.build()
+    scenario = ScenarioGenerator(building, graph).generate(max_scenarios=1)[0]
+    payload = scenario.to_dict()
+
+    assert payload["evacuation_route"]["route_reliability"] == "verified"
+    assert payload["alternative_routes"]
+    assert payload["alternative_routes"][0]["route_reliability"] == "verified"
+
+
+def test_route_reliability_classification_for_inferred_route():
+    from src.bim_processing.spatial_graph import Route
+
+    route = Route(
+        origin="S1",
+        destination="E1",
+        path=["S1", "D1", "E1"],
+        distance=10,
+        estimated_time=8,
+        verified_edge_count=0,
+        inferred_edge_count=2,
+        route_confidence=0.15,
+    )
+
+    assert classify_route_reliability(route) == "insufficient"
 
 
 if __name__ == "__main__":

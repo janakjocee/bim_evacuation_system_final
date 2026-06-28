@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import sys
 from pathlib import Path
@@ -16,6 +17,28 @@ try:
     import ifcopenshell
 except ImportError:
     ifcopenshell = None
+
+
+LOG_FORMAT = "{time:YYYY-MM-DD HH:mm:ss} | {level} | {name} | {message}"
+
+
+def route_loguru_to_stderr_for_json() -> None:
+    """Keep --json stdout machine-readable even when app modules log verbosely."""
+    try:
+        from loguru import logger as loguru_logger
+    except Exception:
+        return
+    loguru_logger.remove()
+    loguru_logger.add(sys.stderr, format=LOG_FORMAT, level="INFO", colorize=False)
+    log_dir = Path("./outputs")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    loguru_logger.add(
+        log_dir / "bim_evacuation.log",
+        format=LOG_FORMAT,
+        level="DEBUG",
+        rotation="10 MB",
+        retention="7 days",
+    )
 
 
 def discover_ifcs(inputs: list[str]) -> list[Path]:
@@ -129,11 +152,15 @@ def main() -> int:
     if not files:
         parser.error("No IFC files found in the supplied inputs.")
 
-    regulation_text = extract_regulation_text(args.regulations) if args.regulations else None
-    rows = [audit_file(path, args.max_scenarios, regulation_text=regulation_text) for path in files]
     if args.json:
+        route_loguru_to_stderr_for_json()
+        with contextlib.redirect_stdout(sys.stderr):
+            regulation_text = extract_regulation_text(args.regulations) if args.regulations else None
+            rows = [audit_file(path, args.max_scenarios, regulation_text=regulation_text) for path in files]
         print(json.dumps(rows, indent=2))
     else:
+        regulation_text = extract_regulation_text(args.regulations) if args.regulations else None
+        rows = [audit_file(path, args.max_scenarios, regulation_text=regulation_text) for path in files]
         for row in rows:
             print(
                 f"{row['file']} | {row['schema']} | success={row['success']} | "

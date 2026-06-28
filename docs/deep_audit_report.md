@@ -24,8 +24,9 @@ codex/deep-ifc-regulation-audit
 - `SpatialGraphBuilder` no longer fabricates cyclic fallback connectivity.
   It records verified edges, inferred edges, disconnected spaces and spaces
   without exit routes.
-- Scenario generation attaches route edge quality, route confidence, graph
-  confidence, data-quality notes and compliance evidence to exported JSON.
+- Scenario generation attaches route edge quality, route confidence, route
+  reliability, alternative-route summaries, graph confidence, data-quality notes
+  and compliance evidence to exported JSON.
 - Uploaded regulation text is parsed into clauses and structured numeric rules.
 - Compliance checks expose whether each threshold came from uploaded rules,
   keyword/RAG evidence or default config.
@@ -108,7 +109,7 @@ exported JSON under `regulation_application`.
 
 ```text
 python3 -m pytest -q
-60 passed, 3 skipped
+63 passed, 3 skipped
 ```
 
 The skipped tests are optional environment-dependent tests, such as PDF fixture

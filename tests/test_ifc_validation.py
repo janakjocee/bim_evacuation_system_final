@@ -1,5 +1,9 @@
 """Tests for IFC compatibility/readiness validation."""
 
+import json
+import subprocess
+import sys
+
 from src.bim_processing.ifc_parser import BuildingData, IFCParser, Point3D, SpaceData
 from src.bim_processing.ifc_validation import validate_ifc_model
 
@@ -65,3 +69,24 @@ def test_parser_infers_topology_for_spaces_without_doors():
     assert len(building.doors) >= 3
     assert len(building.exits) == 2
     assert all(door.connected_spaces for door in building.doors.values())
+
+
+def test_validate_ifcs_json_stdout_is_parseable_on_failure(tmp_path):
+    pointer = tmp_path / "pointer.ifc"
+    pointer.write_text(
+        "version https://git-lfs.github.com/spec/v1\n"
+        "oid sha256:0123456789abcdef\n"
+        "size 12345\n"
+    )
+
+    result = subprocess.run(
+        [sys.executable, "scripts/validate_ifcs.py", str(pointer), "--json"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    rows = json.loads(result.stdout)
+    assert rows[0]["is_git_lfs_pointer"] is True
+    assert rows[0]["success"] is False
