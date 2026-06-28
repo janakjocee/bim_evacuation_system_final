@@ -63,8 +63,10 @@ generated evacuation scenario exports:
 
 - the IFC extraction basis used for the scenario;
 - the route search method, selected path, distance and evacuation time;
-- the compliance checks that passed or failed;
-- the deterministic risk score and weighted factor breakdown;
+- the compliance checks that passed or failed, including whether each threshold
+  came from an uploaded structured rule, RAG evidence or built-in default;
+- the deterministic risk score and weighted factor breakdown, including IFC
+  graph confidence and data-quality caps;
 - confidence score and data-quality notes;
 - a human-readable explanation and expert-review recommendations.
 
@@ -73,6 +75,8 @@ decision trace directly. Risk classification is rule/score based and
 deterministic, not a hidden neural-network prediction. RAG is used only when a
 regulation document is uploaded and grounding is enabled; otherwise the app
 clearly states that built-in default screening constraints were used.
+Low-risk labels are capped when route topology is mostly inferred, when critical
+IFC measurements are assumed, or when no verified exit data is available.
 
 ---
 
@@ -188,7 +192,8 @@ python scripts/validate_ifcs.py /path/to/model.ifc /path/to/ifc-folder
 ```
 
 The audit reports detected schema, analysis mode, screened elements/spaces,
-scenario count, graph connectivity, confidence ceiling and errors.
+scenario count, graph connectivity, confidence ceiling, Git LFS pointer files
+and errors.
 
 The completed local multi-IFC audit is documented in:
 
@@ -269,6 +274,9 @@ families will contain suitable evacuation data. Semantic analysis uses
 `IfcSpace`, `IfcDoor`, storeys and exits where available. Geometry-derived mode
 uses only geometry and properties from the uploaded IFC when those semantic
 entities are absent. No demo building is used as an IFC fallback.
+The latest local audit also successfully parsed IFC4X1 as a compatible
+IfcOpenShell schema, but IFC4X1 remains a best-effort observed schema rather
+than one of the headline documented targets.
 
 Required or preferred data:
 
