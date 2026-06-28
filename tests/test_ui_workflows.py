@@ -37,3 +37,12 @@ def test_explainability_ui_is_not_black_box_or_overclaiming_rag():
     assert "deterministic weighted score" in source
     assert "Retrieved relevant building safety regulations via RAG" not in source
     assert "not as final regulatory approval" in source
+
+
+def test_bim_insights_has_exportable_diagnostics():
+    source = (Path(__file__).resolve().parents[1] / "src/ui/streamlit_app.py").read_text()
+    pipeline = (Path(__file__).resolve().parents[1] / "src/pipeline/evacuation_pipeline.py").read_text()
+
+    assert "Diagnostics Export" in source
+    assert "Download IFC diagnostic report" in source
+    assert "graph_stats" in pipeline

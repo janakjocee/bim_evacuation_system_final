@@ -30,6 +30,7 @@ class PipelineResult:
     errors: List[str] = field(default_factory=list)
     processing_time: float = 0.0
     readiness: Dict[str, Any] = field(default_factory=dict)
+    graph_stats: Dict[str, Any] = field(default_factory=dict)
     source_mode: str = "uploaded_ifc"
     source_file_name: str = ""
     source_file_sha256: str = ""
@@ -166,6 +167,7 @@ class EvacuationPipeline:
         
         if not graph_success:
             logger.warning("Graph building had issues, continuing with limited functionality")
+        graph_stats = self.graph_builder.get_graph_stats() if self.graph_builder else {}
         
         # Step 4: Parse regulations (if provided)
         regulation_clauses = []
@@ -216,6 +218,7 @@ class EvacuationPipeline:
             errors=errors,
             processing_time=processing_time,
             readiness=readiness,
+            graph_stats=graph_stats,
             source_mode=source_mode,
             source_file_name=source_file_name,
             source_file_sha256=source_file_sha256,
@@ -262,6 +265,7 @@ class EvacuationPipeline:
                 'regulation_clause_count': result.regulation_clause_count,
                 'regulation_rule_count': result.regulation_rule_count,
                 'regulation_application': result.regulation_application,
+                'graph_stats': result.graph_stats,
                 'rag_enabled': result.rag_enabled,
                 'scenarios': [s.to_dict() for s in result.scenarios],
                 'summary': self.scenario_generator.get_summary() if self.scenario_generator else {}

@@ -826,12 +826,13 @@ def render_bim_insights(result):
     st.markdown("---")
     
     # Tabs for different views
-    bim_tab1, bim_tab2, bim_tab3, bim_tab4, bim_tab5 = st.tabs([
+    bim_tab1, bim_tab2, bim_tab3, bim_tab4, bim_tab5, bim_tab6 = st.tabs([
         "🔍 Extracted IFC Elements" if geometry_mode else "🔍 Extracted Spaces",
         "🚪 Connections & Egress" if geometry_mode else "🚪 Doors & Exits",
         "🕸️ Connectivity Graph",
         "🗺️ Floor Plan Diagram",
         "🏙️ 3D Model & Egress",
+        "🧾 Diagnostics Export",
     ])
     
     with bim_tab1:
@@ -962,6 +963,69 @@ def render_bim_insights(result):
                 "The uploaded IFC contains no renderable space/element geometry for the 3D view. "
                 "The connectivity graph remains available."
             )
+
+    with bim_tab6:
+        st.markdown("### IFC Diagnostic Report")
+        graph_stats = getattr(result, "graph_stats", {}) or {}
+        diagnostic = {
+            "source_file_name": result.source_file_name,
+            "source_file_sha256": result.source_file_sha256,
+            "ifc_schema": result.ifc_schema,
+            "source_mode": result.source_mode,
+            "readiness": result.readiness,
+            "graph_stats": graph_stats,
+            "entity_counts": {
+                "spaces": len(building.spaces),
+                "doors": len(building.doors),
+                "stairs": len(building.stairs),
+                "exits": len(building.exits),
+                "geometry_elements_available": building.geometry_elements_available,
+                "geometry_elements_used": building.geometry_elements_used,
+                "geometry_source_types": building.geometry_source_types,
+            },
+            "data_quality_flags": {
+                "building": building.data_quality_flags,
+                "spaces": {
+                    space_id: {
+                        "flags": space.data_quality_flags,
+                        "assumptions": space.assumptions,
+                        "area_confidence": space.area_confidence,
+                    }
+                    for space_id, space in building.spaces.items()
+                    if space.data_quality_flags or space.assumptions or space.area_confidence < 1
+                },
+                "doors": {
+                    door_id: {
+                        "flags": door.data_quality_flags,
+                        "assumptions": door.assumptions,
+                        "width_confidence": door.width_confidence,
+                        "connection_source": door.connection_source,
+                        "connected_spaces": door.connected_spaces,
+                        "is_exit": door.is_exit,
+                    }
+                    for door_id, door in building.doors.items()
+                    if door.data_quality_flags or door.assumptions or door.connection_source != "IfcRelSpaceBoundary"
+                },
+            },
+            "regulation_application": getattr(result, "regulation_application", {}),
+        }
+        cols = st.columns(4)
+        cols[0].metric("Graph Confidence", f"{graph_stats.get('graph_confidence_score', 0):.2f}")
+        cols[1].metric("Verified Edges", graph_stats.get("verified_edges_count", 0))
+        cols[2].metric("Inferred Edges", graph_stats.get("inferred_edges_count", 0))
+        cols[3].metric("Spaces Without Route", len(graph_stats.get("spaces_without_exit_route", [])))
+        if graph_stats.get("disconnected_spaces"):
+            st.warning(f"Disconnected spaces: {', '.join(graph_stats['disconnected_spaces'][:10])}")
+        if graph_stats.get("spaces_without_exit_route"):
+            st.warning(f"Spaces without exit route: {', '.join(graph_stats['spaces_without_exit_route'][:10])}")
+        st.json(diagnostic)
+        st.download_button(
+            "Download IFC diagnostic report",
+            json.dumps(diagnostic, indent=2),
+            file_name=f"ifc_diagnostic_{result.source_file_name or 'analysis'}.json",
+            mime="application/json",
+            width='stretch',
+        )
 
 # ==============================================================================
 # TAB 3: REGULATION INTELLIGENCE
