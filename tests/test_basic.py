@@ -135,6 +135,28 @@ def test_geometry_derived_graph_does_not_add_disconnected_stair_nodes():
     assert "STAIR1" not in graph.graph
 
 
+def test_graph_does_not_fabricate_cyclic_connectivity():
+    building = BuildingData(id="B1", name="No Connectivity")
+    building.spaces["S1"] = SpaceData(id="S1", name="Room A", area=20)
+    building.spaces["S2"] = SpaceData(id="S2", name="Room B", area=20)
+    building.doors["D1"] = DoorData(
+        id="D1",
+        name="Unconnected Door",
+        width=0.9,
+        height=2.1,
+        location=Point3D(),
+    )
+
+    graph = SpatialGraphBuilder(building)
+    assert graph.build()
+    stats = graph.get_graph_stats()
+
+    assert stats["edge_count"] == 0
+    assert set(stats["disconnected_spaces"]) == {"S1", "S2"}
+    assert stats["doors_without_connected_spaces"] == ["D1"]
+    assert stats["graph_confidence_score"] == 0.0
+
+
 def test_generated_scenario_exports_explainability_trace():
     building = BuildingData(id="B1", name="Explainability Test")
     building.spaces["S1"] = SpaceData(id="S1", name="Room A", area=20)
@@ -199,6 +221,22 @@ def test_uploaded_regulation_values_drive_compliance_rules():
     assert route_check.status == ComplianceStatus.NON_COMPLIANT
     assert exit_check.required_value == 1.2
     assert exit_check.status == ComplianceStatus.NON_COMPLIANT
+
+
+def test_assumed_door_width_requires_review():
+    checker = ComplianceChecker()
+    result = checker.check_door(DoorData(
+        id="D1",
+        name="Assumed Door",
+        width=0.9,
+        height=2.1,
+        location=Point3D(),
+        assumptions={"width": "Assumed test width"},
+        width_confidence=0.35,
+    ))[0]
+
+    assert result.status == ComplianceStatus.REQUIRES_REVIEW
+    assert "requires expert confirmation" in result.message
 
 
 def test_regulation_parser_recognizes_not_exceed_maximum_language():

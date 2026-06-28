@@ -2,7 +2,7 @@
 Compliance checker for validating scenarios against regulations.
 """
 from typing import Dict, List, Any
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ..utils.logger import get_logger
 from ..utils.config_loader import get_config
@@ -25,6 +25,8 @@ class ComplianceCheck:
     required_value: float
     unit: str
     message: str = ""
+    evidence_source: str = "default_rules"
+    evidence: List[Dict[str, Any]] = field(default_factory=list)
 
 
 class ComplianceChecker:
@@ -104,7 +106,10 @@ class ComplianceChecker:
         if door.is_exit:
             min_width = self.regulations.get('min_exit_width', 1.05)
         
-        status = ComplianceStatus.COMPLIANT if door.width >= min_width else ComplianceStatus.NON_COMPLIANT
+        if door.width_confidence < 1.0 or door.assumptions.get("width"):
+            status = ComplianceStatus.REQUIRES_REVIEW
+        else:
+            status = ComplianceStatus.COMPLIANT if door.width >= min_width else ComplianceStatus.NON_COMPLIANT
         
         checks.append(ComplianceCheck(
             element_id=door.id,
@@ -116,6 +121,7 @@ class ComplianceChecker:
             required_value=min_width,
             unit='m',
             message=f"Door width is {door.width:.2f}m (required: {min_width}m)"
+            + ("; width is assumed or low-confidence and requires expert confirmation" if status == ComplianceStatus.REQUIRES_REVIEW else ""),
         ))
         
         return checks
@@ -163,14 +169,14 @@ class ComplianceChecker:
             Compliance score (0.0 to 1.0)
         """
         if not checks:
-            return 1.0
+            return 0.0
         
         compliant_count = sum(1 for c in checks if c.status == ComplianceStatus.COMPLIANT)
         return compliant_count / len(checks)
     
     def get_violations(self, checks: List[ComplianceCheck]) -> List[ComplianceCheck]:
         """Get only non-compliant checks."""
-        return [c for c in checks if c.status == ComplianceStatus.NON_COMPLIANT]
+        return [c for c in checks if c.status != ComplianceStatus.COMPLIANT]
     
     def generate_recommendations(self, violations: List[ComplianceCheck]) -> List[str]:
         """
@@ -185,7 +191,11 @@ class ComplianceChecker:
         recommendations = []
         
         for v in violations:
-            if 'width' in v.regulation_id:
+            if v.status == ComplianceStatus.REQUIRES_REVIEW:
+                recommendations.append(
+                    f"Expert review required for {v.element_id}: {v.message}"
+                )
+            elif 'width' in v.regulation_id:
                 recommendations.append(
                     f"Increase width of {v.element_id} from {v.measured_value:.2f}m "
                     f"to at least {v.required_value:.2f}m"

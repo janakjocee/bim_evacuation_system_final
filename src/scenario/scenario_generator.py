@@ -144,7 +144,12 @@ class ScenarioGenerator:
         
         # Determine compliance status
         violations = self.compliance_checker.get_violations(compliance_checks)
-        compliance_status = ComplianceStatus.COMPLIANT if not violations else ComplianceStatus.NON_COMPLIANT
+        if any(v.status == ComplianceStatus.INSUFFICIENT_DATA for v in violations):
+            compliance_status = ComplianceStatus.INSUFFICIENT_DATA
+        elif any(v.status == ComplianceStatus.REQUIRES_REVIEW for v in violations):
+            compliance_status = ComplianceStatus.REQUIRES_REVIEW
+        else:
+            compliance_status = ComplianceStatus.COMPLIANT if not violations else ComplianceStatus.NON_COMPLIANT
         
         # Generate recommendations
         recommendations = self.compliance_checker.generate_recommendations(violations)
@@ -180,6 +185,13 @@ class ScenarioGenerator:
             data_quality_notes.append("No regulatory violations were detected by the active rule set.")
         else:
             data_quality_notes.append(f"{len(violations)} regulatory violation(s) affected compliance scoring.")
+        graph_stats = self.graph_builder.get_graph_stats() if self.graph_builder else {}
+        if graph_stats:
+            data_quality_notes.append(
+                f"Graph confidence {graph_stats.get('graph_confidence_score', 0):.2f}; "
+                f"verified edges={graph_stats.get('verified_edges_count', 0)}, "
+                f"inferred edges={graph_stats.get('inferred_edges_count', 0)}."
+            )
         
         # Generate explanation
         explanation = self._generate_explanation(
