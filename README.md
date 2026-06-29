@@ -208,7 +208,7 @@ and errors.
 Generate the full practical compatibility matrix from local test IFCs:
 
 ```bash
-python scripts/batch_ifc_diagnostics.py data/test_ifc --output-dir outputs/ifc_diagnostics
+python scripts/batch_ifc_diagnostics.py --input data/test_ifc --output outputs/ifc_diagnostics
 ```
 
 This writes:
@@ -216,7 +216,14 @@ This writes:
 ```text
 outputs/ifc_diagnostics/compatibility_matrix.csv
 outputs/ifc_diagnostics/compatibility_matrix.json
+outputs/ifc_diagnostics/per_file/*.diagnostic.json
 ```
+
+`pass` means verified semantic spaces, doors, exits and route connectivity were
+available. `partial` means the file was processed and scenarios were generated,
+but some route, exit, width, area or geometry assumptions require expert review.
+`fail` means no usable IFC payload/topology was available, for example a Git LFS
+pointer file instead of the real model.
 
 The completed local multi-IFC audit is documented in:
 
@@ -235,6 +242,13 @@ The practical feature benchmark and researched future-work boundary is documente
 
 ```text
 docs/practical_benchmark.md
+```
+
+The final completion pass, test summary, browser smoke checks and viva/review
+talking points are documented in:
+
+```text
+docs/final_completion_report.md
 ```
 
 The latest practical IFC verification loop is documented in:

@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import streamlit as st
 import pandas as pd
+import copy
 import json
 import plotly.express as px
 import plotly.graph_objects as go
@@ -297,6 +298,7 @@ def init_session_state():
     """Initialize all session state variables."""
     defaults = {
         'pipeline_result': None,
+        'baseline_pipeline_result': None,
         'processing_done': False,
         'selected_scenario_index': 0,
         'expert_reviews': {},
@@ -376,13 +378,25 @@ def render_selected_scenario_details(result, scenario):
     building = result.building
     geometry_mode = result.source_mode == "geometry_derived"
     alternative_exits = max(0, len(building.exits) - 1)
+    route_reliability = getattr(scenario.evacuation_route, "route_reliability", "review")
+    verified_edges = getattr(scenario.evacuation_route, "verified_edges", 0)
+    inferred_edges = getattr(scenario.evacuation_route, "inferred_edges", 0)
+    edge_sources = getattr(scenario.evacuation_route, "edge_sources", []) or []
     st.markdown(
         f"""
         <div class="scenario-detail-card">
-            <h4>Selected Scenario: {scenario.name}</h4>
+            <h4>Selected Scenario Inspection Workspace</h4>
+            <strong>Scenario ID:</strong> {scenario.scenario_id}<br>
+            <strong>Name:</strong> {scenario.name}<br>
             <strong>Origin:</strong> {scenario.origin_space_name}<br>
             <strong>Destination:</strong> {scenario.evacuation_route.destination}<br>
             <strong>Route nodes:</strong> {' → '.join(scenario.evacuation_route.path)}<br>
+            <strong>Risk:</strong> {scenario.risk_level.value.upper()} ·
+            <strong>Compliance:</strong> {scenario.compliance_score * 100:.0f}% ·
+            <strong>Confidence:</strong> {scenario.confidence_score * 100:.0f}%<br>
+            <strong>Route reliability:</strong> {route_reliability}<br>
+            <strong>Edge evidence:</strong> verified={verified_edges}, inferred={inferred_edges}<br>
+            <strong>Edge sources:</strong> {', '.join(edge_sources) or 'No route-edge source metadata'}<br>
             <strong>Analysis basis:</strong> {'Geometry-derived structural screening' if geometry_mode else 'Semantic IFC space and door data'}
         </div>
         """,
@@ -435,6 +449,50 @@ def render_selected_scenario_details(result, scenario):
             "application/json",
             key=f"download_scenario_{scenario.scenario_id}",
         )
+
+
+def build_complete_export_payload(result):
+    """Create a complete, traceable export payload for reviewer handoff."""
+    building = result.building
+    return {
+        "export_version": "submission-evidence-v1",
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "academic_use_notice": (
+            "Rule-based decision-support screening only; not certified fire engineering "
+            "approval or legal compliance sign-off."
+        ),
+        "source_file": {
+            "name": result.source_file_name,
+            "sha256": result.source_file_sha256,
+            "ifc_schema": result.ifc_schema,
+            "source_mode": result.source_mode,
+        },
+        "building": {
+            "id": building.id if building else None,
+            "name": building.name if building else "Unknown",
+            "spaces": len(building.spaces) if building else 0,
+            "doors": len(building.doors) if building else 0,
+            "stairs": len(building.stairs) if building else 0,
+            "exits": len(building.exits) if building else 0,
+            "geometry_source_types": building.geometry_source_types if building else [],
+            "geometry_elements_available": building.geometry_elements_available if building else 0,
+            "geometry_elements_used": building.geometry_elements_used if building else 0,
+            "extraction_mode": building.extraction_mode if building else "unknown",
+        },
+        "ifc_readiness": result.readiness,
+        "graph_stats": result.graph_stats,
+        "regulations": {
+            "source": result.regulation_source,
+            "clause_count": result.regulation_clause_count,
+            "rule_count": result.regulation_rule_count,
+            "application": result.regulation_application,
+            "rag_enabled": result.rag_enabled,
+        },
+        "manual_corrections": st.session_state.get("manual_corrections"),
+        "scenarios": [scenario.to_dict() for scenario in result.scenarios],
+        "errors": result.errors,
+        "processing_time_seconds": result.processing_time,
+    }
 
 # ==============================================================================
 # HEADER
@@ -612,7 +670,10 @@ def process_files(ifc_file, regulation_file, max_scenarios, enable_rag):
         
         # Store result
         st.session_state.pipeline_result = result
+        st.session_state.baseline_pipeline_result = copy.deepcopy(result)
         st.session_state.processing_done = True
+        st.session_state.selected_scenario_id = result.scenarios[0].scenario_id if result.scenarios else None
+        st.session_state.manual_corrections = None
         
         if result.source_mode == "geometry_derived":
             st.success(
@@ -1030,7 +1091,7 @@ def render_bim_insights(result):
         )
 
         st.markdown("---")
-        st.markdown("### Manual Correction Layer")
+        st.markdown("### Manual IFC Review & Correction")
         st.caption(
             "Use this when IFC door widths, exits or connectivity are missing/incorrect. "
             "Corrections are marked as manual review and the graph/scenarios are regenerated."
@@ -1055,17 +1116,27 @@ def render_bim_insights(result):
                 height=300,
                 key=f"manual_corrections_{result.source_file_sha256}",
             )
-            col_apply, col_export = st.columns(2)
+            col_apply, col_reset, col_export = st.columns(3)
             with col_apply:
                 if st.button("Apply manual corrections and rerun", type="primary", width='stretch'):
                     corrections = {"doors": edited.to_dict(orient="records")}
                     st.session_state.manual_corrections = corrections
+                    correction_base = copy.deepcopy(
+                        st.session_state.get("baseline_pipeline_result") or result
+                    )
                     st.session_state.pipeline_result = apply_manual_corrections(
-                        result,
+                        correction_base,
                         corrections,
                         max_scenarios=max(10, len(result.scenarios)),
                     )
                     st.success("Manual corrections applied. Graph and scenarios regenerated.")
+                    st.rerun()
+            with col_reset:
+                if st.button("Reset manual corrections", width='stretch'):
+                    st.session_state.manual_corrections = None
+                    baseline_result = st.session_state.get("baseline_pipeline_result")
+                    st.session_state.pipeline_result = copy.deepcopy(baseline_result) if baseline_result else result
+                    st.success("Manual corrections cleared for this session.")
                     st.rerun()
             with col_export:
                 corrections_payload = {
@@ -1267,6 +1338,12 @@ def render_evacuation_scenarios(result):
     
     # Display scenarios
     st.markdown(f"### Showing {len(filtered)} of {len(scenarios)} Scenarios")
+    scenario_by_id = {scenario.scenario_id: scenario for scenario in scenarios}
+    selected_id = st.session_state.get("selected_scenario_id")
+    if selected_id and selected_id not in scenario_by_id:
+        st.session_state.selected_scenario_id = filtered[0].scenario_id if filtered else scenarios[0].scenario_id
+    elif not selected_id and filtered:
+        st.session_state.selected_scenario_id = filtered[0].scenario_id
     
     for i, scenario in enumerate(filtered):
         # Determine border color based on risk
@@ -1299,13 +1376,12 @@ def render_evacuation_scenarios(result):
                 )
             
             with col_h3:
-                selected = st.session_state.selected_scenario_id == scenario.scenario_id
                 if st.button(
-                    "Close Details" if selected else "View Details",
+                    "View Details",
                     key=f"details_btn_{scenario.scenario_id}",
-                    type="primary" if selected else "secondary",
+                    type="primary" if st.session_state.selected_scenario_id == scenario.scenario_id else "secondary",
                 ):
-                    st.session_state.selected_scenario_id = None if selected else scenario.scenario_id
+                    st.session_state.selected_scenario_id = scenario.scenario_id
             
             # Metrics
             col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
@@ -1331,11 +1407,19 @@ def render_evacuation_scenarios(result):
                     for r in scenario.recommendations:
                         st.info(f"💡 {r}")
 
-            if st.session_state.selected_scenario_id == scenario.scenario_id:
-                st.markdown("#### Scenario Inspection Workspace")
-                render_selected_scenario_details(result, scenario)
-            
             st.markdown("---")
+
+    selected_scenario = scenario_by_id.get(st.session_state.get("selected_scenario_id"))
+    if selected_scenario:
+        st.markdown("### Selected Scenario Inspection Workspace")
+        if selected_scenario.scenario_id not in {scenario.scenario_id for scenario in filtered}:
+            st.caption("The selected scenario is outside the current filter view; details remain attached to the original scenario ID.")
+        close_col, _ = st.columns([1, 5])
+        with close_col:
+            if st.button("Close Details", key="close_selected_scenario_details", width='stretch'):
+                st.session_state.selected_scenario_id = None
+                st.rerun()
+        render_selected_scenario_details(result, selected_scenario)
     
     # Route comparison chart
     st.markdown("### Route Comparison")
@@ -1843,11 +1927,11 @@ def render_export(result):
     
     with col_json:
         st.markdown("**JSON Export**")
-        st.markdown("<small>Machine-readable format for system integration</small>", unsafe_allow_html=True)
+        st.markdown("<small>Complete machine-readable evidence package</small>", unsafe_allow_html=True)
         
         if st.button("📄 Export JSON", key="export_json"):
             try:
-                export_data = create_export_summary(result.scenarios, result.building.name if result.building else 'Unknown')
+                export_data = build_complete_export_payload(result)
                 json_str = json.dumps(export_data, indent=2)
                 
                 st.download_button(

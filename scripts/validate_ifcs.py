@@ -140,14 +140,19 @@ def _scenario_summary(result) -> dict:
             "max_confidence": 0.0,
             "min_confidence": 0.0,
             "risk_levels": [],
+            "risk_counts": {"high": 0, "medium": 0, "low": 0},
             "compliance_statuses": [],
             "route_reliabilities": [],
         }
     scenario_dicts = [scenario.to_dict() for scenario in result.scenarios]
+    risk_counts = {"high": 0, "medium": 0, "low": 0}
+    for scenario in result.scenarios:
+        risk_counts[scenario.risk_level.value] = risk_counts.get(scenario.risk_level.value, 0) + 1
     return {
         "max_confidence": round(max(scenario.confidence_score for scenario in result.scenarios), 2),
         "min_confidence": round(min(scenario.confidence_score for scenario in result.scenarios), 2),
         "risk_levels": sorted({item.get("risk_level", "") for item in scenario_dicts if item.get("risk_level")}),
+        "risk_counts": risk_counts,
         "compliance_statuses": sorted({item.get("compliance_status", "") for item in scenario_dicts if item.get("compliance_status")}),
         "route_reliabilities": sorted({
             item.get("evacuation_route", {}).get("route_reliability", "")
@@ -190,6 +195,9 @@ def audit_file(path: Path, max_scenarios: int, regulation_text: str | None = Non
         "raw_schema": raw_counts.get("raw_schema", "UNKNOWN"),
         "success": result.success,
         "mode": result.source_mode,
+        "geometry_source_types": building.geometry_source_types if building else [],
+        "geometry_elements_available": building.geometry_elements_available if building else 0,
+        "geometry_elements_used": building.geometry_elements_used if building else 0,
         "compatibility_status": _status(result, graph),
         "failure_reason": _failure_reason(result, building, graph),
         "building": building.name if building else None,
@@ -219,6 +227,9 @@ def audit_file(path: Path, max_scenarios: int, regulation_text: str | None = Non
         "max_confidence": scenario_summary["max_confidence"],
         "min_confidence": scenario_summary["min_confidence"],
         "risk_levels": scenario_summary["risk_levels"],
+        "high_risk_count": scenario_summary["risk_counts"].get("high", 0),
+        "medium_risk_count": scenario_summary["risk_counts"].get("medium", 0),
+        "low_risk_count": scenario_summary["risk_counts"].get("low", 0),
         "compliance_statuses": scenario_summary["compliance_statuses"],
         "route_reliabilities": scenario_summary["route_reliabilities"],
         "reliability": _reliability(result, graph),

@@ -13,6 +13,7 @@ import plotly.express as px
 import streamlit as st
 
 from src.fire.fire_scenario_engine import FireScenarioEngine
+from src.scenario.ifc_dataset_exporter import building_to_worst_case_dataset
 from src.ui.visualization_3d import create_dataset_3d_figure
 from src.scenario.worst_case_engine import (
     DEFAULT_DATASET_PATH,
@@ -30,11 +31,15 @@ st.warning(
 )
 
 demo_dataset_text = DEFAULT_DATASET_PATH.read_text(encoding="utf-8")
+latest_pipeline_result = st.session_state.get("pipeline_result")
+dataset_options = ["Bundled demonstration dataset", "Upload custom JSON dataset"]
+if latest_pipeline_result and getattr(latest_pipeline_result, "building", None):
+    dataset_options.insert(0, "Latest uploaded IFC-derived dataset")
 with st.sidebar:
     st.header("Dataset Source")
     dataset_source = st.radio(
         "Choose simulation dataset",
-        ["Bundled demonstration dataset", "Upload custom JSON dataset"],
+        dataset_options,
         help="This choice controls only this Fire Scenario Testing page.",
     )
     st.download_button(
@@ -49,7 +54,17 @@ with st.sidebar:
         uploaded_dataset = st.file_uploader("Upload scenario dataset", type=["json"])
 
 try:
-    if dataset_source == "Upload custom JSON dataset":
+    if dataset_source == "Latest uploaded IFC-derived dataset":
+        dataset = building_to_worst_case_dataset(
+            latest_pipeline_result.building,
+            graph_builder=None,
+            features=getattr(latest_pipeline_result, "features", None),
+            source_file_name=getattr(latest_pipeline_result, "source_file_name", ""),
+            ifc_schema=getattr(latest_pipeline_result, "ifc_schema", "UNKNOWN"),
+        )
+        validate_scenario_dataset(dataset)
+        dataset_label = f"IFC-DERIVED DATASET: {getattr(latest_pipeline_result, 'source_file_name', 'current upload')}"
+    elif dataset_source == "Upload custom JSON dataset":
         if uploaded_dataset is None:
             st.info("Upload a JSON scenario dataset to enable Fire Scenario Testing.")
             st.stop()
@@ -94,11 +109,14 @@ with st.sidebar:
 scenario = scenario_by_label[selected_label]
 summary = dataset_summary(dataset)
 st.warning(
-    f"Active source: **{dataset_label}**. This page does not silently use the IFC uploaded "
-    "on the main page."
+    f"Active source: **{dataset_label}**. IFC-derived datasets are converted from the "
+    "main analysis graph and remain marked for expert review when inference was needed."
 )
 with st.expander("Active dataset provenance and structure", expanded=True):
     st.json(summary)
+    if dataset.get("provenance"):
+        st.markdown("#### IFC provenance")
+        st.json(dataset["provenance"])
     st.caption("Review or download the dataset before using its results in an assessment.")
 with st.expander("Explore 3D dataset overview", expanded=True):
     st.plotly_chart(create_dataset_3d_figure(engine))
