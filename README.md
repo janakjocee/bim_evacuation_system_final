@@ -47,6 +47,9 @@ This is an academic decision-support tool. It does **not** perform CFD, certifie
 - Regulation-oriented NLP/RAG workflow using spaCy, FAISS and SentenceTransformers.
 - Evacuation scenario generation with distance, time, confidence, compliance and risk.
 - Alternative route summaries and route-reliability labels for each generated scenario.
+- Practical compliance screening for travel distance, final/route door width,
+  corridor width, stair width/riser/tread data where available, missing data,
+  inferred topology and route redundancy.
 - Explainability panel for traceable deterministic decision reasoning.
 - Human-in-the-loop expert review workflow.
 - Fire-origin worst-case scenario testing.
@@ -69,7 +72,8 @@ generated evacuation scenario exports:
 - the compliance checks that passed or failed, including whether each threshold
   came from an uploaded structured rule, RAG evidence or built-in default;
 - the deterministic risk score and weighted factor breakdown, including IFC
-  graph confidence and data-quality caps;
+  graph confidence, narrow-door penalties, route-redundancy penalties and
+  data-quality caps;
 - confidence score and data-quality notes;
 - a human-readable explanation and expert-review recommendations.
 

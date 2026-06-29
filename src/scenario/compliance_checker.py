@@ -7,7 +7,8 @@ from dataclasses import dataclass, field
 from ..utils.logger import get_logger
 from ..utils.config_loader import get_config
 from ..utils.helpers import ComplianceStatus
-from ..bim_processing.ifc_parser import BuildingData, SpaceData, DoorData
+from ..bim_processing.ifc_parser import BuildingData, SpaceData, DoorData, StairData
+from ..bim_processing.spatial_graph import Route
 from ..nlp.regulation_parser import RegulationClause, RegulationRule
 
 logger = get_logger("compliance_checker")
@@ -305,6 +306,171 @@ class ComplianceChecker:
             evidence=evidence,
         ))
         
+        return checks
+
+    def check_route_redundancy(self, origin: SpaceData, route_count: int, exit_count: int) -> List[ComplianceCheck]:
+        """Check whether a space has route/exit redundancy or needs review."""
+        checks = []
+        status = ComplianceStatus.COMPLIANT if route_count >= 2 else ComplianceStatus.REQUIRES_REVIEW
+        checks.append(ComplianceCheck(
+            element_id=origin.id,
+            element_type="route",
+            regulation_id="alternative_escape_route",
+            regulation_text="Alternative escape route availability should be confirmed for practical evacuation review.",
+            status=status,
+            measured_value=route_count,
+            required_value=2,
+            unit="routes",
+            message=(
+                f"{route_count} route(s) to exits found."
+                if status == ComplianceStatus.COMPLIANT
+                else "Only one route to an exit was found; alternative escape availability requires expert review."
+            ),
+            evidence_source="ifc_graph_validation",
+            evidence=[{
+                "source": "ifc_graph_validation",
+                "text": f"{route_count} route(s) and {exit_count} exit node(s) are available in the extracted graph.",
+                "score": 1.0 if status == ComplianceStatus.COMPLIANT else 0.5,
+            }],
+        ))
+
+        if exit_count <= 1:
+            checks.append(ComplianceCheck(
+                element_id=origin.id,
+                element_type="route",
+                regulation_id="only_one_exit_available",
+                regulation_text="Evacuation strategy should not rely on a single available exit without review.",
+                status=ComplianceStatus.REQUIRES_REVIEW,
+                measured_value=exit_count,
+                required_value=2,
+                unit="exits",
+                message="Only one exit node was detected; exit availability requires expert review.",
+                evidence_source="ifc_graph_validation",
+                evidence=[{
+                    "source": "ifc_graph_validation",
+                    "text": f"{exit_count} exit node(s) were detected from the IFC-derived graph.",
+                    "score": 0.5,
+                }],
+            ))
+        return checks
+
+    def check_route_doors(self, route: Route, doors: Dict[str, DoorData]) -> List[ComplianceCheck]:
+        """Check door widths along the selected route where route nodes are doors."""
+        checks = []
+        min_width = self.regulations.get("min_door_width", 0.75)
+        for node_id in route.path:
+            door = doors.get(node_id)
+            if not door or door.is_exit:
+                continue
+            status = ComplianceStatus.REQUIRES_REVIEW if door.width_confidence < 1.0 or door.assumptions.get("width") else (
+                ComplianceStatus.COMPLIANT if door.width >= min_width else ComplianceStatus.NON_COMPLIANT
+            )
+            evidence_source, evidence = self._evidence_for(
+                "min_door_width",
+                f"minimum door clear width {min_width} metres",
+            )
+            checks.append(ComplianceCheck(
+                element_id=door.id,
+                element_type="door",
+                regulation_id="route_door_width",
+                regulation_text=f"Route door width should be at least {min_width}m",
+                status=status,
+                measured_value=door.width,
+                required_value=min_width,
+                unit="m",
+                message=(
+                    f"Route door {door.name} is {door.width:.2f}m wide; required minimum is {min_width:.2f}m."
+                    + (" Width is assumed or low-confidence and requires expert confirmation." if status == ComplianceStatus.REQUIRES_REVIEW else "")
+                ),
+                evidence_source=evidence_source,
+                evidence=evidence,
+            ))
+        return checks
+
+    def check_space_data_quality(self, space: SpaceData) -> List[ComplianceCheck]:
+        """Flag low-confidence space measurements that affect occupancy/risk."""
+        checks = []
+        if space.area_confidence < 1.0 or space.assumptions.get("area"):
+            checks.append(ComplianceCheck(
+                element_id=space.id,
+                element_type="space",
+                regulation_id="space_area_confidence",
+                regulation_text="Space area should come from reliable IFC quantities or geometry for occupancy screening.",
+                status=ComplianceStatus.REQUIRES_REVIEW,
+                measured_value=space.area_confidence,
+                required_value=1.0,
+                unit="confidence",
+                message="Space area is estimated or low-confidence; occupancy and risk outputs require review.",
+                evidence_source="ifc_data_quality",
+                evidence=[{
+                    "source": "ifc_data_quality",
+                    "text": space.assumptions.get("area", "Space area confidence is below 1.0."),
+                    "score": space.area_confidence,
+                }],
+            ))
+        return checks
+
+    def check_corridor(self, space: SpaceData) -> List[ComplianceCheck]:
+        """Check corridor width when a corridor-like space has bounding-box geometry."""
+        if space.space_type != "corridor":
+            return []
+
+        rule_key = "min_corridor_width"
+        min_width = self.regulations.get(rule_key, 1.2)
+        if not space.bounding_box:
+            status = ComplianceStatus.REQUIRES_REVIEW
+            measured_width = 0.0
+            message = "Corridor width could not be measured from IFC geometry and requires review."
+        else:
+            minimum, maximum = space.bounding_box
+            measured_width = min(abs(maximum.x - minimum.x), abs(maximum.y - minimum.y))
+            status = ComplianceStatus.COMPLIANT if measured_width >= min_width else ComplianceStatus.NON_COMPLIANT
+            message = f"Corridor width is {measured_width:.2f}m (required: {min_width:.2f}m)."
+
+        evidence_source, evidence = self._evidence_for(rule_key, f"minimum corridor width {min_width} metres")
+        return [ComplianceCheck(
+            element_id=space.id,
+            element_type="corridor",
+            regulation_id=rule_key,
+            regulation_text=f"Minimum corridor width: {min_width}m",
+            status=status,
+            measured_value=measured_width,
+            required_value=min_width,
+            unit="m",
+            message=message,
+            evidence_source=evidence_source,
+            evidence=evidence,
+        )]
+
+    def check_stair(self, stair: StairData) -> List[ComplianceCheck]:
+        """Check stair dimensions when stair elements exist."""
+        checks = []
+        rules = [
+            ("min_stair_width", "width", stair.width, self.regulations.get("min_stair_width", 1.0), ">="),
+            ("max_riser_height", "riser height", stair.riser_height, self.regulations.get("max_riser_height", 0.19), "<="),
+            ("min_tread_length", "tread length", stair.tread_length, self.regulations.get("min_tread_length", 0.25), ">="),
+        ]
+        for rule_key, label, measured, required, operator in rules:
+            if stair.assumptions.get(label.split()[0]) or (label == "width" and stair.assumptions.get("width")):
+                status = ComplianceStatus.REQUIRES_REVIEW
+            elif operator == ">=":
+                status = ComplianceStatus.COMPLIANT if measured >= required else ComplianceStatus.NON_COMPLIANT
+            else:
+                status = ComplianceStatus.COMPLIANT if measured <= required else ComplianceStatus.NON_COMPLIANT
+            evidence_source, evidence = self._evidence_for(rule_key, f"{label} stair requirement {required}")
+            checks.append(ComplianceCheck(
+                element_id=stair.id,
+                element_type="stair",
+                regulation_id=rule_key,
+                regulation_text=f"Stair {label} requirement: {operator} {required}m",
+                status=status,
+                measured_value=measured,
+                required_value=required,
+                unit="m",
+                message=f"Stair {label} is {measured:.2f}m; requirement is {operator} {required:.2f}m.",
+                evidence_source=evidence_source,
+                evidence=evidence,
+            ))
         return checks
     
     def calculate_compliance_score(self, checks: List[ComplianceCheck]) -> float:

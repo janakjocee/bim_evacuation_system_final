@@ -27,6 +27,13 @@ codex/deep-ifc-regulation-audit
 - Scenario generation attaches route edge quality, route confidence, route
   reliability, alternative-route summaries, graph confidence, data-quality notes
   and compliance evidence to exported JSON.
+- Compliance screening now includes practical review checks for route redundancy,
+  route door width, corridor width when corridor geometry exists, stair
+  width/riser/tread data when stair elements exist, and missing/assumed area
+  measurements.
+- Risk scoring includes actual exit-capacity estimates, graph confidence,
+  inferred-route penalties, assumed-measurement penalties, narrow-door
+  penalties, route-redundancy penalties and missing-area penalties.
 - Uploaded regulation text is parsed into clauses and structured numeric rules.
 - Compliance checks expose whether each threshold came from uploaded rules,
   keyword/RAG evidence or default config.
@@ -109,7 +116,7 @@ exported JSON under `regulation_application`.
 
 ```text
 python3 -m pytest -q
-63 passed, 3 skipped
+66 passed, 3 skipped
 ```
 
 The skipped tests are optional environment-dependent tests, such as PDF fixture
