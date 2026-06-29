@@ -295,6 +295,19 @@ class IFCParser:
     def _extract_space_area(self, ifc_space) -> Tuple[float, str, float, List[str]]:
         """Extract space area with source/confidence metadata."""
         try:
+            properties = self._get_properties(ifc_space)
+            area_from_properties = self._first_numeric_property(properties, [
+                "NetFloorArea",
+                "GrossFloorArea",
+                "NetPlannedArea",
+                "GrossPlannedArea",
+                "NetArea",
+                "GrossArea",
+                "Area",
+            ])
+            if area_from_properties:
+                return float(area_from_properties), "IFC space property area", 1.0, []
+
             for rel in getattr(ifc_space, 'IsDefinedBy', []):
                 if hasattr(rel, 'RelatingPropertyDefinition'):
                     prop_set = rel.RelatingPropertyDefinition
@@ -453,7 +466,15 @@ class IFCParser:
     
     def _get_space_type(self, ifc_space) -> str:
         """Determine space type from name."""
-        name = (ifc_space.Name or "").lower()
+        name = " ".join(
+            str(value or "")
+            for value in (
+                getattr(ifc_space, "Name", ""),
+                getattr(ifc_space, "LongName", ""),
+                getattr(ifc_space, "Description", ""),
+                getattr(ifc_space, "PredefinedType", ""),
+            )
+        ).lower()
         
         if "office" in name:
             return "office"
@@ -463,6 +484,10 @@ class IFCParser:
             return "stair"
         elif "lobby" in name:
             return "lobby"
+        elif "bedroom" in name or "dorm" in name or "residential" in name:
+            return "residential"
+        elif "storage" in name or "store" in name or "plant" in name:
+            return "industrial"
         elif "toilet" in name or "wc" in name:
             return "toilet"
         

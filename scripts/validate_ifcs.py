@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import csv
 import json
 import sys
 from pathlib import Path
@@ -59,6 +60,7 @@ def _ifc_entity_counts(path: Path) -> dict:
         "raw_ifcspace_count": 0,
         "raw_ifcdoor_count": 0,
         "raw_ifcstair_count": 0,
+        "raw_ifcbuildingstorey_count": 0,
         "raw_ifcslab_count": 0,
         "raw_ifcwall_count": 0,
         "raw_ifcbuildingelementproxy_count": 0,
@@ -75,6 +77,7 @@ def _ifc_entity_counts(path: Path) -> dict:
             ("IfcSpace", "raw_ifcspace_count"),
             ("IfcDoor", "raw_ifcdoor_count"),
             ("IfcStair", "raw_ifcstair_count"),
+            ("IfcBuildingStorey", "raw_ifcbuildingstorey_count"),
             ("IfcSlab", "raw_ifcslab_count"),
             ("IfcWall", "raw_ifcwall_count"),
             ("IfcBuildingElementProxy", "raw_ifcbuildingelementproxy_count"),
@@ -97,25 +100,112 @@ def _reliability(result, graph: dict) -> str:
     return "partial_requires_review"
 
 
+def _status(result, graph: dict) -> str:
+    """Classify practical compatibility as pass, partial, or fail."""
+    if not result.success:
+        return "fail"
+    if _reliability(result, graph) == "reliable":
+        return "pass"
+    return "partial"
+
+
+def _failure_reason(result, building, graph: dict) -> str:
+    """Return the primary practical reason for fail/partial status."""
+    if not result.success:
+        return "; ".join(result.errors) or "Pipeline did not generate scenarios."
+    reasons = []
+    if result.source_mode == "geometry_derived":
+        reasons.append("No semantic IfcSpace/IfcDoor topology; geometry-derived screening only.")
+    elif result.source_mode == "semantic_spaces_inferred_topology":
+        reasons.append("IfcSpace data exists, but route topology/exits are inferred.")
+    if building:
+        if not building.exits:
+            reasons.append("No exits detected.")
+        assumed_doors = sum(1 for door in building.doors.values() if door.assumptions.get("width"))
+        assumed_areas = sum(1 for space in building.spaces.values() if space.assumptions.get("area"))
+        if assumed_doors:
+            reasons.append(f"{assumed_doors} door width(s) assumed.")
+        if assumed_areas:
+            reasons.append(f"{assumed_areas} space area(s) assumed.")
+    if graph.get("spaces_without_exit_route"):
+        reasons.append(f"{len(graph['spaces_without_exit_route'])} space(s) lack an exit route.")
+    if graph.get("disconnected_spaces"):
+        reasons.append(f"{len(graph['disconnected_spaces'])} disconnected space(s).")
+    return "; ".join(reasons) or "Usable with review warnings."
+
+
+def _scenario_summary(result) -> dict:
+    if not result.scenarios:
+        return {
+            "max_confidence": 0.0,
+            "min_confidence": 0.0,
+            "risk_levels": [],
+            "compliance_statuses": [],
+            "route_reliabilities": [],
+        }
+    scenario_dicts = [scenario.to_dict() for scenario in result.scenarios]
+    return {
+        "max_confidence": round(max(scenario.confidence_score for scenario in result.scenarios), 2),
+        "min_confidence": round(min(scenario.confidence_score for scenario in result.scenarios), 2),
+        "risk_levels": sorted({item.get("risk_level", "") for item in scenario_dicts if item.get("risk_level")}),
+        "compliance_statuses": sorted({item.get("compliance_status", "") for item in scenario_dicts if item.get("compliance_status")}),
+        "route_reliabilities": sorted({
+            item.get("evacuation_route", {}).get("route_reliability", "")
+            for item in scenario_dicts
+            if item.get("evacuation_route", {}).get("route_reliability")
+        }),
+    }
+
+
 def audit_file(path: Path, max_scenarios: int, regulation_text: str | None = None) -> dict:
     pipeline = EvacuationPipeline()
     raw_counts = _ifc_entity_counts(path)
     result = pipeline.run(str(path), regulation_text=regulation_text, max_scenarios=max_scenarios)
     graph = pipeline.graph_builder.get_graph_stats() if pipeline.graph_builder else {}
     building = result.building
+    scenario_summary = _scenario_summary(result)
+    door_widths_found = 0
+    door_widths_assumed = 0
+    space_areas_found = 0
+    space_areas_assumed = 0
+    inferred_connections = 0
+    inferred_exits = 0
+    doors_without_connected_spaces = []
+    if building:
+        door_widths_found = sum(1 for door in building.doors.values() if not door.assumptions.get("width"))
+        door_widths_assumed = sum(1 for door in building.doors.values() if door.assumptions.get("width"))
+        space_areas_found = sum(1 for space in building.spaces.values() if not space.assumptions.get("area"))
+        space_areas_assumed = sum(1 for space in building.spaces.values() if space.assumptions.get("area"))
+        inferred_connections = sum(1 for door in building.doors.values() if str(door.connection_source).startswith("inferred"))
+        inferred_exits = sum(1 for door in building.exits.values() if door.assumptions.get("exit_detection"))
+        doors_without_connected_spaces = sorted(
+            door_id for door_id, door in building.doors.items() if not door.connected_spaces
+        )
     row = {
         "file": path.name,
+        "path": str(path),
         "file_size_bytes": path.stat().st_size,
         "is_git_lfs_pointer": _looks_like_git_lfs_pointer(path),
         "schema": result.ifc_schema,
+        "raw_schema": raw_counts.get("raw_schema", "UNKNOWN"),
         "success": result.success,
         "mode": result.source_mode,
+        "compatibility_status": _status(result, graph),
+        "failure_reason": _failure_reason(result, building, graph),
         "building": building.name if building else None,
         "screened_elements_or_spaces": len(building.spaces) if building else 0,
         "extracted_spaces": len(building.spaces) if building else 0,
         "extracted_doors": len(building.doors) if building else 0,
+        "extracted_stairs": len(building.stairs) if building else 0,
         "detected_exits": len(building.exits) if building else 0,
+        "door_widths_found": door_widths_found,
+        "door_widths_assumed": door_widths_assumed,
+        "space_areas_found": space_areas_found,
+        "space_areas_assumed": space_areas_assumed,
         "door_space_connections": sum(len(door.connected_spaces) for door in building.doors.values()) if building else 0,
+        "inferred_connections": inferred_connections,
+        "inferred_exits": inferred_exits,
+        "doors_without_connected_spaces": doors_without_connected_spaces,
         "candidate_geometry_elements": building.geometry_elements_available if building else 0,
         "scenarios": len(result.scenarios),
         "graph_node_count": graph.get("node_count", 0),
@@ -126,10 +216,16 @@ def audit_file(path: Path, max_scenarios: int, regulation_text: str | None = Non
         "disconnected_spaces": graph.get("disconnected_spaces", []),
         "spaces_without_exit_route": graph.get("spaces_without_exit_route", []),
         "graph_confidence": graph.get("graph_confidence_score", 0),
-        "max_confidence": round(
-            max((scenario.confidence_score for scenario in result.scenarios), default=0.0), 2
-        ),
+        "max_confidence": scenario_summary["max_confidence"],
+        "min_confidence": scenario_summary["min_confidence"],
+        "risk_levels": scenario_summary["risk_levels"],
+        "compliance_statuses": scenario_summary["compliance_statuses"],
+        "route_reliabilities": scenario_summary["route_reliabilities"],
         "reliability": _reliability(result, graph),
+        "readiness_score": result.readiness.get("model_readiness_score", 0),
+        "readiness_label": result.readiness.get("readiness_label", ""),
+        "readiness_warnings": result.readiness.get("warnings", []),
+        "readiness_critical_issues": result.readiness.get("critical_issues", []),
         "regulation_clause_count": result.regulation_clause_count,
         "regulation_rule_count": result.regulation_rule_count,
         "applied_uploaded_rules": result.regulation_application.get("uploaded_rule_count", 0),
@@ -138,6 +234,78 @@ def audit_file(path: Path, max_scenarios: int, regulation_text: str | None = Non
     }
     row.update(raw_counts)
     return row
+
+
+def write_csv(rows: list[dict], path: Path) -> None:
+    """Write diagnostics rows to a CSV with stable columns."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = [
+        "file",
+        "path",
+        "compatibility_status",
+        "failure_reason",
+        "schema",
+        "raw_schema",
+        "ifcopenshell_open",
+        "file_size_bytes",
+        "is_git_lfs_pointer",
+        "raw_ifcspace_count",
+        "raw_ifcdoor_count",
+        "raw_ifcstair_count",
+        "raw_ifcwall_count",
+        "raw_ifcslab_count",
+        "raw_ifcbuildingelementproxy_count",
+        "raw_ifcopeningelement_count",
+        "raw_ifcrelspaceboundary_count",
+        "raw_ifcbuildingstorey_count",
+        "extracted_spaces",
+        "extracted_doors",
+        "extracted_stairs",
+        "door_widths_found",
+        "door_widths_assumed",
+        "space_areas_found",
+        "space_areas_assumed",
+        "detected_exits",
+        "door_space_connections",
+        "inferred_connections",
+        "inferred_exits",
+        "graph_node_count",
+        "graph_edge_count",
+        "graph_connected",
+        "verified_edges",
+        "inferred_edges",
+        "disconnected_spaces",
+        "spaces_without_exit_route",
+        "doors_without_connected_spaces",
+        "scenarios",
+        "max_confidence",
+        "min_confidence",
+        "risk_levels",
+        "compliance_statuses",
+        "route_reliabilities",
+        "graph_confidence",
+        "readiness_score",
+        "readiness_label",
+        "reliability",
+        "mode",
+        "candidate_geometry_elements",
+        "regulation_clause_count",
+        "regulation_rule_count",
+        "applied_uploaded_rules",
+        "unsupported_rules",
+        "errors",
+        "readiness_warnings",
+        "readiness_critical_issues",
+    ]
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        for row in rows:
+            serialised = {
+                key: json.dumps(value) if isinstance(value, (list, dict)) else value
+                for key, value in row.items()
+            }
+            writer.writerow(serialised)
 
 
 def main() -> int:

@@ -205,6 +205,19 @@ The audit reports detected schema, analysis mode, screened elements/spaces,
 scenario count, graph connectivity, confidence ceiling, Git LFS pointer files
 and errors.
 
+Generate the full practical compatibility matrix from local test IFCs:
+
+```bash
+python scripts/batch_ifc_diagnostics.py data/test_ifc --output-dir outputs/ifc_diagnostics
+```
+
+This writes:
+
+```text
+outputs/ifc_diagnostics/compatibility_matrix.csv
+outputs/ifc_diagnostics/compatibility_matrix.json
+```
+
 The completed local multi-IFC audit is documented in:
 
 ```text
@@ -222,6 +235,12 @@ The practical feature benchmark and researched future-work boundary is documente
 
 ```text
 docs/practical_benchmark.md
+```
+
+The latest practical IFC verification loop is documented in:
+
+```text
+docs/practical_ifc_verification.md
 ```
 
 Then use the sidebar pages:
