@@ -26,7 +26,7 @@ from src.scenario.scenario_generator import ScenarioGenerator, classify_route_re
 from src.scenario.risk_classifier import RiskClassifier, RiskFactors
 from src.scenario.ifc_dataset_exporter import building_to_worst_case_dataset
 from src.scenario.worst_case_engine import validate_scenario_dataset
-from src.pipeline.evacuation_pipeline import PipelineResult
+from src.pipeline.evacuation_pipeline import EvacuationPipeline, PipelineResult
 from src.pipeline.manual_corrections import apply_manual_corrections
 
 
@@ -552,6 +552,40 @@ def test_ifc_derived_worst_case_dataset_validates():
     assert dataset["dataset_kind"] == "ifc_derived_requires_review"
     assert any(space["type"] == "exit" for space in dataset["spaces"])
     assert dataset["connections"]
+
+
+def test_pipeline_exports_json_and_csv_for_generated_scenarios(tmp_path):
+    building = BuildingData(id="B1", name="Export Building")
+    building.spaces["S1"] = SpaceData(id="S1", name="Room", area=20)
+    exit_door = DoorData(
+        id="E1",
+        name="Exit",
+        width=1.2,
+        height=2.1,
+        location=Point3D(),
+        is_exit=True,
+        connected_spaces=["S1"],
+    )
+    building.doors = {"E1": exit_door}
+    building.exits = {"E1": exit_door}
+    graph = SpatialGraphBuilder(building)
+    assert graph.build()
+    scenarios = ScenarioGenerator(building, graph).generate(max_scenarios=1)
+    result = PipelineResult(
+        success=True,
+        building=building,
+        scenarios=scenarios,
+        source_file_name="synthetic.ifc",
+        ifc_schema="SYNTHETIC",
+        graph_stats=graph.get_graph_stats(),
+    )
+
+    exported = EvacuationPipeline().export_results(result, str(tmp_path), formats=["json", "csv"])
+
+    assert Path(exported["json"]).exists()
+    assert Path(exported["csv"]).exists()
+    assert "synthetic.ifc" in Path(exported["json"]).read_text()
+    assert scenarios[0].scenario_id in Path(exported["csv"]).read_text()
 
 
 def test_ifc_dataset_exporter_adds_review_occupancy_for_geometry_spaces():

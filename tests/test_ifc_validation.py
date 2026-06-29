@@ -71,6 +71,33 @@ def test_parser_infers_topology_for_spaces_without_doors():
     assert all(door.connected_spaces for door in building.doors.values())
 
 
+def test_parser_reads_space_planned_area_properties():
+    parser = IFCParser()
+
+    class Space:
+        IsDefinedBy = []
+
+    parser._get_properties = lambda element: {"NetPlannedArea": 18.5}
+    area, source, confidence, flags = parser._extract_space_area(Space())
+
+    assert area == 18.5
+    assert source == "IFC space property area"
+    assert confidence == 1.0
+    assert flags == []
+
+
+def test_parser_uses_long_name_for_space_type():
+    parser = IFCParser()
+
+    class Space:
+        Name = "207"
+        LongName = "Bedroom"
+        Description = ""
+        PredefinedType = "INTERNAL"
+
+    assert parser._get_space_type(Space()) == "residential"
+
+
 def test_validate_ifcs_json_stdout_is_parseable_on_failure(tmp_path):
     pointer = tmp_path / "pointer.ifc"
     pointer.write_text(
@@ -90,3 +117,35 @@ def test_validate_ifcs_json_stdout_is_parseable_on_failure(tmp_path):
     rows = json.loads(result.stdout)
     assert rows[0]["is_git_lfs_pointer"] is True
     assert rows[0]["success"] is False
+
+
+def test_batch_ifc_diagnostics_writes_csv_and_json(tmp_path):
+    pointer = tmp_path / "pointer.ifc"
+    pointer.write_text(
+        "version https://git-lfs.github.com/spec/v1\n"
+        "oid sha256:0123456789abcdef\n"
+        "size 12345\n"
+    )
+    output_dir = tmp_path / "diagnostics"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/batch_ifc_diagnostics.py",
+            str(pointer),
+            "--output-dir",
+            str(output_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    summary = json.loads(result.stdout)
+    assert summary["status_counts"]["fail"] == 1
+    rows = json.loads((output_dir / "compatibility_matrix.json").read_text())
+    assert rows[0]["compatibility_status"] == "fail"
+    csv_text = (output_dir / "compatibility_matrix.csv").read_text()
+    assert "compatibility_status" in csv_text
+    assert "Git LFS pointer" in csv_text
