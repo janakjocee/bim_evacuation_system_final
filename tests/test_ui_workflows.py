@@ -59,6 +59,9 @@ def test_bim_insights_has_manual_corrections_and_fire_dataset_bridge():
     assert "Manual IFC Review & Correction" in source
     assert "Apply manual corrections and rerun" in source
     assert "Reset manual corrections" in source
+    assert "'baseline_pipeline_result': None" in source
+    assert "st.session_state.baseline_pipeline_result = copy.deepcopy(result)" in source
+    assert "correction_base = copy.deepcopy" in source
     assert "Download manual corrections JSON" in source
     assert "Fire/Worst-Case Dataset Bridge" in source
     assert "Export IFC-derived graph as fire scenario dataset" in source

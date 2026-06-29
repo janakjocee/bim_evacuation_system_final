@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import streamlit as st
 import pandas as pd
+import copy
 import json
 import plotly.express as px
 import plotly.graph_objects as go
@@ -297,6 +298,7 @@ def init_session_state():
     """Initialize all session state variables."""
     defaults = {
         'pipeline_result': None,
+        'baseline_pipeline_result': None,
         'processing_done': False,
         'selected_scenario_index': 0,
         'expert_reviews': {},
@@ -668,7 +670,10 @@ def process_files(ifc_file, regulation_file, max_scenarios, enable_rag):
         
         # Store result
         st.session_state.pipeline_result = result
+        st.session_state.baseline_pipeline_result = copy.deepcopy(result)
         st.session_state.processing_done = True
+        st.session_state.selected_scenario_id = result.scenarios[0].scenario_id if result.scenarios else None
+        st.session_state.manual_corrections = None
         
         if result.source_mode == "geometry_derived":
             st.success(
@@ -1116,8 +1121,11 @@ def render_bim_insights(result):
                 if st.button("Apply manual corrections and rerun", type="primary", width='stretch'):
                     corrections = {"doors": edited.to_dict(orient="records")}
                     st.session_state.manual_corrections = corrections
+                    correction_base = copy.deepcopy(
+                        st.session_state.get("baseline_pipeline_result") or result
+                    )
                     st.session_state.pipeline_result = apply_manual_corrections(
-                        result,
+                        correction_base,
                         corrections,
                         max_scenarios=max(10, len(result.scenarios)),
                     )
@@ -1126,7 +1134,8 @@ def render_bim_insights(result):
             with col_reset:
                 if st.button("Reset manual corrections", width='stretch'):
                     st.session_state.manual_corrections = None
-                    st.session_state.pipeline_result = result
+                    baseline_result = st.session_state.get("baseline_pipeline_result")
+                    st.session_state.pipeline_result = copy.deepcopy(baseline_result) if baseline_result else result
                     st.success("Manual corrections cleared for this session.")
                     st.rerun()
             with col_export:
