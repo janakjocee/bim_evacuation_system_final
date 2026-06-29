@@ -244,6 +244,13 @@ The practical feature benchmark and researched future-work boundary is documente
 docs/practical_benchmark.md
 ```
 
+The final completion pass, test summary, browser smoke checks and viva/review
+talking points are documented in:
+
+```text
+docs/final_completion_report.md
+```
+
 The latest practical IFC verification loop is documented in:
 
 ```text
