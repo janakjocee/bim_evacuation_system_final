@@ -5,7 +5,7 @@ Verification date: 29 June 2026
 Branch:
 
 ```text
-codex/practical-ifc-verification
+codex/final-completion-pass
 ```
 
 ## Commands Used
@@ -20,10 +20,10 @@ The batch diagnostic command was:
 
 ```bash
 python3 scripts/batch_ifc_diagnostics.py \
-  data/test_ifc \
+  --input data/test_ifc \
   --regulations /Users/janakjocee/Downloads/Practical_ADB_Volume2_Regulation_Input_for_BIM_Evacuation.txt \
-  --max-scenarios 5 \
-  --output-dir outputs/ifc_diagnostics
+  --max-scenarios 10 \
+  --output outputs/ifc_diagnostics
 ```
 
 Generated local artifacts:
@@ -31,7 +31,7 @@ Generated local artifacts:
 ```text
 outputs/ifc_diagnostics/compatibility_matrix.csv
 outputs/ifc_diagnostics/compatibility_matrix.json
-outputs/ifc_diagnostics/before_after_comparison.json
+outputs/ifc_diagnostics/per_file/*.diagnostic.json
 ```
 
 The IFC files themselves and generated diagnostic outputs are intentionally git-ignored.
@@ -47,20 +47,20 @@ The repeatable scripts and this report are tracked.
 
 ## Compatibility Matrix Summary
 
-| IFC | Schema | Status | Mode | Raw Spaces | Raw Doors | Extracted Spaces | Extracted Doors | Exits | Scenarios | Max Confidence | Main Reason |
+| IFC | Schema | Status | Mode | Raw Spaces | Raw Doors | Extracted Spaces | Extracted Doors | Exits | Scenarios | Graph Confidence | Main Reason |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|
-| 01_IFC2X3_Duplex_A_20110907.ifc | UNKNOWN | fail | uploaded_ifc | 0 | 0 | 0 | 0 | 0 | 0 | 0.00 | Git LFS pointer, not actual IFC model. |
-| 02_IFC2X3_Duplex_Rooms_And_Spaces.ifc | UNKNOWN | fail | uploaded_ifc | 0 | 0 | 0 | 0 | 0 | 0 | 0.00 | Git LFS pointer, not actual IFC model. |
-| 03_IFC2X3_Clinic_Architectural.ifc | UNKNOWN | fail | uploaded_ifc | 0 | 0 | 0 | 0 | 0 | 0 | 0.00 | Git LFS pointer, not actual IFC model. |
-| 04_IFC4_buildingSMART_Building_Architecture.ifc | IFC4 | partial | semantic_spaces_inferred_topology | 2 | 0 | 2 | 3 | 2 | 2 | 0.15 | IfcSpace areas are now read from properties, but route topology/exits and connector widths remain inferred. |
-| 05_IFC4_buildingSMART_Building_HVAC.ifc | IFC4 | partial | geometry_derived | 0 | 0 | 2 | 3 | 2 | 2 | 0.15 | No semantic IfcSpace/IfcDoor topology; geometry-derived screening only. |
-| 06_IFC4X3_ADD2_buildingSMART_Building_Architecture.ifc | IFC4X3 | partial | semantic_spaces_inferred_topology | 2 | 0 | 2 | 3 | 2 | 2 | 0.15 | IfcSpace entities exist, but no area properties, route topology or doors are available. |
-| 07_IFC4X1_Revit_Dormitory_Spaces.ifc | IFC4X1 | partial | semantic_spaces_inferred_topology | 20 | 0 | 20 | 21 | 2 | 5 | 0.15 | IfcSpace entities exist, but areas, route topology and doors are inferred/assumed. |
-| 11134_V_Motebello_Heistopp_Rev.ifc | IFC2X3 | partial | geometry_derived | 0 | 0 | 16 | 17 | 2 | 5 | 0.15 | BuildingElementProxy geometry can be screened, but no semantic rooms/doors are present. |
-| STRUC_NordicLCA_Housing_Concrete_BuildingPermit.ifc | IFC4 | partial | geometry_derived | 0 | 0 | 60 | 61 | 2 | 5 | 0.15 | Structural geometry only; no semantic evacuation room/door graph. |
-| STRUC_NordicLCA_Housing_Timber_BuildingPermit.ifc | IFC4 | partial | geometry_derived | 0 | 0 | 60 | 61 | 2 | 5 | 0.15 | Structural geometry only; no semantic evacuation room/door graph. |
-| STRUC_NordicLCA_Office_Concrete_BuildingPermit.ifc | IFC4 | partial | geometry_derived | 0 | 0 | 60 | 61 | 2 | 5 | 0.15 | Structural geometry only; no semantic evacuation room/door graph. |
-| STRUC_NordicLCA_Office_Timber_BuildingPermit.ifc | IFC4 | partial | geometry_derived | 0 | 0 | 60 | 61 | 2 | 5 | 0.15 | Structural geometry only; no semantic evacuation room/door graph. |
+| 01_IFC2X3_Duplex_A_20110907.ifc | UNKNOWN | fail | uploaded_ifc | 0 | 0 | 0 | 0 | 0 | 0 | 0.00 | Git LFS pointer file, not the actual IFC model. |
+| 02_IFC2X3_Duplex_Rooms_And_Spaces.ifc | UNKNOWN | fail | uploaded_ifc | 0 | 0 | 0 | 0 | 0 | 0 | 0.00 | Git LFS pointer file, not the actual IFC model. |
+| 03_IFC2X3_Clinic_Architectural.ifc | UNKNOWN | fail | uploaded_ifc | 0 | 0 | 0 | 0 | 0 | 0 | 0.00 | Git LFS pointer file, not the actual IFC model. |
+| 04_IFC4_buildingSMART_Building_Architecture.ifc | IFC4 | partial | semantic_spaces_inferred_topology | 2 | 0 | 2 | 3 | 2 | 2 | 0.55 | IfcSpace data exists, but route topology/exits are inferred; 3 door widths assumed. |
+| 05_IFC4_buildingSMART_Building_HVAC.ifc | IFC4 | partial | geometry_derived | 0 | 0 | 2 | 3 | 2 | 2 | 0.35 | No semantic IfcSpace/IfcDoor topology; geometry-derived screening only; 3 door widths assumed. |
+| 06_IFC4X3_ADD2_buildingSMART_Building_Architecture.ifc | IFC4X3 | partial | semantic_spaces_inferred_topology | 2 | 0 | 2 | 3 | 2 | 2 | 0.55 | IfcSpace data exists, but route topology/exits are inferred; 3 door widths and 2 space areas assumed. |
+| 07_IFC4X1_Revit_Dormitory_Spaces.ifc | IFC4X1 | partial | semantic_spaces_inferred_topology | 20 | 0 | 20 | 21 | 2 | 10 | 0.55 | IfcSpace data exists, but route topology/exits are inferred; 21 door widths and 20 space areas assumed. |
+| 11134_V_Motebello_Heistopp_Rev.ifc | IFC2X3 | partial | geometry_derived | 0 | 0 | 16 | 17 | 2 | 10 | 0.35 | No semantic IfcSpace/IfcDoor topology; geometry-derived screening only; 17 door widths assumed. |
+| STRUC_NordicLCA_Housing_Concrete_BuildingPermit.ifc | IFC4 | partial | geometry_derived | 0 | 0 | 60 | 61 | 2 | 10 | 0.35 | No semantic IfcSpace/IfcDoor topology; geometry-derived screening only; 61 door widths assumed. |
+| STRUC_NordicLCA_Housing_Timber_BuildingPermit.ifc | IFC4 | partial | geometry_derived | 0 | 0 | 60 | 61 | 2 | 10 | 0.35 | No semantic IfcSpace/IfcDoor topology; geometry-derived screening only; 61 door widths assumed. |
+| STRUC_NordicLCA_Office_Concrete_BuildingPermit.ifc | IFC4 | partial | geometry_derived | 0 | 0 | 60 | 61 | 2 | 10 | 0.35 | No semantic IfcSpace/IfcDoor topology; geometry-derived screening only; 61 door widths assumed. |
+| STRUC_NordicLCA_Office_Timber_BuildingPermit.ifc | IFC4 | partial | geometry_derived | 0 | 0 | 60 | 61 | 2 | 10 | 0.35 | No semantic IfcSpace/IfcDoor topology; geometry-derived screening only; 61 door widths assumed. |
 
 ## Fix Applied During Loop
 
@@ -101,19 +101,22 @@ Before/after:
 
 Covered by local/browser checks and regression tests:
 
-- Scenario `View Details` workspace: static regression guard verifies inline
-  details, decision trace and evidence download are wired.
+- Scenario `View Details` workspace: static regression guard verifies the stable
+  selected-scenario details panel, decision trace and evidence download are wired.
 - Manual corrections: regression test verifies exit/width/connectivity edits
-  regenerate graph and scenarios.
+  regenerate graph and scenarios, and the UI includes a reset path.
 - Regulation upload formats: regression test verifies TXT, DOCX and PDF text
   extraction.
-- Main JSON/CSV export: regression test verifies scenario JSON and CSV files are written.
+- Main JSON/CSV export: regression test verifies complete JSON evidence payload
+  and CSV scenario export wiring.
 - IFC-derived fire dataset export: regression test validates the exported
   dataset against the fire/worst-case schema.
-- Fire Scenario Testing page: deployed page loads with no `FileNotFoundError`
-  or traceback, and engine tests cover scenario execution/export.
-- Worst Case Testing page: deployed page loads with no `FileNotFoundError`
-  or traceback, and engine tests cover scenario execution/export.
+- Fire Scenario Testing page: page can use the latest uploaded IFC-derived
+  dataset, bundled demo dataset or uploaded JSON, and engine tests cover scenario
+  execution/export.
+- Worst Case Testing page: page can use the latest uploaded IFC-derived dataset,
+  bundled demo dataset or uploaded JSON, and engine tests cover scenario
+  execution/export.
 
 ## Interpretation
 
