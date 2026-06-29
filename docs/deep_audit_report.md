@@ -24,8 +24,9 @@ codex/deep-ifc-regulation-audit
 - `SpatialGraphBuilder` no longer fabricates cyclic fallback connectivity.
   It records verified edges, inferred edges, disconnected spaces and spaces
   without exit routes.
-- Scenario generation attaches route edge quality, route confidence, graph
-  confidence, data-quality notes and compliance evidence to exported JSON.
+- Scenario generation attaches route edge quality, route confidence, route
+  reliability, alternative-route summaries, graph confidence, data-quality notes
+  and compliance evidence to exported JSON.
 - Uploaded regulation text is parsed into clauses and structured numeric rules.
 - Compliance checks expose whether each threshold came from uploaded rules,
   keyword/RAG evidence or default config.
@@ -34,6 +35,11 @@ codex/deep-ifc-regulation-audit
   enabled in config, because the native stack can crash the process in some
   local/cloud environments.
 - Fire Scenario Testing and Worst Case Testing have automated regression tests.
+- BIM Insights includes a manual correction layer for door widths, exits and
+  door-space assignments. Applying corrections regenerates graph and scenarios.
+- BIM Insights can export the uploaded IFC-derived graph as a Worst Case/Fire
+  Scenario Testing JSON dataset. Inferred exits, assumed widths and review
+  occupancy remain labelled in the exported file.
 
 ## What Is Partial
 
@@ -103,7 +109,7 @@ exported JSON under `regulation_application`.
 
 ```text
 python3 -m pytest -q
-56 passed, 3 skipped
+63 passed, 3 skipped
 ```
 
 The skipped tests are optional environment-dependent tests, such as PDF fixture
@@ -120,3 +126,12 @@ files lack verified door semantics. The correct interpretation is:
 - Partial pass for space/geometry-derived route exploration.
 - Not safe as an automated compliance decision without expert review and a
   semantically rich IFC containing spaces, doors, exits and connectivity.
+
+## Fire/Worst-Case Bridge
+
+The uploaded IFC-derived graph can now be exported to the same JSON dataset
+schema used by the Worst Case Testing page. For geometry-derived IFC files where
+occupancy is unavailable, the exporter adds a low-confidence review occupancy so
+the fire-origin engine can run practical screening instead of silently reporting
+zero affected occupants. The exported dataset is labelled
+`ifc_derived_requires_review` and must not be treated as a certified fire model.

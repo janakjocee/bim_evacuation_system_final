@@ -46,6 +46,7 @@ This is an academic decision-support tool. It does **not** perform CFD, certifie
   readiness checklist, evidence display and per-scenario download.
 - Regulation-oriented NLP/RAG workflow using spaCy, FAISS and SentenceTransformers.
 - Evacuation scenario generation with distance, time, confidence, compliance and risk.
+- Alternative route summaries and route-reliability labels for each generated scenario.
 - Explainability panel for traceable deterministic decision reasoning.
 - Human-in-the-loop expert review workflow.
 - Fire-origin worst-case scenario testing.
@@ -63,6 +64,8 @@ generated evacuation scenario exports:
 
 - the IFC extraction basis used for the scenario;
 - the route search method, selected path, distance and evacuation time;
+- alternative escape routes where the IFC-derived graph contains more than one
+  route to an exit;
 - the compliance checks that passed or failed, including whether each threshold
   came from an uploaded structured rule, RAG evidence or built-in default;
 - the deterministic risk score and weighted factor breakdown, including IFC
@@ -77,6 +80,9 @@ regulation document is uploaded and grounding is enabled; otherwise the app
 clearly states that built-in default screening constraints were used.
 Low-risk labels are capped when route topology is mostly inferred, when critical
 IFC measurements are assumed, or when no verified exit data is available.
+Routes are labelled as `verified`, `partially_inferred`, `heavily_inferred` or
+`insufficient` so the reviewer can see whether a path came from IFC semantic
+connectivity or from geometry-derived screening.
 
 ---
 

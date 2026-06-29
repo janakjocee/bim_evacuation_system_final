@@ -16,6 +16,19 @@ from .risk_classifier import RiskClassifier, RiskFactors
 logger = get_logger("scenario_generator")
 
 
+def classify_route_reliability(route: Route) -> str:
+    """Classify route reliability from verified/inferred edge makeup."""
+    total_edges = route.verified_edge_count + route.inferred_edge_count
+    if total_edges == 0 or route.route_confidence <= 0.2:
+        return "insufficient"
+    if route.inferred_edge_count == 0:
+        return "verified"
+    inferred_ratio = route.inferred_edge_count / total_edges
+    if inferred_ratio >= 0.75:
+        return "heavily_inferred"
+    return "partially_inferred"
+
+
 @dataclass
 class EvacuationScenario:
     """Evacuation scenario."""
@@ -35,6 +48,7 @@ class EvacuationScenario:
     risk_factors: Dict[str, Any] = field(default_factory=dict)
     decision_trace: List[Dict[str, Any]] = field(default_factory=list)
     data_quality_notes: List[str] = field(default_factory=list)
+    alternative_routes: List[Dict[str, Any]] = field(default_factory=list)
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -53,8 +67,10 @@ class EvacuationScenario:
                 'verified_edge_count': self.evacuation_route.verified_edge_count,
                 'inferred_edge_count': self.evacuation_route.inferred_edge_count,
                 'route_confidence': round(self.evacuation_route.route_confidence, 2),
+                'route_reliability': classify_route_reliability(self.evacuation_route),
                 'edge_sources': self.evacuation_route.edge_sources or [],
             },
+            'alternative_routes': self.alternative_routes,
             'compliance_status': self.compliance_status.value,
             'compliance_score': round(self.compliance_score, 2),
             'violated_regulations': self.violated_regulations,
@@ -138,6 +154,7 @@ class ScenarioGenerator:
         
         # Use shortest route
         best_route = routes[0]
+        alternative_routes = [self._route_to_summary(route) for route in routes[1:4]]
         
         # Run compliance checks
         compliance_checks = []
@@ -165,6 +182,24 @@ class ScenarioGenerator:
                     "source": "ifc_graph_validation",
                     "text": f"Route edge sources: {', '.join(best_route.edge_sources or [])}",
                     "score": best_route.route_confidence,
+                }],
+            ))
+        if len(routes) <= 1:
+            compliance_checks.append(ComplianceCheck(
+                element_id=space.id,
+                element_type="route",
+                regulation_id="alternative_route_availability",
+                regulation_text="Evacuation strategy should review alternative route availability.",
+                status=ComplianceStatus.REQUIRES_REVIEW,
+                measured_value=len(routes),
+                required_value=2,
+                unit="routes",
+                message="Only one route to an exit was found; alternative escape availability requires expert review.",
+                evidence_source="ifc_graph_validation",
+                evidence=[{
+                    "source": "ifc_graph_validation",
+                    "text": f"{len(routes)} route(s) were found from {space.name}.",
+                    "score": 0.5,
                 }],
             ))
         
@@ -263,6 +298,7 @@ class ScenarioGenerator:
                 confidence=confidence,
             ),
             data_quality_notes=data_quality_notes,
+            alternative_routes=alternative_routes,
         )
         
         return scenario
@@ -298,7 +334,9 @@ class ScenarioGenerator:
                     "verified_edge_count": route.verified_edge_count,
                     "inferred_edge_count": route.inferred_edge_count,
                     "route_confidence": round(route.route_confidence, 2),
+                    "route_reliability": classify_route_reliability(route),
                     "edge_sources": route.edge_sources or [],
+                    "alternative_routes_found": len(self.graph_builder.find_paths_to_exits(space.id)) - 1 if self.graph_builder else 0,
                 },
             },
             {
@@ -414,6 +452,20 @@ class ScenarioGenerator:
             return 0
         bottlenecks = self.graph_builder.identify_bottlenecks(top_n=10)
         return sum(1 for item in bottlenecks if item.get("centrality", 0) >= 0.2)
+
+    def _route_to_summary(self, route: Route) -> Dict[str, Any]:
+        """Return a compact alternative-route summary."""
+        return {
+            "destination": route.destination,
+            "path": route.path,
+            "distance_m": round(route.distance, 2),
+            "estimated_time_s": round(route.estimated_time, 1),
+            "verified_edge_count": route.verified_edge_count,
+            "inferred_edge_count": route.inferred_edge_count,
+            "route_confidence": round(route.route_confidence, 2),
+            "route_reliability": classify_route_reliability(route),
+            "edge_sources": route.edge_sources or [],
+        }
     
     def _generate_explanation(self, space: SpaceData, route: Route,
                               checks: List[ComplianceCheck], violations: List[ComplianceCheck],
