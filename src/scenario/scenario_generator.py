@@ -162,6 +162,16 @@ class ScenarioGenerator:
         # Check route distance
         route_checks = self.compliance_checker.check_route(space, best_route.distance)
         compliance_checks.extend(route_checks)
+        compliance_checks.extend(self.compliance_checker.check_route_redundancy(
+            space,
+            route_count=len(routes),
+            exit_count=len(self.building.exits),
+        ))
+        compliance_checks.extend(self.compliance_checker.check_route_doors(best_route, self.building.doors))
+        compliance_checks.extend(self.compliance_checker.check_space_data_quality(space))
+        compliance_checks.extend(self.compliance_checker.check_corridor(space))
+        for stair in self.building.stairs.values():
+            compliance_checks.extend(self.compliance_checker.check_stair(stair))
 
         if best_route.inferred_edge_count:
             compliance_checks.append(ComplianceCheck(
@@ -184,25 +194,6 @@ class ScenarioGenerator:
                     "score": best_route.route_confidence,
                 }],
             ))
-        if len(routes) <= 1:
-            compliance_checks.append(ComplianceCheck(
-                element_id=space.id,
-                element_type="route",
-                regulation_id="alternative_route_availability",
-                regulation_text="Evacuation strategy should review alternative route availability.",
-                status=ComplianceStatus.REQUIRES_REVIEW,
-                measured_value=len(routes),
-                required_value=2,
-                unit="routes",
-                message="Only one route to an exit was found; alternative escape availability requires expert review.",
-                evidence_source="ifc_graph_validation",
-                evidence=[{
-                    "source": "ifc_graph_validation",
-                    "text": f"{len(routes)} route(s) were found from {space.name}.",
-                    "score": 0.5,
-                }],
-            ))
-        
         # Check exit door
         exit_door = self.building.exits.get(best_route.destination)
         if exit_door:
@@ -225,7 +216,11 @@ class ScenarioGenerator:
         recommendations = self.compliance_checker.generate_recommendations(violations)
         
         graph_stats = self.graph_builder.get_graph_stats() if self.graph_builder else {}
-        data_quality_factors = self._build_data_quality_risk_factors(graph_stats)
+        data_quality_factors = self._build_data_quality_risk_factors(
+            graph_stats,
+            route=best_route,
+            route_count=len(routes),
+        )
 
         # Classify risk
         risk_factors = RiskFactors(
@@ -233,7 +228,7 @@ class ScenarioGenerator:
             evacuation_time=best_route.estimated_time,
             compliance_score=compliance_score,
             exit_capacity_ratio=self._estimate_exit_capacity_ratio(),
-            bottleneck_count=self._estimate_bottleneck_count(),
+            bottleneck_count=self._estimate_bottleneck_count(best_route),
             **data_quality_factors,
         )
         
@@ -368,9 +363,11 @@ class ScenarioGenerator:
                     evacuation_time=route.estimated_time,
                     compliance_score=self.compliance_checker.calculate_compliance_score(compliance_checks),
                     exit_capacity_ratio=self._estimate_exit_capacity_ratio(),
-                    bottleneck_count=self._estimate_bottleneck_count(),
+                    bottleneck_count=self._estimate_bottleneck_count(route),
                     **self._build_data_quality_risk_factors(
-                        self.graph_builder.get_graph_stats() if self.graph_builder else {}
+                        self.graph_builder.get_graph_stats() if self.graph_builder else {},
+                        route=route,
+                        route_count=max(1, len(self.graph_builder.find_paths_to_exits(space.id))) if self.graph_builder else 1,
                     ),
                 )),
                 "method": "Weighted deterministic score, not an opaque machine-learning prediction.",
@@ -397,7 +394,12 @@ class ScenarioGenerator:
         
         return min(confidence, 1.0)
 
-    def _build_data_quality_risk_factors(self, graph_stats: Dict[str, Any]) -> Dict[str, Any]:
+    def _build_data_quality_risk_factors(
+        self,
+        graph_stats: Dict[str, Any],
+        route: Optional[Route] = None,
+        route_count: int = 1,
+    ) -> Dict[str, Any]:
         """Build risk model inputs from IFC extraction and graph validation quality."""
         total_edges = graph_stats.get("edge_count", 0)
         inferred_edges = graph_stats.get("inferred_edges_count", 0)
@@ -408,6 +410,11 @@ class ScenarioGenerator:
             assumed_measurements += len(door.assumptions)
         for space in self.building.spaces.values():
             assumed_measurements += len(space.assumptions)
+        missing_area_count = sum(
+            1 for space in self.building.spaces.values()
+            if space.area_confidence < 1.0 or space.assumptions.get("area")
+        )
+        narrow_door_count = self._count_narrow_route_doors(route) if route else self._count_narrow_route_doors()
 
         if self.building.extraction_mode == "geometry_derived":
             data_quality_confidence = 0.4
@@ -425,6 +432,9 @@ class ScenarioGenerator:
             "inferred_edge_ratio": inferred_edge_ratio,
             "missing_exit_count": 0 if self.building.exits else 1,
             "assumed_measurement_count": assumed_measurements,
+            "narrow_door_count": narrow_door_count,
+            "no_alternative_route_count": 1 if route_count <= 1 else 0,
+            "missing_area_count": missing_area_count,
         }
 
     def _estimate_exit_capacity_ratio(self) -> float:
@@ -446,12 +456,24 @@ class ScenarioGenerator:
             total += int(space.area * densities.get(space.space_type, 0.1))
         return total
 
-    def _estimate_bottleneck_count(self) -> int:
-        """Count meaningful graph bottlenecks from betweenness centrality."""
+    def _estimate_bottleneck_count(self, route: Optional[Route] = None) -> int:
+        """Count meaningful graph bottlenecks and narrow route doors."""
         if not self.graph_builder:
             return 0
         bottlenecks = self.graph_builder.identify_bottlenecks(top_n=10)
-        return sum(1 for item in bottlenecks if item.get("centrality", 0) >= 0.2)
+        centrality_count = sum(1 for item in bottlenecks if item.get("centrality", 0) >= 0.2)
+        return centrality_count + self._count_narrow_route_doors(route)
+
+    def _count_narrow_route_doors(self, route: Optional[Route] = None) -> int:
+        """Count non-exit doors below the active minimum width, optionally on one route."""
+        min_width = self.compliance_checker.regulations.get("min_door_width", 0.75)
+        door_ids = route.path if route else self.building.doors.keys()
+        count = 0
+        for node_id in door_ids:
+            door = self.building.doors.get(node_id)
+            if door and not door.is_exit and door.width < min_width:
+                count += 1
+        return count
 
     def _route_to_summary(self, route: Route) -> Dict[str, Any]:
         """Return a compact alternative-route summary."""

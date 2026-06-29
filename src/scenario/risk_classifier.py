@@ -24,6 +24,9 @@ class RiskFactors:
     inferred_edge_ratio: float = 0.0
     missing_exit_count: int = 0
     assumed_measurement_count: int = 0
+    narrow_door_count: int = 0
+    no_alternative_route_count: int = 0
+    missing_area_count: int = 0
 
 
 class RiskClassifier:
@@ -58,6 +61,9 @@ class RiskClassifier:
                 or factors.data_quality_confidence < 0.5
                 or factors.inferred_edge_ratio > 0.75
                 or factors.assumed_measurement_count > 0
+                or factors.narrow_door_count > 0
+                or factors.no_alternative_route_count > 0
+                or factors.missing_area_count > 0
             ):
                 return RiskLevel.MEDIUM
             return RiskLevel.LOW
@@ -99,7 +105,8 @@ class RiskClassifier:
         data_quality_score = max(0.0, min(factors.data_quality_confidence, 1.0)) * 0.05
         inferred_penalty = min(max(factors.inferred_edge_ratio, 0.0), 1.0) * 0.05
         assumption_penalty = min(factors.assumed_measurement_count * 0.02, 0.08)
-        scores.append(max(0.0, topology_score + data_quality_score - inferred_penalty - assumption_penalty))
+        practical_penalty = self._practical_data_penalty(factors)
+        scores.append(max(0.0, topology_score + data_quality_score - inferred_penalty - assumption_penalty - practical_penalty))
         
         return sum(scores)
 
@@ -110,13 +117,17 @@ class RiskClassifier:
         data_quality_score = max(0.0, min(factors.data_quality_confidence, 1.0)) * 0.05
         inferred_penalty = min(max(factors.inferred_edge_ratio, 0.0), 1.0) * 0.05
         assumption_penalty = min(factors.assumed_measurement_count * 0.02, 0.08)
-        topology_component = max(0.0, topology_score + data_quality_score - inferred_penalty - assumption_penalty)
+        practical_penalty = self._practical_data_penalty(factors)
+        topology_component = max(0.0, topology_score + data_quality_score - inferred_penalty - assumption_penalty - practical_penalty)
         return {
             "compliance_component": round(factors.compliance_score * 0.35, 3),
             "exit_capacity_component": round(min(factors.exit_capacity_ratio, 1.0) * 0.25, 3),
             "evacuation_time_component": round(time_score, 3),
             "bottleneck_component": round(max(0, 1 - (factors.bottleneck_count * 0.1)) * 0.1, 3),
             "topology_data_quality_component": round(topology_component, 3),
+            "inferred_route_penalty": round(inferred_penalty, 3),
+            "assumed_measurement_penalty": round(assumption_penalty, 3),
+            "practical_data_penalty": round(practical_penalty, 3),
             "total_score": round(self.calculate_score(factors), 3),
             "interpretation": (
                 "Higher score means lower risk; thresholds are low>=0.8, medium>=0.5, otherwise high. "
@@ -146,4 +157,16 @@ class RiskClassifier:
             'inferred_edge_ratio': round(factors.inferred_edge_ratio, 2),
             'missing_exit_count': factors.missing_exit_count,
             'assumed_measurement_count': factors.assumed_measurement_count,
+            'narrow_door_count': factors.narrow_door_count,
+            'no_alternative_route_count': factors.no_alternative_route_count,
+            'missing_area_count': factors.missing_area_count,
         }
+
+    def _practical_data_penalty(self, factors: RiskFactors) -> float:
+        """Penalty for practical evacuation weaknesses visible in the extracted IFC."""
+        return min(
+            factors.narrow_door_count * 0.03
+            + factors.no_alternative_route_count * 0.04
+            + factors.missing_area_count * 0.02,
+            0.1,
+        )

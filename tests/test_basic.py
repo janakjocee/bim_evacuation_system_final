@@ -336,6 +336,41 @@ def test_assumed_door_width_requires_review():
     assert "requires expert confirmation" in result.message
 
 
+def test_corridor_width_check_uses_bounding_box():
+    checker = ComplianceChecker()
+    corridor = SpaceData(
+        id="C1",
+        name="Narrow Corridor",
+        area=12,
+        space_type="corridor",
+        bounding_box=(Point3D(0, 0, 0), Point3D(0.9, 10, 3)),
+    )
+
+    result = checker.check_corridor(corridor)[0]
+
+    assert result.status == ComplianceStatus.NON_COMPLIANT
+    assert result.regulation_id == "min_corridor_width"
+    assert result.measured_value == 0.9
+
+
+def test_stair_dimension_checks_flag_unsafe_values():
+    checker = ComplianceChecker()
+    stair = StairData(
+        id="ST1",
+        name="Tight Stair",
+        width=0.8,
+        riser_height=0.22,
+        tread_length=0.2,
+    )
+
+    checks = checker.check_stair(stair)
+    statuses = {check.regulation_id: check.status for check in checks}
+
+    assert statuses["min_stair_width"] == ComplianceStatus.NON_COMPLIANT
+    assert statuses["max_riser_height"] == ComplianceStatus.NON_COMPLIANT
+    assert statuses["min_tread_length"] == ComplianceStatus.NON_COMPLIANT
+
+
 def test_low_confidence_topology_cannot_be_low_risk():
     classifier = RiskClassifier()
     factors = RiskFactors(
@@ -349,6 +384,24 @@ def test_low_confidence_topology_cannot_be_low_risk():
     )
 
     assert classifier.classify(factors) == RiskLevel.MEDIUM
+
+
+def test_practical_route_weaknesses_prevent_low_risk():
+    classifier = RiskClassifier()
+    factors = RiskFactors(
+        travel_distance=5.0,
+        evacuation_time=4.0,
+        compliance_score=1.0,
+        exit_capacity_ratio=1.0,
+        graph_confidence=1.0,
+        data_quality_confidence=1.0,
+        narrow_door_count=1,
+        no_alternative_route_count=1,
+    )
+
+    assert classifier.classify(factors) == RiskLevel.MEDIUM
+    breakdown = classifier.risk_contribution_breakdown(factors)
+    assert breakdown["practical_data_penalty"] > 0
 
 
 def test_missing_exit_forces_high_risk():
