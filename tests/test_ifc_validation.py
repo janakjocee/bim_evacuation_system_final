@@ -145,7 +145,64 @@ def test_batch_ifc_diagnostics_writes_csv_and_json(tmp_path):
     summary = json.loads(result.stdout)
     assert summary["status_counts"]["fail"] == 1
     rows = json.loads((output_dir / "compatibility_matrix.json").read_text())
-    assert rows[0]["compatibility_status"] == "fail"
+    assert rows[0]["pass_partial_fail_status"] == "fail"
+    assert rows[0]["file_name"] == "pointer.ifc"
+    assert rows[0]["opens_with_ifcopenshell"] is False
+    assert rows[0]["scenarios_generated"] == 0
+    assert rows[0]["failure_reason"]
     csv_text = (output_dir / "compatibility_matrix.csv").read_text()
-    assert "compatibility_status" in csv_text
+    assert "pass_partial_fail_status" in csv_text
+    assert "ifc_schema" in csv_text
     assert "Git LFS pointer" in csv_text
+    per_file = output_dir / "per_file" / "pointer.diagnostic.json"
+    assert per_file.exists()
+    assert json.loads(per_file.read_text())["failure_reason"]
+
+
+def test_batch_ifc_diagnostics_supports_input_output_flags(tmp_path):
+    pointer = tmp_path / "flagged.ifc"
+    pointer.write_text(
+        "version https://git-lfs.github.com/spec/v1\n"
+        "oid sha256:0123456789abcdef\n"
+        "size 12345\n"
+    )
+    output_dir = tmp_path / "matrix"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/batch_ifc_diagnostics.py",
+            "--input",
+            str(tmp_path),
+            "--output",
+            str(output_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    summary = json.loads(result.stdout)
+    assert summary["input_count"] == 1
+    assert summary["per_file_json_dir"].endswith("per_file")
+    rows = json.loads((output_dir / "compatibility_matrix.json").read_text())
+    required_fields = {
+        "file_name",
+        "ifc_schema",
+        "opens_with_ifcopenshell",
+        "extraction_mode",
+        "source_mode",
+        "geometry_elements_available",
+        "geometry_elements_used",
+        "space_count",
+        "door_count",
+        "exit_count",
+        "verified_edges_count",
+        "inferred_edges_count",
+        "scenarios_generated",
+        "pass_partial_fail_status",
+        "failure_reason",
+        "reliability_notes",
+    }
+    assert required_fields.issubset(rows[0])
