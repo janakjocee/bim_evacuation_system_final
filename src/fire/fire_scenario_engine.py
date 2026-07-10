@@ -208,7 +208,7 @@ class FireScenarioEngine:
         return create_fds_skeleton(result)
 
     def _hazard_adjusted_graph(self, scenario: Dict[str, Any]) -> Any:
-        graph = self.graph.copy()
+        graph = copy.deepcopy(self.graph)
         blocked_edges = set(scenario.get("blocked_edges", []))
         for u, v, data in list(graph.edges(data=True)):
             if str(data.get("connection_id")) in blocked_edges and graph.has_edge(u, v):
