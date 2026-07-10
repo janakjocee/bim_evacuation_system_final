@@ -460,7 +460,7 @@ class IFCParser:
             for rel in getattr(ifc_space, 'Decomposes', []):
                 if hasattr(rel, 'RelatingObject'):
                     return rel.RelatingObject.GlobalId
-        except:
+        except Exception:
             pass
         return ""
     
@@ -500,7 +500,7 @@ class IFCParser:
             if placement and hasattr(placement, 'RelativePlacement'):
                 coords = placement.RelativePlacement.Location.Coordinates
                 return Point3D(x=coords[0], y=coords[1], z=coords[2] if len(coords) > 2 else 0)
-        except:
+        except Exception:
             pass
         return Point3D()
 
