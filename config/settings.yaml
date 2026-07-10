@@ -94,6 +94,22 @@ scenario:
     medium: 0.5
     high: 0.0
 
+# Fire Scenario Settings
+fire:
+  # Default t-squared fire growth class per room type
+  room_type_growth:
+    office: "slow"
+    meeting_room: "slow"
+    classroom: "medium"
+    lecture_room: "medium"
+    lab: "fast"
+    corridor: "fast"
+    high_hazard: "fast"
+    kitchen: "fast"
+    plant_room: "ultra_fast"
+    service: "ultra_fast"
+    default: "medium"
+
 # Export Settings
 export:
   formats:
