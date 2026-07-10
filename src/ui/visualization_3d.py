@@ -3,7 +3,12 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, Optional, Set, Tuple
 
-import networkx as nx
+try:
+    import networkx as nx
+    NETWORKX_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    nx = None
+    NETWORKX_AVAILABLE = False
 import plotly.graph_objects as go
 
 
