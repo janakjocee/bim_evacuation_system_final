@@ -11,7 +11,7 @@ try:
 except ImportError:  # pragma: no cover
     nx = None
 
-from src.scenario.worst_case_engine import (
+from ..scenario.worst_case_engine import (
     build_graph_from_dataset,
     classify_risk,
     load_worst_case_dataset,
