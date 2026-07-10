@@ -1,8 +1,6 @@
 # Docker Compose Configuration
 # BIM Evacuation System - University of Greenwich
 
-version: '3.8'
-
 services:
   bim-evacuation:
     build:
@@ -49,8 +47,3 @@ services:
                --NotebookApp.token='' --NotebookApp.password=''"
     profiles:
       - dev
-
-volumes:
-  data:
-  outputs:
-  logs:
