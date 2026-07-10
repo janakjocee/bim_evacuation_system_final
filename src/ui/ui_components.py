@@ -55,7 +55,10 @@ def get_compliance_badge(status: ComplianceStatus) -> str:
     colors = {
         ComplianceStatus.COMPLIANT: ("#28a745", "✓ Compliant"),
         ComplianceStatus.NON_COMPLIANT: ("#dc3545", "✗ Non-Compliant"),
-        ComplianceStatus.PARTIAL: ("#ffc107", "◐ Partial")
+        ComplianceStatus.PARTIAL: ("#ffc107", "◐ Partial"),
+        ComplianceStatus.REQUIRES_REVIEW: ("#17a2b8", "⚠ Requires Review"),
+        ComplianceStatus.INSUFFICIENT_DATA: ("#6f42c1", "◌ Insufficient Data"),
+        ComplianceStatus.UNKNOWN: ("#6c757d", "? Unknown"),
     }
     color, label = colors.get(status, ("#6c757d", "? Unknown"))
     return (
@@ -342,7 +345,10 @@ def render_scenario_card(scenario: EvacuationScenario, index: int):
     compliance_color = {
         ComplianceStatus.COMPLIANT: '#28a745',
         ComplianceStatus.NON_COMPLIANT: '#dc3545',
-        ComplianceStatus.PARTIAL: '#ffc107'
+        ComplianceStatus.PARTIAL: '#ffc107',
+        ComplianceStatus.REQUIRES_REVIEW: '#17a2b8',
+        ComplianceStatus.INSUFFICIENT_DATA: '#6f42c1',
+        ComplianceStatus.UNKNOWN: '#6c757d',
     }.get(scenario.compliance_status, '#6c757d')
     
     with st.container():
