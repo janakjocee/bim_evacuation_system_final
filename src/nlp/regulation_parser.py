@@ -342,7 +342,20 @@ class RegulationParser:
         return measurements
 
     def _split_sentences(self, text: str) -> List[Dict[str, Any]]:
-        """Split text into sentence-like spans while preserving offsets."""
+        """Split text into sentence-like spans while preserving offsets.
+
+        Uses spaCy sentence boundary detection when available for more
+        accurate splitting, with a regex fallback otherwise.
+        """
+        if self.nlp is not None:
+            doc = self.nlp(text)
+            return [
+                {"text": sent.text.strip(), "start": sent.start_char, "end": sent.end_char}
+                for sent in doc.sents
+                if sent.text.strip()
+            ]
+
+        # Regex fallback when spaCy is not available
         spans = []
         start = 0
         for match in re.finditer(r'(?<=[.!?])\s+', text):
