@@ -6,6 +6,21 @@ import hashlib
 import sys
 from pathlib import Path
 
+import numpy as np
+
+
+class _NumpySafeEncoder(json.JSONEncoder):
+    """JSON encoder that converts numpy types to native Python types."""
+
+    def default(self, obj):
+        if isinstance(obj, (np.integer,)):
+            return int(obj)
+        if isinstance(obj, (np.floating,)):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super().default(obj)
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pandas as pd
@@ -177,7 +192,7 @@ with visual_tab:
 with export_tab:
     st.download_button(
         "Download Scenario JSON",
-        json.dumps(result, indent=2),
+        json.dumps(result, indent=2, cls=_NumpySafeEncoder),
         "fire_scenario_result.json",
         "application/json",
         width="stretch",
