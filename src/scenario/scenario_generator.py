@@ -291,6 +291,7 @@ class ScenarioGenerator:
                 risk_level=risk_level,
                 risk_score=risk_score,
                 confidence=confidence,
+                route_count=len(routes),
             ),
             data_quality_notes=data_quality_notes,
             alternative_routes=alternative_routes,
@@ -302,7 +303,8 @@ class ScenarioGenerator:
                               compliance_checks: List[ComplianceCheck],
                               violations: List[ComplianceCheck],
                               risk_level: RiskLevel, risk_score: float,
-                              confidence: float) -> List[Dict[str, Any]]:
+                              confidence: float,
+                              route_count: int = 1) -> List[Dict[str, Any]]:
         """Build a transparent audit trail for why the scenario was produced."""
         if self.building.extraction_mode == "geometry_derived":
             extraction_basis = "geometry-derived IFC element topology"
@@ -331,7 +333,7 @@ class ScenarioGenerator:
                     "route_confidence": round(route.route_confidence, 2),
                     "route_reliability": classify_route_reliability(route),
                     "edge_sources": route.edge_sources or [],
-                    "alternative_routes_found": len(self.graph_builder.find_paths_to_exits(space.id)) - 1 if self.graph_builder else 0,
+                    "alternative_routes_found": max(0, route_count - 1),
                 },
             },
             {
@@ -367,7 +369,7 @@ class ScenarioGenerator:
                     **self._build_data_quality_risk_factors(
                         self.graph_builder.get_graph_stats() if self.graph_builder else {},
                         route=route,
-                        route_count=max(1, len(self.graph_builder.find_paths_to_exits(space.id))) if self.graph_builder else 1,
+                        route_count=route_count,
                     ),
                 )),
                 "method": "Weighted deterministic score, not an opaque machine-learning prediction.",
