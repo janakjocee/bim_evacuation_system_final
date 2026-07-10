@@ -27,7 +27,19 @@ bim:
     - "IfcDoor"
     - "IfcStair"
     - "IfcBuildingStorey"
-  
+
+  # Default dimensions used when IFC data is missing (requires review)
+  defaults:
+    door_width_m: 0.9
+    door_height_m: 2.1
+    stair_width_m: 1.2
+    riser_height_m: 0.17
+    tread_length_m: 0.25
+    space_area_m2: 20.0
+    door_proximity_threshold_m: 2.5
+    perimeter_tolerance_m: 1.0
+    geometry_sample_limit: 60
+
   # Occupancy density (persons per square meter)
   occupancy_density:
     office: 0.1
@@ -37,8 +49,9 @@ bim:
     retail: 0.5
     industrial: 0.1
     residential: 0.05
+    toilet: 0.05
     default: 0.1
-  
+
   # Travel speeds (meters per second)
   travel_speed:
     level: 1.2
