@@ -1,0 +1,4 @@
+-r requirements.txt
+
+# Test-only PDF fixture generation; the application reads PDFs with pypdf.
+reportlab>=4.2.0,<5

@@ -219,6 +219,22 @@ outputs/ifc_diagnostics/compatibility_matrix.json
 outputs/ifc_diagnostics/per_file/*.diagnostic.json
 ```
 
+Run a strict end-to-end acceptance check for one real IFC and an optional
+regulation document:
+
+```bash
+python scripts/verify_practical_workflow.py /path/to/model.ifc \
+  --regulations /path/to/regulations.txt \
+  --output outputs/practical_verification
+```
+
+The verifier checks the real payload and SHA-256 provenance, IFC opening,
+extraction, graph routes, scenario decision traces, regulation application and
+JSON/CSV reconciliation. It writes both `verification_report.json` and
+`verification_report.md`. Its operational verdict is separate from engineering
+evidence quality: a geometry-only IFC can be processed successfully without
+being misrepresented as a verified room-and-door evacuation model.
+
 `pass` means verified semantic spaces, doors, exits and route connectivity were
 available. `partial` means the file was processed and scenarios were generated,
 but some route, exit, width, area or geometry assumptions require expert review.
@@ -480,9 +496,10 @@ http://localhost:8501
 
 ## Testing
 
-Run:
+Install test-only fixture tools and run:
 
 ```bash
+pip install -r requirements-dev.txt
 pytest
 ```
 

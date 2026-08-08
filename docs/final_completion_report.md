@@ -19,6 +19,9 @@ Repository: `janakjocee/bim_evacuation_system_final`
 
 ### IFC parsing and routing
 
+- Operational processing readiness and engineering evidence quality are now
+  separate scores, so geometry-only files can run without receiving a false
+  semantic-readiness claim.
 - Door coordinates now use the complete IFC placement hierarchy instead of a nested local origin.
 - Placeholder property labels such as `Fire Rating` are no longer treated as actual fire ratings.
 - Boolean IFC properties use strict parsing; unknown strings do not become `True` implicitly.
@@ -41,7 +44,7 @@ Observed regulation results:
 
 | Input | Clauses | Structured rules | Result |
 |---|---:|---:|---|
-| Practical ADB TXT | 15 | 10 | Correctly retained 18 m, 12 m and 1.05 m screening thresholds. |
+| Practical ADB TXT | 15 | 10 | Applied 18 m single-direction, 45 m alternative-route and 1.05 m conservative exit-width screening thresholds. Direct-distance and small-premises rules remain explicit unsupported candidates until their scope can be verified. |
 | GOV.UK ADB Volume 2 PDF | 426 | 12 | Applied focused 45 m travel, 1.2 m exit and 1.1 m stair candidates without section contamination. |
 | DOCX FAQ | 8 | 0 | Extracted text but did not invent numeric constraints; defaults remained explicit. |
 
@@ -49,6 +52,9 @@ Observed regulation results:
 
 - Scenario `View Details` opens, closes and reopens against a stable scenario ID.
 - The inspection workspace renders directly inside the selected scenario card; it is no longer hidden below the complete scenario list.
+- Scenario details now read the real `verified_edge_count` and
+  `inferred_edge_count` fields; the previous nonexistent attribute names made
+  route evidence appear as `0/0`.
 - Expert review decisions and comments persist in session state.
 - Main JSON, CSV and XML exports are direct downloads; XML is generated with safe escaping.
 - Manual correction and IFC-derived fire dataset exports are present and executable.
@@ -59,6 +65,8 @@ Observed regulation results:
 - The dashboard uses Streamlit's native dataframe path, avoiding a Linux PyArrow `Styler` crash found by CI.
 - Fire and worst-case results are invalidated whenever a scenario, origin, route blockage or modelling assumption changes, preventing stale metrics from appearing under new controls.
 - Root `pages/` entry points now delegate to the canonical `src/ui/pages/` implementations, eliminating two diverging copies of each fire workflow.
+- `scripts/verify_practical_workflow.py` produces a strict eight-gate JSON and
+  Markdown acceptance report for one real IFC and regulation document.
 - Explanation, export and welcome panels consistently use adaptive theme variables in light and dark modes.
 - Reusable UI components and the worst-case result card escape IFC/reviewer text before inserting it into custom HTML.
 
@@ -74,9 +82,9 @@ Observed regulation results:
 Complete local suite:
 
 ```text
-94 tests collected
-91 passed
-3 skipped
+99 tests collected
+99 passed with the real Montebello IFC supplied through `BIM_TEST_IFC`
+0 skipped in the complete local practical run
 ```
 
 This result was repeated in a clean Python 3.10.20 environment using Streamlit 1.61.1, PyArrow 24.0.0 and pytest 9.1.1. `pip check` found no broken requirements.
@@ -92,7 +100,9 @@ The component control matrix now executes:
 - both fire pages using an IFC-derived dataset rather than the bundled demonstration dataset;
 - canonical and backward-compatible page entry points.
 
-The three skips are optional compatibility cases whose external model prerequisites are not bundled in the repository. No executed test failed.
+Fresh checkouts without the external Montebello payload skip three optional
+real-file compatibility cases. The complete local practical run executes those
+tests against the exact Downloads IFC; no executed test failed.
 
 Executable Streamlit interaction coverage includes:
 
