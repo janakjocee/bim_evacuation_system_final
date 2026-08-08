@@ -1,4 +1,5 @@
 """Executable Streamlit interaction tests for release-critical controls."""
+import copy
 from pathlib import Path
 
 from streamlit.testing.v1 import AppTest
@@ -109,6 +110,36 @@ def test_main_scenario_details_close_reopen_review_and_exports():
         "⬇️ Download CSV",
         "⬇️ Download XML",
     }.issubset(download_labels)
+
+
+def test_selected_details_render_inside_the_selected_scenario_card():
+    result = _main_pipeline_result()
+    scenarios = []
+    for index in range(3):
+        scenario = copy.deepcopy(result.scenarios[0])
+        scenario.scenario_id = f"SCEN_POSITION_{index}"
+        scenario.name = f"Position Test {index}"
+        scenarios.append(scenario)
+    result.scenarios = scenarios
+
+    app = _app_test("src/ui/streamlit_app.py")
+    app.session_state["processing_done"] = True
+    app.session_state["pipeline_result"] = result
+    app.session_state["baseline_pipeline_result"] = result
+    app.session_state["selected_scenario_id"] = scenarios[0].scenario_id
+    app.run(timeout=30)
+    assert not app.exception
+
+    markdown = [str(getattr(element, "value", "")) for element in app.markdown]
+    card_positions = [
+        index for index, value in enumerate(markdown)
+        if 'class="scenario-card"' in value
+    ]
+    detail_position = next(
+        index for index, value in enumerate(markdown)
+        if 'class="scenario-detail-card"' in value
+    )
+    assert card_positions[0] < detail_position < card_positions[1]
 
 
 def test_fire_scenario_page_runs_and_exposes_result_exports():

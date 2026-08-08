@@ -9,13 +9,13 @@ def test_scenario_details_use_stable_inspection_workspace():
     assert "render_selected_scenario_details" in source
     assert "Selected Scenario Inspection Workspace" in source
     assert "View Details" in source
-    assert '"Close Details", key="close_selected_scenario_details"' in source
-    assert "scenario_by_id = {scenario.scenario_id: scenario for scenario in scenarios}" in source
-    assert "selected_scenario = scenario_by_id.get" in source
+    assert '"Close Details" if is_selected else "View Details"' in source
+    assert "on_click=toggle_scenario_details" in source
+    assert "visible_scenario_ids = {scenario.scenario_id for scenario in filtered}" in source
     assert "st.session_state.active_tab = 4" not in source
-    assert "render_selected_scenario_details(result, selected_scenario)" in source
+    assert "render_selected_scenario_details(result, scenario)" in source
     scenario_tab_source = source[source.index("def render_evacuation_scenarios"):source.index("def render_explainability")]
-    assert "render_selected_scenario_details(result, scenario)" not in scenario_tab_source
+    assert "if st.session_state.selected_scenario_id == scenario.scenario_id:" in scenario_tab_source
     assert "selected_scenario = next(" not in source
     assert "Download selected scenario evidence" in source
     assert "scenario.decision_trace" in source

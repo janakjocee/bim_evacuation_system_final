@@ -65,6 +65,9 @@ def test_main_app_control_matrix_and_icon_labels():
         _control(app.multiselect, "Risk Level").set_value(values).run(timeout=30)
         _assert_clean(app)
 
+    if "Close Details" not in {button.label for button in app.button}:
+        _button(app, "View Details").click().run(timeout=30)
+        _assert_clean(app)
     _button(app, "Close Details").click().run(timeout=30)
     _assert_clean(app)
     _button(app, "View Details").click().run(timeout=30)

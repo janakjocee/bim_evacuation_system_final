@@ -1296,6 +1296,12 @@ def render_regulation_intelligence(result):
 # ==============================================================================
 # TAB 4: EVACUATION SCENARIOS
 # ==============================================================================
+def toggle_scenario_details(scenario_id: str) -> None:
+    """Open one scenario workspace, or close it when already selected."""
+    current_id = st.session_state.get("selected_scenario_id")
+    st.session_state.selected_scenario_id = None if current_id == scenario_id else scenario_id
+
+
 def render_evacuation_scenarios(result):
     """Render Evacuation Scenarios panel."""
     st.markdown('<div class="section-header">🚨 Evacuation Scenarios</div>', unsafe_allow_html=True)
@@ -1346,10 +1352,10 @@ def render_evacuation_scenarios(result):
     
     # Display scenarios
     st.markdown(f"### Showing {len(filtered)} of {len(scenarios)} Scenarios")
-    scenario_by_id = {scenario.scenario_id: scenario for scenario in scenarios}
     selected_id = st.session_state.get("selected_scenario_id")
-    if selected_id and selected_id not in scenario_by_id:
-        st.session_state.selected_scenario_id = filtered[0].scenario_id if filtered else scenarios[0].scenario_id
+    visible_scenario_ids = {scenario.scenario_id for scenario in filtered}
+    if selected_id and selected_id not in visible_scenario_ids:
+        st.session_state.selected_scenario_id = None
     
     for i, scenario in enumerate(filtered):
         # Determine border color based on risk
@@ -1382,12 +1388,14 @@ def render_evacuation_scenarios(result):
                 )
             
             with col_h3:
-                if st.button(
-                    "View Details",
+                is_selected = st.session_state.selected_scenario_id == scenario.scenario_id
+                st.button(
+                    "Close Details" if is_selected else "View Details",
                     key=f"details_btn_{scenario.scenario_id}",
-                    type="primary" if st.session_state.selected_scenario_id == scenario.scenario_id else "secondary",
-                ):
-                    st.session_state.selected_scenario_id = scenario.scenario_id
+                    type="primary" if is_selected else "secondary",
+                    on_click=toggle_scenario_details,
+                    args=(scenario.scenario_id,),
+                )
             
             # Metrics
             col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
@@ -1413,20 +1421,11 @@ def render_evacuation_scenarios(result):
                     for r in scenario.recommendations:
                         st.info(f"💡 {r}")
 
+            if st.session_state.selected_scenario_id == scenario.scenario_id:
+                render_selected_scenario_details(result, scenario)
+
             st.markdown("---")
 
-    selected_scenario = scenario_by_id.get(st.session_state.get("selected_scenario_id"))
-    if selected_scenario:
-        st.markdown("### Selected Scenario Inspection Workspace")
-        if selected_scenario.scenario_id not in {scenario.scenario_id for scenario in filtered}:
-            st.caption("The selected scenario is outside the current filter view; details remain attached to the original scenario ID.")
-        close_col, _ = st.columns([1, 5])
-        with close_col:
-            if st.button("Close Details", key="close_selected_scenario_details", width='stretch'):
-                st.session_state.selected_scenario_id = None
-                st.rerun()
-        render_selected_scenario_details(result, selected_scenario)
-    
     # Route comparison chart
     st.markdown("### Route Comparison")
     fig_comp = create_route_comparison_chart(scenarios)
