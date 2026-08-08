@@ -90,6 +90,8 @@ class SpatialGraphBuilder:
             # disconnected because the source IFC has no semantic route links.
             if self.building.extraction_mode != "geometry_derived":
                 for stair_id, stair in self.building.stairs.items():
+                    if not stair.connected_spaces:
+                        continue
                     self.graph.add_node(
                         stair_id,
                         node_type='stair',
@@ -99,6 +101,7 @@ class SpatialGraphBuilder:
             
             # Add edges from verified or explicitly inferred connectivity only.
             self._add_connectivity_edges()
+            self._add_stair_edges()
             self.validation = self.validate_graph()
             
             logger.info(f"Graph built: {self.graph.number_of_nodes()} nodes, "
@@ -133,6 +136,23 @@ class SpatialGraphBuilder:
             return
         logger.warning("No verified or explicitly inferred door-space connectivity found; graph edges were not fabricated.")
 
+    def _add_stair_edges(self) -> None:
+        """Add labelled stair-space edges when the parser found touching geometry."""
+        for stair_id, stair in self.building.stairs.items():
+            if stair_id not in self.graph:
+                continue
+            for space_id in stair.connected_spaces:
+                if space_id not in self.graph:
+                    continue
+                edge_type = stair.connection_source or "inferred_stair_geometry"
+                self.graph.add_edge(
+                    space_id,
+                    stair_id,
+                    weight=self._space_to_stair_distance(space_id, stair),
+                    edge_type=edge_type,
+                    inferred=edge_type.startswith("inferred"),
+                )
+
     def _space_to_door_distance(self, space_id: str, door: DoorData) -> float:
         """Calculate distance from a file-derived space center to a connection."""
         space = self.building.spaces[space_id]
@@ -150,6 +170,33 @@ class SpatialGraphBuilder:
                 (center.x - door.location.x) ** 2
                 + (center.y - door.location.y) ** 2
                 + (center.z - door.location.z) ** 2
+            ),
+        )
+
+    def _space_to_stair_distance(self, space_id: str, stair) -> float:
+        """Estimate travel distance between a space and touching stair geometry."""
+        space_bounds = self.building.spaces[space_id].bounding_box
+        stair_bounds = stair.bounding_box
+        if not space_bounds or not stair_bounds:
+            return 5.0
+        space_min, space_max = space_bounds
+        stair_min, stair_max = stair_bounds
+        space_center = Point3D(
+            (space_min.x + space_max.x) / 2,
+            (space_min.y + space_max.y) / 2,
+            (space_min.z + space_max.z) / 2,
+        )
+        stair_center = Point3D(
+            (stair_min.x + stair_max.x) / 2,
+            (stair_min.y + stair_max.y) / 2,
+            (stair_min.z + stair_max.z) / 2,
+        )
+        return max(
+            0.1,
+            math.sqrt(
+                (space_center.x - stair_center.x) ** 2
+                + (space_center.y - stair_center.y) ** 2
+                + (space_center.z - stair_center.z) ** 2
             ),
         )
     
@@ -203,7 +250,7 @@ class SpatialGraphBuilder:
             )
             
         except nx.NetworkXNoPath:
-            logger.warning(f"No path found from {origin} to {destination}")
+            logger.debug(f"No path found from {origin} to {destination}")
             return None
         except Exception as e:
             logger.error(f"Error finding path: {e}")
@@ -318,6 +365,11 @@ class SpatialGraphBuilder:
         doors_without_spaces = sorted(
             door_id for door_id in door_ids if not self.building.doors[door_id].connected_spaces
         )
+        stairs_without_spaces = sorted(
+            stair_id
+            for stair_id, stair in self.building.stairs.items()
+            if not stair.connected_spaces
+        )
         spaces_without_exit_route = []
         for space_id in space_ids:
             if not self.find_paths_to_exits(space_id):
@@ -340,6 +392,7 @@ class SpatialGraphBuilder:
             "inferred_edges_count": inferred_edges,
             "disconnected_spaces": disconnected_spaces,
             "doors_without_connected_spaces": doors_without_spaces,
+            "stairs_without_connected_spaces": stairs_without_spaces,
             "spaces_without_exit_route": sorted(spaces_without_exit_route),
             "graph_confidence_score": round(topology_confidence, 2),
         }

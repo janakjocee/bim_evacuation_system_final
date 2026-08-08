@@ -141,6 +141,51 @@ def test_geometry_derived_graph_does_not_add_disconnected_stair_nodes():
     assert "STAIR1" not in graph.graph
 
 
+def test_semantic_graph_connects_storeys_through_geometry_inferred_stair():
+    building = BuildingData(id="B1", name="Two Storey Test")
+    building.spaces["GROUND"] = SpaceData(
+        id="GROUND",
+        name="Ground Lobby",
+        area=20,
+        bounding_box=(Point3D(0, 0, 0), Point3D(4, 4, 3)),
+    )
+    building.spaces["UPPER"] = SpaceData(
+        id="UPPER",
+        name="Upper Lobby",
+        area=20,
+        bounding_box=(Point3D(0, 0, 3), Point3D(4, 4, 6)),
+    )
+    building.stairs["STAIR1"] = StairData(
+        id="STAIR1",
+        name="Main Stair",
+        width=1.2,
+        riser_height=0.17,
+        tread_length=0.25,
+        connected_spaces=["GROUND", "UPPER"],
+        bounding_box=(Point3D(1, 1, 0), Point3D(3, 3, 6)),
+        connection_source="inferred_stair_geometry",
+    )
+    exit_door = DoorData(
+        id="EXIT",
+        name="Final Exit",
+        width=1.2,
+        height=2.1,
+        location=Point3D(0, 2, 0),
+        is_exit=True,
+        connected_spaces=["GROUND"],
+    )
+    building.doors = {"EXIT": exit_door}
+    building.exits = {"EXIT": exit_door}
+
+    graph = SpatialGraphBuilder(building)
+    assert graph.build()
+    route = graph.find_shortest_path("UPPER", "EXIT")
+
+    assert route is not None
+    assert route.path == ["UPPER", "STAIR1", "GROUND", "EXIT"]
+    assert route.inferred_edge_count == 2
+
+
 def test_graph_does_not_fabricate_cyclic_connectivity():
     building = BuildingData(id="B1", name="No Connectivity")
     building.spaces["S1"] = SpaceData(id="S1", name="Room A", area=20)

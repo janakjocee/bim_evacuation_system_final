@@ -10,6 +10,7 @@ import math
 try:
     import ifcopenshell
     import ifcopenshell.geom
+    import ifcopenshell.util.placement
     from ifcopenshell import entity_instance
     IFC_AVAILABLE = True
 except ImportError:
@@ -73,6 +74,9 @@ class StairData:
     riser_height: float
     tread_length: float
     connected_levels: List[str] = field(default_factory=list)
+    connected_spaces: List[str] = field(default_factory=list)
+    bounding_box: Optional[Tuple[Point3D, Point3D]] = None
+    connection_source: str = "unconnected"
     data_quality_flags: List[str] = field(default_factory=list)
     assumptions: Dict[str, str] = field(default_factory=dict)
 
@@ -236,7 +240,7 @@ class IFCParser:
                     data_quality_flags=flags,
                     assumptions=assumptions,
                     width_confidence=confidence,
-                    is_fire_door=self._property_bool(properties, "FireRating") or self._property_bool(properties, "FireExit"),
+                    is_fire_door=self._property_has_rating(properties, "FireRating") or self._property_bool(properties, "FireExit"),
                     is_smoke_stop=self._property_bool(properties, "SmokeStop") or self._property_bool(properties, "SmokeSeal"),
                 )
                 building.doors[door.id] = door
@@ -257,15 +261,47 @@ class IFCParser:
                     width = 1.2
                     assumptions["width"] = "Assumed 1.2m because no stair width property was found."
                     flags.append("missing_stair_width_assumed")
+                bounds = self._get_bounding_box(ifc_stair)
+                if bounds is None:
+                    child_bounds = [
+                        self._get_bounding_box(child)
+                        for relation in getattr(ifc_stair, "IsDecomposedBy", []) or []
+                        for child in getattr(relation, "RelatedObjects", []) or []
+                    ]
+                    bounds = self._combined_bounds([item for item in child_bounds if item])
                 stair = StairData(
                     id=ifc_stair.GlobalId,
                     name=ifc_stair.Name or "Unnamed Stair",
                     width=width,
                     riser_height=0.17,
                     tread_length=0.25,
+                    bounding_box=bounds,
                     assumptions=assumptions,
                     data_quality_flags=flags,
                 )
+                if bounds:
+                    candidates = sorted(
+                        (
+                            self._box_to_box_distance(bounds, space.bounding_box),
+                            space_id,
+                        )
+                        for space_id, space in building.spaces.items()
+                        if space.bounding_box
+                    )
+                    stair.connected_spaces = [
+                        space_id for distance, space_id in candidates[:8] if distance <= 0.25
+                    ]
+                    if stair.connected_spaces:
+                        stair.connected_levels = sorted({
+                            building.spaces[space_id].level
+                            for space_id in stair.connected_spaces
+                            if building.spaces[space_id].level
+                        })
+                        stair.connection_source = "inferred_stair_geometry"
+                        stair.data_quality_flags.append("stair_space_connection_inferred_from_geometry")
+                        stair.assumptions["connectivity"] = (
+                            "Stair-space links inferred from touching IFC geometry and require expert review."
+                        )
                 building.stairs[stair.id] = stair
             except Exception as e:
                 logger.warning(f"Error extracting stair {ifc_stair.GlobalId}: {e}")
@@ -389,10 +425,30 @@ class IFCParser:
             return bool(value)
         if isinstance(value, str):
             normalized = value.strip().lower()
-            if normalized in {"false", "f", "no", "0", "none", "n/a", ""}:
+            if normalized in {"false", "f", "no", "0", "none", "n/a", "", "internal"}:
                 return False
-            return normalized in {"true", "t", "yes", "1", "external", "fire rated", "exit"} or bool(normalized)
+            return normalized in {"true", "t", "yes", "1", "external", "fire rated", "exit"}
         return False
+
+    @staticmethod
+    def _property_has_rating(properties: Dict[str, Any], name: str) -> bool:
+        """Return True only when a property contains an actual positive rating."""
+        value = next((v for k, v in properties.items() if str(k).lower() == name.lower()), None)
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return value > 0
+        if not isinstance(value, str):
+            return False
+
+        normalized = value.strip().lower()
+        if normalized in {
+            "", "false", "no", "none", "n/a", "not rated", "unrated", "fire rating",
+        }:
+            return False
+        if normalized in {"true", "yes", "rated", "fire rated"}:
+            return True
+        return any(character.isdigit() for character in normalized)
 
     def _connect_doors_to_spaces_from_boundaries(self, building: BuildingData) -> None:
         """Connect doors to spaces using IfcRelSpaceBoundary / opening fillings."""
@@ -494,12 +550,16 @@ class IFCParser:
         return "unknown"
     
     def _get_location(self, element) -> Point3D:
-        """Get element location."""
+        """Get the element origin in world coordinates."""
         try:
             placement = getattr(element, 'ObjectPlacement', None)
-            if placement and hasattr(placement, 'RelativePlacement'):
-                coords = placement.RelativePlacement.Location.Coordinates
-                return Point3D(x=coords[0], y=coords[1], z=coords[2] if len(coords) > 2 else 0)
+            if placement:
+                matrix = ifcopenshell.util.placement.get_local_placement(placement)
+                return Point3D(
+                    x=float(matrix[0, 3]),
+                    y=float(matrix[1, 3]),
+                    z=float(matrix[2, 3]),
+                )
         except Exception:
             pass
         return Point3D()
@@ -772,6 +832,19 @@ class IFCParser:
         dx = max(minimum.x - point.x, 0, point.x - maximum.x)
         dy = max(minimum.y - point.y, 0, point.y - maximum.y)
         dz = max(minimum.z - point.z, 0, point.z - maximum.z)
+        return math.sqrt(dx * dx + dy * dy + dz * dz)
+
+    @staticmethod
+    def _box_to_box_distance(
+        first: Tuple[Point3D, Point3D],
+        second: Tuple[Point3D, Point3D],
+    ) -> float:
+        """Return the shortest 3D distance between two axis-aligned boxes."""
+        first_min, first_max = first
+        second_min, second_max = second
+        dx = max(first_min.x - second_max.x, second_min.x - first_max.x, 0)
+        dy = max(first_min.y - second_max.y, second_min.y - first_max.y, 0)
+        dz = max(first_min.z - second_max.z, second_min.z - first_max.z, 0)
         return math.sqrt(dx * dx + dy * dy + dz * dz)
 
     @staticmethod

@@ -4,6 +4,9 @@ import json
 import subprocess
 import sys
 
+import numpy as np
+
+import src.bim_processing.ifc_parser as ifc_parser_module
 from src.bim_processing.ifc_parser import BuildingData, IFCParser, Point3D, SpaceData
 from src.bim_processing.ifc_validation import validate_ifc_model
 
@@ -96,6 +99,41 @@ def test_parser_uses_long_name_for_space_type():
         PredefinedType = "INTERNAL"
 
     assert parser._get_space_type(Space()) == "residential"
+
+
+def test_parser_resolves_nested_object_placement_to_world_coordinates(monkeypatch):
+    parser = IFCParser()
+    matrix = np.eye(4)
+    matrix[:3, 3] = [8.383, -15.553, 3.1]
+
+    class Element:
+        ObjectPlacement = object()
+
+    monkeypatch.setattr(
+        ifc_parser_module.ifcopenshell.util.placement,
+        "get_local_placement",
+        lambda placement: matrix,
+    )
+
+    assert parser._get_location(Element()) == Point3D(8.383, -15.553, 3.1)
+
+
+def test_parser_does_not_treat_placeholder_properties_as_true():
+    parser = IFCParser()
+
+    assert parser._property_bool({"IsExternal": "INTERNAL"}, "IsExternal") is False
+    assert parser._property_bool({"IsExternal": "unexpected label"}, "IsExternal") is False
+    assert parser._property_has_rating({"FireRating": "Fire Rating"}, "FireRating") is False
+    assert parser._property_has_rating({"FireRating": "FD60"}, "FireRating") is True
+
+
+def test_box_distance_detects_touching_stair_and_space_geometry():
+    stair_bounds = (Point3D(1, 1, 0), Point3D(3, 3, 6))
+    upper_space_bounds = (Point3D(0, 0, 3), Point3D(4, 4, 6))
+    distant_space_bounds = (Point3D(10, 10, 3), Point3D(14, 14, 6))
+
+    assert IFCParser._box_to_box_distance(stair_bounds, upper_space_bounds) == 0
+    assert IFCParser._box_to_box_distance(stair_bounds, distant_space_bounds) > 9
 
 
 def test_validate_ifcs_json_stdout_is_parseable_on_failure(tmp_path):
