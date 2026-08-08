@@ -3,6 +3,7 @@ Basic tests for BIM Evacuation System.
 """
 import pytest
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 # Add src to path
@@ -28,6 +29,7 @@ from src.scenario.ifc_dataset_exporter import building_to_worst_case_dataset
 from src.scenario.worst_case_engine import validate_scenario_dataset
 from src.pipeline.evacuation_pipeline import EvacuationPipeline, PipelineResult
 from src.pipeline.manual_corrections import apply_manual_corrections
+from src.ui.export_helpers import build_scenarios_csv, build_scenarios_xml, safe_uploaded_filename
 
 
 class TestConfigLoader:
@@ -293,6 +295,29 @@ def test_structured_parser_extracts_multiple_rules_from_one_clause():
     assert metrics["min_exit_width"] == 1.2
 
 
+def test_parser_does_not_inherit_exit_metric_for_unrelated_measurement():
+    parser = RegulationParser()
+    parser.parse(
+        "2.1 Exit widths\n"
+        "Final exit doors shall have a minimum clear opening width of 1050mm.\n"
+        "External walls should be 1000mm or more from the relevant boundary."
+    )
+
+    exit_rules = [rule for rule in parser.rules if rule.metric == "min_exit_width"]
+
+    assert [rule.value for rule in exit_rules] == [1.05]
+
+
+def test_parser_does_not_apply_per_person_formula_as_fixed_width():
+    parser = RegulationParser()
+    parser.parse(
+        "2.2 Exit capacity\n"
+        "For more than 220 occupants, the minimum exit width is 5 mm per person."
+    )
+
+    assert not [rule for rule in parser.rules if rule.metric == "min_exit_width"]
+
+
 def test_structured_rules_override_defaults_and_attach_evidence():
     checker = ComplianceChecker()
     checker.update_regulation_rules([
@@ -315,6 +340,73 @@ def test_structured_rules_override_defaults_and_attach_evidence():
     assert check.status == ComplianceStatus.NON_COMPLIANT
     assert check.evidence_source == "uploaded_regulation_rule"
     assert check.evidence[0]["rule_id"] == "2.1-R1"
+
+
+def test_uploaded_rule_candidates_use_conservative_selection():
+    checker = ComplianceChecker()
+    checker.update_regulation_rules([
+        RegulationRule(
+            rule_id="A",
+            source_section="A",
+            source_text="Travel distance must not exceed 45 metres.",
+            applies_to="route",
+            condition="general",
+            metric="max_travel_distance",
+            operator="<=",
+            value=45.0,
+            unit="metres",
+        ),
+        RegulationRule(
+            rule_id="B",
+            source_section="B",
+            source_text="Travel distance must not exceed 30 metres.",
+            applies_to="route",
+            condition="general",
+            metric="max_travel_distance",
+            operator="<=",
+            value=30.0,
+            unit="metres",
+        ),
+    ])
+
+    summary = checker.get_rule_application_summary()
+    selected = next(item for item in summary["active_thresholds"] if item["rule_key"] == "max_travel_distance")
+
+    assert selected["value"] == 30.0
+    assert selected["candidate_count"] == 2
+    assert selected["selection_strategy"] == "conservative uploaded candidate"
+
+
+def test_route_check_uses_single_and_alternative_escape_thresholds():
+    checker = ComplianceChecker()
+    checker.update_regulation_rules([
+        RegulationRule(
+            rule_id="SINGLE",
+            source_section="T",
+            source_text="Single direction travel must not exceed 18 metres.",
+            applies_to="route",
+            condition="single_direction_escape",
+            metric="max_single_direction_travel_distance",
+            operator="<=",
+            value=18.0,
+            unit="metres",
+        ),
+        RegulationRule(
+            rule_id="ALT",
+            source_section="T",
+            source_text="Alternative travel must not exceed 45 metres.",
+            applies_to="route",
+            condition="alternative_escape",
+            metric="max_alternative_travel_distance",
+            operator="<=",
+            value=45.0,
+            unit="metres",
+        ),
+    ])
+    space = SpaceData(id="S1", name="Room", area=10)
+
+    assert checker.check_route(space, 30.0, route_count=1)[0].status == ComplianceStatus.NON_COMPLIANT
+    assert checker.check_route(space, 30.0, route_count=2)[0].status == ComplianceStatus.COMPLIANT
 
 
 def test_rule_application_summary_reports_defaults_and_unsupported_rules():
@@ -543,7 +635,13 @@ def test_manual_corrections_update_exit_width_and_connectivity():
         building=building,
         regulation_application={
             "active_thresholds": [
-                {"rule_key": "min_exit_width", "value": 1.1},
+                {
+                    "rule_key": "min_exit_width",
+                    "value": 1.1,
+                    "source": "uploaded_regulation_rule",
+                    "rule_id": "UPLOADED-EXIT",
+                    "source_text": "Final exits shall have a minimum width of 1.1 metres.",
+                },
                 {"rule_key": "max_travel_distance", "value": 30.0},
             ]
         },
@@ -563,6 +661,9 @@ def test_manual_corrections_update_exit_width_and_connectivity():
     assert corrected.graph_stats["edge_count"] == 1
     assert corrected.scenarios
     assert corrected.scenarios[0].evacuation_route.destination == "D1"
+    checks = corrected.scenarios[0].decision_trace[2]["output"]["checks"]
+    exit_width_check = next(check for check in checks if check["regulation_id"] == "min_exit_width")
+    assert exit_width_check["evidence_source"] == "uploaded_regulation_rule"
 
 
 def test_ifc_derived_worst_case_dataset_validates():
@@ -631,6 +732,37 @@ def test_pipeline_exports_json_and_csv_for_generated_scenarios(tmp_path):
     assert Path(exported["csv"]).exists()
     assert "synthetic.ifc" in Path(exported["json"]).read_text()
     assert scenarios[0].scenario_id in Path(exported["csv"]).read_text()
+
+
+def test_ui_export_helpers_produce_safe_names_and_well_formed_outputs():
+    building = BuildingData(id="B1", name="Clinic & Lab <North>")
+    building.spaces["S1"] = SpaceData(id="S1", name="Room", area=20)
+    exit_door = DoorData(
+        id="E1",
+        name="Exit",
+        width=1.2,
+        height=2.1,
+        location=Point3D(),
+        is_exit=True,
+        connected_spaces=["S1"],
+    )
+    building.doors = {"E1": exit_door}
+    building.exits = {"E1": exit_door}
+    graph = SpatialGraphBuilder(building)
+    assert graph.build()
+    scenarios = ScenarioGenerator(building, graph).generate(max_scenarios=1)
+    scenarios[0].name = "Scenario <A&B>"
+    result = PipelineResult(success=True, building=building, scenarios=scenarios)
+
+    xml_text = build_scenarios_xml(result, "2026-08-08T14:00:00")
+    xml_root = ET.fromstring(xml_text)
+    csv_text = build_scenarios_csv(scenarios)
+
+    assert xml_root.find("Building").attrib["name"] == building.name
+    assert xml_root.find("./Scenarios/Scenario/Name").text == scenarios[0].name
+    assert scenarios[0].scenario_id in csv_text
+    assert safe_uploaded_filename("../../unsafe/model.ifc") == "model.ifc"
+    assert safe_uploaded_filename(r"C:\\uploads\\model.ifc") == "model.ifc"
 
 
 def test_ifc_dataset_exporter_adds_review_occupancy_for_geometry_spaces():

@@ -105,9 +105,10 @@ class ScenarioGenerator:
         rag_engine: Any = None,
     ) -> None:
         """Set regulations from parsed clauses."""
-        self.compliance_checker.update_regulations(clauses)
         if rules:
             self.compliance_checker.update_regulation_rules(rules)
+        else:
+            self.compliance_checker.update_regulations(clauses)
         if rag_engine:
             self.compliance_checker.set_evidence_provider(rag_engine.retrieve)
     
@@ -160,7 +161,11 @@ class ScenarioGenerator:
         compliance_checks = []
         
         # Check route distance
-        route_checks = self.compliance_checker.check_route(space, best_route.distance)
+        route_checks = self.compliance_checker.check_route(
+            space,
+            best_route.distance,
+            route_count=len(routes),
+        )
         compliance_checks.extend(route_checks)
         compliance_checks.extend(self.compliance_checker.check_route_redundancy(
             space,

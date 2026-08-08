@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 from ..bim_processing.feature_extractor import FeatureExtractor
 from ..bim_processing.spatial_graph import SpatialGraphBuilder
 from ..scenario.scenario_generator import ScenarioGenerator
+from ..nlp.regulation_parser import RegulationRule
 from .evacuation_pipeline import PipelineResult
 
 
@@ -82,6 +83,22 @@ def _restore_active_thresholds(scenario_generator: ScenarioGenerator, regulation
         value = row.get("value")
         if key and isinstance(value, (int, float)):
             scenario_generator.compliance_checker.regulations[key] = float(value)
+            if row.get("source") == "uploaded_regulation_rule":
+                rule = RegulationRule(
+                    rule_id=row.get("rule_id") or f"RESTORED-{key}",
+                    source_section=row.get("source_section") or row.get("rule_id") or "uploaded",
+                    source_text=row.get("source_text") or "Uploaded regulation threshold restored after manual correction.",
+                    applies_to="route" if "travel_distance" in key else "building_element",
+                    condition="general",
+                    metric=key,
+                    operator="<=" if key.startswith("max_") else ">=",
+                    value=float(value),
+                    unit="m",
+                    confidence=0.75,
+                    extracted_by="manual_correction_restore",
+                )
+                scenario_generator.compliance_checker.rule_sources[key] = rule
+                scenario_generator.compliance_checker.rule_candidates[key] = [rule]
 
 
 def _normalise_space_list(value: Any, spaces: Dict[str, Any]) -> List[str]:

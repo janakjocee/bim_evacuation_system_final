@@ -169,10 +169,10 @@ class RegulationParser:
             operator = self._operator_from_constraint(constraint_type)
 
             if metric == "general" or operator == "":
-                metric = self._metric_from_constraint(text, clause.applies_to, clause.constraint_type)
-                operator = self._operator_from_constraint(clause.constraint_type)
-
-            if metric == "general" or operator == "":
+                continue
+            if re.search(r'\bper\s+(?:person|occupant)\b', source_text, re.IGNORECASE):
+                # Per-person width formulas need an occupant calculation and must
+                # not be misapplied as a global fixed-width threshold.
                 continue
 
             key = (metric, operator, value, source_text)
@@ -200,6 +200,8 @@ class RegulationParser:
         """Determine what building element the clause applies to."""
         text_lower = text.lower()
         
+        if 'travel' in text_lower or 'distance' in text_lower:
+            return 'route'
         if 'door' in text_lower or 'exit' in text_lower:
             return 'door'
         elif 'stair' in text_lower:
@@ -208,9 +210,7 @@ class RegulationParser:
             return 'corridor'
         elif 'space' in text_lower or 'room' in text_lower:
             return 'space'
-        elif 'travel' in text_lower or 'distance' in text_lower:
-            return 'route'
-        
+
         return 'general'
     
     def _determine_constraint_type(self, text: str) -> str:
@@ -348,17 +348,27 @@ class RegulationParser:
         accurate splitting, with a regex fallback otherwise.
         """
         if self.nlp is not None:
-            doc = self.nlp(text)
-            return [
-                {"text": sent.text.strip(), "start": sent.start_char, "end": sent.end_char}
-                for sent in doc.sents
-                if sent.text.strip()
-            ]
+            line_matches = list(re.finditer(r'[^\r\n]+', text))
+            spans = []
+            for line_match, doc in zip(
+                line_matches,
+                self.nlp.pipe([match.group(0) for match in line_matches]),
+            ):
+                for sent in doc.sents:
+                    source_text = sent.text.strip()
+                    if source_text:
+                        start = line_match.start() + sent.start_char
+                        spans.append({
+                            "text": source_text,
+                            "start": start,
+                            "end": line_match.start() + sent.end_char,
+                        })
+            return spans
 
         # Regex fallback when spaCy is not available
         spans = []
         start = 0
-        for match in re.finditer(r'(?<=[.!?])\s+', text):
+        for match in re.finditer(r'(?<=[.!?])\s+|[\r\n]+', text):
             end = match.start()
             sentence = text[start:end].strip()
             if sentence:

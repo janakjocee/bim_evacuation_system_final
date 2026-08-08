@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import streamlit as st
 import pandas as pd
 import copy
+import hashlib
 import json
 import plotly.express as px
 import plotly.graph_objects as go
@@ -38,6 +39,7 @@ from src.ui.ui_components import (
     render_explanation_panel, render_expert_review_controls, create_export_summary
 )
 from src.ui.visualization_3d import create_ifc_3d_figure, create_ifc_plan_figure
+from src.ui.export_helpers import build_scenarios_csv, build_scenarios_xml, safe_uploaded_filename
 
 # ==============================================================================
 # PAGE CONFIGURATION
@@ -622,13 +624,15 @@ def render_sidebar():
 # FILE PROCESSING
 # ==============================================================================
 def save_uploaded_file(uploaded_file, directory: str) -> str:
-    """Save uploaded file and return path."""
-    import os
+    """Save an upload under a collision-safe local name and return its path."""
     save_dir = Path(directory)
     save_dir.mkdir(parents=True, exist_ok=True)
-    file_path = save_dir / uploaded_file.name
+    payload = bytes(uploaded_file.getbuffer())
+    digest = hashlib.sha256(payload).hexdigest()[:12]
+    safe_name = safe_uploaded_filename(uploaded_file.name)
+    file_path = save_dir / f"{digest}_{safe_name}"
     with open(file_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
+        f.write(payload)
     return str(file_path)
 
 def process_files(ifc_file, regulation_file, max_scenarios, enable_rag):
@@ -663,6 +667,7 @@ def process_files(ifc_file, regulation_file, max_scenarios, enable_rag):
             max_scenarios=max_scenarios,
             enable_rag=enable_rag,
         )
+        result.source_file_name = safe_uploaded_filename(ifc_file.name, "uploaded.ifc")
         
         progress_bar.progress(100, text="Complete!")
         time.sleep(0.5)
@@ -1209,7 +1214,7 @@ def render_regulation_intelligence(result):
         cols = st.columns(4)
         cols[0].metric("Extracted Clauses", getattr(result, "regulation_clause_count", 0))
         cols[1].metric("Numeric Rules", getattr(result, "regulation_rule_count", 0))
-        cols[2].metric("Applied Uploaded Rules", application.get("uploaded_rule_count", 0))
+        cols[2].metric("Supported Rule Candidates", application.get("uploaded_rule_count", 0))
         cols[3].metric("Unsupported Rules", application.get("unsupported_rule_count", 0))
 
         active_rows = application.get("active_thresholds", [])
@@ -1224,13 +1229,14 @@ def render_regulation_intelligence(result):
         st.info("No pipeline result is available yet.")
     
     constraints_data = [
-        {'Parameter': 'Maximum Travel Distance', 'Value': '45.0 m', 'Source': 'AD B 2.2.1', 'Status': '✓ Active'},
-        {'Parameter': 'Minimum Door Width', 'Value': '0.75 m', 'Source': 'AD B 2.3.1', 'Status': '✓ Active'},
-        {'Parameter': 'Minimum Exit Width', 'Value': '1.05 m', 'Source': 'AD B 2.3.2', 'Status': '✓ Active'},
-        {'Parameter': 'Minimum Corridor Width', 'Value': '1.20 m', 'Source': 'AD B 2.10.1', 'Status': '✓ Active'},
-        {'Parameter': 'Max Riser Height', 'Value': '0.19 m', 'Source': 'AD B 2.4.2', 'Status': '✓ Active'},
-        {'Parameter': 'Min Tread Length', 'Value': '0.25 m', 'Source': 'AD B 2.4.3', 'Status': '✓ Active'},
-        {'Parameter': 'Exit Capacity', 'Value': '90 p/min/m', 'Source': 'AD B 2.5.2', 'Status': '✓ Active'},
+        {'Parameter': 'Maximum Travel Distance', 'Value': '45.0 m', 'Source': 'Prototype configuration', 'Status': 'Default only'},
+        {'Parameter': 'Minimum Door Width', 'Value': '0.75 m', 'Source': 'Prototype configuration', 'Status': 'Default only'},
+        {'Parameter': 'Minimum Exit Width', 'Value': '1.05 m', 'Source': 'Prototype configuration', 'Status': 'Default only'},
+        {'Parameter': 'Minimum Corridor Width', 'Value': '1.20 m', 'Source': 'Prototype configuration', 'Status': 'Default only'},
+        {'Parameter': 'Minimum Stair Width', 'Value': '1.00 m', 'Source': 'Prototype configuration', 'Status': 'Default only'},
+        {'Parameter': 'Max Riser Height', 'Value': '0.19 m', 'Source': 'Prototype configuration', 'Status': 'Default only'},
+        {'Parameter': 'Min Tread Length', 'Value': '0.25 m', 'Source': 'Prototype configuration', 'Status': 'Default only'},
+        {'Parameter': 'Exit Capacity', 'Value': '90 p/min/m', 'Source': 'Prototype configuration', 'Status': 'Default only'},
     ]
     
     df_constraints = pd.DataFrame(constraints_data)
@@ -1342,8 +1348,6 @@ def render_evacuation_scenarios(result):
     selected_id = st.session_state.get("selected_scenario_id")
     if selected_id and selected_id not in scenario_by_id:
         st.session_state.selected_scenario_id = filtered[0].scenario_id if filtered else scenarios[0].scenario_id
-    elif not selected_id and filtered:
-        st.session_state.selected_scenario_id = filtered[0].scenario_id
     
     for i, scenario in enumerate(filtered):
         # Determine border color based on risk
@@ -1808,13 +1812,11 @@ def render_expert_review(result):
             st.session_state.expert_reviews[review_key] = "Not Reviewed"
         
         # Decision buttons
-        st.markdown("**Engineering Decision:**")
-        
         decision = st.radio(
-            "",
+            "Engineering Decision",
             options=["Not Reviewed", "✅ Approved", "⚠️ Needs Revision", "❌ Rejected"],
             key=f"decision_radio_{scenario_id}",
-            index=0
+            index=0,
         )
         
         # Comments
@@ -1929,87 +1931,42 @@ def render_export(result):
         st.markdown("**JSON Export**")
         st.markdown("<small>Complete machine-readable evidence package</small>", unsafe_allow_html=True)
         
-        if st.button("📄 Export JSON", key="export_json"):
-            try:
-                export_data = build_complete_export_payload(result)
-                json_str = json.dumps(export_data, indent=2)
-                
-                st.download_button(
-                    label="⬇️ Download JSON",
-                    data=json_str,
-                    file_name=f"fire_strategy_{result.building.name if result.building else 'report'}_{time.strftime('%Y%m%d')}.json",
-                    mime="application/json",
-                    width='stretch'
-                )
-            except Exception as e:
-                st.error(f"Export error: {e}")
+        export_data = build_complete_export_payload(result)
+        json_str = json.dumps(export_data, indent=2)
+        st.download_button(
+            label="⬇️ Download JSON",
+            data=json_str,
+            file_name=f"fire_strategy_{safe_uploaded_filename(result.building.name if result.building else 'report')}_{time.strftime('%Y%m%d')}.json",
+            mime="application/json",
+            width='stretch',
+        )
     
     with col_csv:
         st.markdown("**CSV Export**")
         st.markdown("<small>Spreadsheet format for data analysis</small>", unsafe_allow_html=True)
         
-        if st.button("📊 Export CSV", key="export_csv"):
-            try:
-                import csv
-                import io
-                
-                if result.scenarios:
-                    output = io.StringIO()
-                    fieldnames = ['scenario_id', 'name', 'risk_level', 'compliance_score', 
-                                  'confidence_score', 'distance', 'estimated_time', 'violations']
-                    writer = csv.DictWriter(output, fieldnames=fieldnames)
-                    writer.writeheader()
-                    
-                    for s in result.scenarios:
-                        writer.writerow({
-                            'scenario_id': s.scenario_id,
-                            'name': s.name,
-                            'risk_level': s.risk_level.value,
-                            'compliance_score': s.compliance_score,
-                            'confidence_score': s.confidence_score,
-                            'distance': s.evacuation_route.distance,
-                            'estimated_time': s.evacuation_route.estimated_time,
-                            'violations': len(s.violated_regulations)
-                        })
-                    
-                    st.download_button(
-                        label="⬇️ Download CSV",
-                        data=output.getvalue(),
-                        file_name=f"fire_strategy_{result.building.name if result.building else 'report'}_{time.strftime('%Y%m%d')}.csv",
-                        mime="text/csv",
-                        width='stretch'
-                    )
-            except Exception as e:
-                st.error(f"Export error: {e}")
+        csv_data = build_scenarios_csv(result.scenarios)
+        st.download_button(
+            label="⬇️ Download CSV",
+            data=csv_data,
+            file_name=f"fire_strategy_{safe_uploaded_filename(result.building.name if result.building else 'report')}_{time.strftime('%Y%m%d')}.csv",
+            mime="text/csv",
+            width='stretch',
+            disabled=not bool(result.scenarios),
+        )
     
     with col_xml:
         st.markdown("**XML Export**")
         st.markdown("<small>BIM interoperability format</small>", unsafe_allow_html=True)
         
-        if st.button("📋 Export XML", key="export_xml"):
-            try:
-                xml_content = f"""<?xml version="1.0" encoding="UTF-8"?>
-<FireStrategyReport generated="{time.strftime('%Y-%m-%dT%H:%M:%S')}">
-    <Building name="{result.building.name if result.building else 'Unknown'}"/>
-    <Scenarios count="{len(result.scenarios)}">
-        {''.join([f'''
-        <Scenario id="{s.scenario_id}" risk="{s.risk_level.value}">
-            <Name>{s.name}</Name>
-            <Route distance="{s.evacuation_route.distance:.2f}" time="{s.evacuation_route.estimated_time:.1f}"/>
-            <Compliance score="{s.compliance_score:.3f}" status="{s.compliance_status.value}"/>
-        </Scenario>''' for s in result.scenarios])}
-    </Scenarios>
-</FireStrategyReport>"""
-                
-                st.download_button(
-                    label="⬇️ Download XML",
-                    data=xml_content,
-                    file_name=f"fire_strategy_{result.building.name if result.building else 'report'}_{time.strftime('%Y%m%d')}.xml",
-                    mime="application/xml",
-                    width='stretch'
-                )
-            except Exception as e:
-                st.error(f"Export error: {e}")
+        xml_content = build_scenarios_xml(result, time.strftime('%Y-%m-%dT%H:%M:%S'))
+        st.download_button(
+            label="⬇️ Download XML",
+            data=xml_content,
+            file_name=f"fire_strategy_{safe_uploaded_filename(result.building.name if result.building else 'report')}_{time.strftime('%Y%m%d')}.xml",
+            mime="application/xml",
+            width='stretch',
+        )
     
     # Full report generation
     st.markdown("---")

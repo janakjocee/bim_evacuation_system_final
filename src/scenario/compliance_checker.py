@@ -39,6 +39,7 @@ class ComplianceChecker:
         self.regulations = self._load_default_regulations()
         self.default_regulations = dict(self.regulations)
         self.rule_sources: Dict[str, RegulationRule] = {}
+        self.rule_candidates: Dict[str, List[RegulationRule]] = {}
         self.unsupported_rules: List[RegulationRule] = []
         self.evidence_provider: Optional[Callable[[str, int], List[Any]]] = None
     
@@ -49,6 +50,7 @@ class ComplianceChecker:
             'min_door_width': self.config.get('regulations.min_door_width', 0.75),
             'min_exit_width': self.config.get('regulations.min_exit_width', 1.05),
             'min_corridor_width': self.config.get('regulations.min_corridor_width', 1.2),
+            'min_stair_width': self.config.get('regulations.min_stair_width', 1.0),
             'max_riser_height': self.config.get('regulations.max_riser_height', 0.19),
             'min_tread_length': self.config.get('regulations.min_tread_length', 0.25),
         }
@@ -92,14 +94,24 @@ class ComplianceChecker:
         """
         applied = 0
         self.unsupported_rules = []
+        self.rule_candidates = {}
+        grouped_rules: Dict[str, List[RegulationRule]] = {}
         for rule in rules:
             key = self._map_rule_to_rule_key(rule)
             if key:
-                self.regulations[key] = rule.value
-                self.rule_sources[key] = rule
-                applied += 1
+                grouped_rules.setdefault(key, []).append(rule)
             else:
                 self.unsupported_rules.append(rule)
+
+        for key, candidates in grouped_rules.items():
+            if key.startswith("max_"):
+                selected = min(candidates, key=lambda item: (item.value, -item.confidence))
+            else:
+                selected = max(candidates, key=lambda item: (item.value, item.confidence))
+            self.rule_candidates[key] = candidates
+            self.regulations[key] = selected.value
+            self.rule_sources[key] = selected
+            applied += 1
 
         logger.info(f"Updated regulations with {len(rules)} structured rules; applied {applied} constraints")
 
@@ -142,11 +154,17 @@ class ComplianceChecker:
                 "source": "uploaded_regulation_rule" if rule else "default_config",
                 "rule_id": rule.rule_id if rule else "",
                 "source_text": rule.source_text[:300] if rule else "",
+                "candidate_count": len(self.rule_candidates.get(key, [])),
+                "selection_strategy": (
+                    "conservative uploaded candidate"
+                    if self.rule_candidates.get(key)
+                    else "configured default"
+                ),
             })
 
         return {
             "active_threshold_count": len(active_thresholds),
-            "uploaded_rule_count": len(self.rule_sources),
+            "uploaded_rule_count": sum(len(items) for items in self.rule_candidates.values()),
             "default_threshold_count": sum(1 for item in active_thresholds if item["source"] == "default_config"),
             "unsupported_rule_count": len(self.unsupported_rules),
             "active_thresholds": active_thresholds,
@@ -176,8 +194,6 @@ class ComplianceChecker:
             "min_stair_width",
             "max_riser_height",
             "min_tread_length",
-            "max_occupancy",
-            "max_area",
         }:
             if rule.metric.startswith("max_") and rule.operator == "<=":
                 return rule.metric
@@ -269,7 +285,7 @@ class ComplianceChecker:
         
         return checks
     
-    def check_route(self, origin: SpaceData, distance: float) -> List[ComplianceCheck]:
+    def check_route(self, origin: SpaceData, distance: float, route_count: int = 1) -> List[ComplianceCheck]:
         """
         Check evacuation route compliance.
         
@@ -283,7 +299,12 @@ class ComplianceChecker:
         checks = []
         
         # Check maximum travel distance
-        rule_key = 'max_travel_distance'
+        if route_count >= 2 and "max_alternative_travel_distance" in self.regulations:
+            rule_key = "max_alternative_travel_distance"
+        elif route_count < 2 and "max_single_direction_travel_distance" in self.regulations:
+            rule_key = "max_single_direction_travel_distance"
+        else:
+            rule_key = 'max_travel_distance'
         max_distance = self.regulations.get(rule_key, 45.0)
         
         status = ComplianceStatus.COMPLIANT if distance <= max_distance else ComplianceStatus.NON_COMPLIANT
