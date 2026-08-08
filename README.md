@@ -21,7 +21,7 @@ This MSc research prototype turns IFC/BIM building data into evacuation scenario
 This project does **not** use GPT, OpenAI, an autonomous agent, CFD, or a certified evacuation simulator to make fire-engineering decisions. The AI-assisted parts are:
 
 - **spaCy NLP** to split uploaded regulation text into clauses and detect simple constraints such as widths and travel distances.
-- **SentenceTransformers + FAISS RAG** to retrieve relevant uploaded regulation clauses when RAG grounding is enabled.
+- **Deterministic keyword grounding** for uploaded regulation evidence, with opt-in SentenceTransformers + FAISS vector retrieval for local research runs.
 - **Deterministic graph/rule algorithms** for route search, compliance screening, risk scoring and explanation traces.
 
 The system is fast because it performs lightweight BIM parsing, NetworkX shortest-path checks, simplified fire/smoke approximations and rule-based scoring. It is a screening and explanation prototype, not a final legal or professional fire-safety decision system.
@@ -44,7 +44,7 @@ This is an academic decision-support tool. It does **not** perform CFD, certifie
 - Clearly labelled 3D scenario schematics for demo fire and worst-case workflows.
 - Working scenario inspection workspace with highlighted route diagram, practical
   readiness checklist, evidence display and per-scenario download.
-- Regulation-oriented NLP/RAG workflow using spaCy, FAISS and SentenceTransformers.
+- Regulation-oriented NLP/RAG workflow using spaCy and stable keyword retrieval, with optional FAISS and SentenceTransformers.
 - Evacuation scenario generation with distance, time, confidence, compliance and risk.
 - Alternative route summaries and route-reliability labels for each generated scenario.
 - Practical compliance screening for travel distance, final/route door width,
@@ -244,14 +244,15 @@ The practical feature benchmark and researched future-work boundary is documente
 docs/practical_benchmark.md
 ```
 
-The final completion pass, test summary, browser smoke checks and viva/review
-talking points are documented in:
+The final 8 August release-hardening pass, 23-file compatibility matrix,
+regulation evidence, executable UI tests and viva/review talking points are
+documented in:
 
 ```text
 docs/final_completion_report.md
 ```
 
-The latest practical IFC verification loop is documented in:
+The earlier June practical IFC verification loop is retained in:
 
 ```text
 docs/practical_ifc_verification.md
@@ -443,6 +444,7 @@ bim-evacuation-system-streamlit/
 │   ├── test_fire_model.py
 │   └── test_ifc_validation.py
 ├── requirements.txt
+├── requirements-vector-rag.txt
 └── README.md
 ```
 
@@ -457,8 +459,15 @@ python3 -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
-python -m spacy download en_core_web_sm
 streamlit run src/ui/streamlit_app.py
+```
+
+The public app uses deterministic keyword evidence retrieval. For an explicit
+local vector-RAG experiment, install the optional native ML stack and enable
+`rag.vector_enabled` in `config/settings.yaml`:
+
+```bash
+pip install -r requirements-vector-rag.txt
 ```
 
 Open:

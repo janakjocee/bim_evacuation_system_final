@@ -1,0 +1,7 @@
+# Optional local vector retrieval. The deployed app uses deterministic keyword
+# evidence retrieval unless config/settings.yaml sets rag.vector_enabled=true.
+-r requirements.txt
+
+sentence-transformers>=5.7.0,<6
+torch>=2.13.0,<3
+faiss-cpu>=1.15.0,<2

@@ -23,9 +23,6 @@ RUN pip install --upgrade pip setuptools wheel
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install spaCy model (do not put en-core-web-sm in requirements.txt)
-RUN python -m spacy download en_core_web_sm
-
 # Copy application code
 COPY src/ ./src/
 COPY config/ ./config/

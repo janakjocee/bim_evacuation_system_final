@@ -2085,7 +2085,7 @@ def main():
             </div>
             <br><br>
             <p style="color: #999; font-size: 0.9rem;">
-                <strong>Documented IFC targets:</strong> IFC2X3, IFC4, IFC4X3, IFC4X3_ADD2 | <strong>NLP:</strong> spaCy | <strong>RAG:</strong> FAISS + SentenceTransformers | <strong>Graph:</strong> NetworkX
+                <strong>Documented IFC targets:</strong> IFC2X3, IFC4, IFC4X3, IFC4X3_ADD2 | <strong>NLP:</strong> spaCy | <strong>RAG:</strong> keyword + optional vector retrieval | <strong>Graph:</strong> NetworkX
             </p>
         </div>
         """, unsafe_allow_html=True)

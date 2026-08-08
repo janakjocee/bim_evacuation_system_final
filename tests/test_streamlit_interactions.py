@@ -1,4 +1,6 @@
 """Executable Streamlit interaction tests for release-critical controls."""
+from pathlib import Path
+
 from streamlit.testing.v1 import AppTest
 
 from src.bim_processing.feature_extractor import FeatureExtractor
@@ -7,6 +9,13 @@ from src.bim_processing.ifc_validation import validate_ifc_model
 from src.bim_processing.spatial_graph import SpatialGraphBuilder
 from src.pipeline.evacuation_pipeline import PipelineResult
 from src.scenario.scenario_generator import ScenarioGenerator
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _app_test(path: str) -> AppTest:
+    return AppTest.from_file(str(REPO_ROOT / path), default_timeout=30)
 
 
 def _main_pipeline_result() -> PipelineResult:
@@ -60,7 +69,7 @@ def _button(app: AppTest, label: str):
 def test_main_scenario_details_close_reopen_review_and_exports():
     result = _main_pipeline_result()
     scenario = result.scenarios[0]
-    app = AppTest.from_file("src/ui/streamlit_app.py", default_timeout=30)
+    app = _app_test("src/ui/streamlit_app.py")
     app.session_state["processing_done"] = True
     app.session_state["pipeline_result"] = result
     app.session_state["baseline_pipeline_result"] = result
@@ -103,7 +112,7 @@ def test_main_scenario_details_close_reopen_review_and_exports():
 
 
 def test_fire_scenario_page_runs_and_exposes_result_exports():
-    app = AppTest.from_file("src/ui/pages/Fire_Scenario_Testing.py", default_timeout=30)
+    app = _app_test("src/ui/pages/Fire_Scenario_Testing.py")
     app.run(timeout=30)
     assert not app.exception
 
@@ -116,7 +125,7 @@ def test_fire_scenario_page_runs_and_exposes_result_exports():
 
 
 def test_worst_case_page_runs_ranks_and_exposes_result_exports():
-    app = AppTest.from_file("src/ui/pages/Worst_Case_Testing.py", default_timeout=30)
+    app = _app_test("src/ui/pages/Worst_Case_Testing.py")
     app.run(timeout=30)
     assert not app.exception
 

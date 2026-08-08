@@ -2,12 +2,12 @@
 # Python: 3.10.x
 
 # --- Core / config ---
-python-dotenv>=1.0.0
+python-dotenv>=1.2.2,<2
 PyYAML>=6.0
 loguru>=0.7.0
 tqdm>=4.65.0
-urllib3<2
-pytest>=8,<9
+urllib3>=2.7.0,<3
+pytest>=9.1.1,<10
 
 # --- Data / graph ---
 numpy==1.26.4
@@ -26,19 +26,21 @@ thinc==8.2.3
 spacy==3.7.5
 https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
 
-# --- ML / RAG ---
+# --- Regulation evidence retrieval ---
 scikit-learn>=1.3.0
-sentence-transformers==2.7.0
-torch==2.2.2
-faiss-cpu==1.7.4; python_version < "3.12"
-faiss-cpu>=1.8.0,<2; python_version >= "3.12"
+# Keyword retrieval is the stable default. Install requirements-vector-rag.txt
+# only when local vector embeddings are explicitly required.
 
 # --- UI ---
-streamlit==1.50.0
+streamlit>=1.61.1,<2
 plotly>=5.15.0
 pypdf>=4.2.0
 python-docx>=1.1.0
 watchdog>=4.0.0
+Pillow>=12.3.0,<13
+requests>=2.34.2,<3
+pyarrow>=23.0.1,<25
+click>=8.4.2,<9
 
 # --- Validation (your code uses pydantic directly) ---
 pydantic>=2.0.0

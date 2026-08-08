@@ -35,14 +35,17 @@ jobs:
       - name: Streamlit AppTest smoke
         run: |
           python - <<'PY'
+          from pathlib import Path
+
           from streamlit.testing.v1 import AppTest
 
+          root = Path.cwd()
           for path in [
               "src/ui/streamlit_app.py",
               "src/ui/pages/Fire_Scenario_Testing.py",
               "src/ui/pages/Worst_Case_Testing.py",
           ]:
-              app = AppTest.from_file(path, default_timeout=30)
+              app = AppTest.from_file(str(root / path), default_timeout=30)
               app.run(timeout=30)
               if app.exception:
                   raise RuntimeError(f"{path} failed: {[exc.value for exc in app.exception]}")

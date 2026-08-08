@@ -72,7 +72,8 @@ rag:
   top_k: 5
   similarity_threshold: 0.7
 
-# Regulation Constraints (UK Approved Document B - Sample)
+# Prototype screening defaults. These are not a substitute for project-specific
+# regulation interpretation or professional approval.
 regulations:
   max_travel_distance: 45.0
   min_door_width: 0.75
