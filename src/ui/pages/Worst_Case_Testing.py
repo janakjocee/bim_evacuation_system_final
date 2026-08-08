@@ -5,8 +5,9 @@ This Streamlit multipage entry can be launched from the sidebar when running
 `streamlit run src/ui/streamlit_app.py`. It uses a bundled demonstration dataset
 so the marker can test the worst-case engine even without a fully classified IFC.
 """
-import json
 import hashlib
+import html
+import json
 import sys
 from pathlib import Path
 
@@ -24,6 +25,7 @@ from src.scenario.worst_case_engine import (
     validate_scenario_dataset,
 )
 from src.scenario.ifc_dataset_exporter import building_to_worst_case_dataset
+from src.ui.export_helpers import safe_uploaded_filename
 from src.ui.visualization_3d import create_dataset_3d_figure
 
 
@@ -161,14 +163,21 @@ try:
             ifc_schema=getattr(latest_pipeline_result, "ifc_schema", "UNKNOWN"),
         )
         validate_scenario_dataset(dataset)
-        dataset_label = f"IFC-DERIVED DATASET: {getattr(latest_pipeline_result, 'source_file_name', 'current upload')}"
+        source_name = safe_uploaded_filename(
+            getattr(latest_pipeline_result, "source_file_name", "current_upload.ifc"),
+            "current_upload.ifc",
+        )
+        dataset_label = f"IFC-DERIVED DATASET: {source_name}"
     elif dataset_source == "Upload custom JSON dataset":
         if uploaded_dataset is None:
             st.info("Upload a JSON scenario dataset to enable Worst Case Testing.")
             st.stop()
         dataset = json.loads(uploaded_dataset.getvalue().decode("utf-8"))
         validate_scenario_dataset(dataset)
-        dataset_label = f"UPLOADED CUSTOM DATASET: {uploaded_dataset.name}"
+        dataset_label = (
+            "UPLOADED CUSTOM DATASET: "
+            f"{safe_uploaded_filename(uploaded_dataset.name, 'scenario_dataset.json')}"
+        )
     else:
         dataset = load_worst_case_dataset()
         dataset_label = "BUNDLED DEMONSTRATION DATASET"
@@ -227,6 +236,14 @@ if "worst_case_result" not in st.session_state:
 if "worst_case_rankings" not in st.session_state:
     st.session_state.worst_case_rankings = []
 
+scenario_token = hashlib.sha256(json.dumps({
+    "dataset": dataset_token,
+    "scenario": scenario,
+}, sort_keys=True).encode("utf-8")).hexdigest()
+if st.session_state.get("worst_case_control_token") != scenario_token:
+    st.session_state.worst_case_control_token = scenario_token
+    st.session_state.worst_case_result = None
+
 if run_button:
     try:
         st.session_state.worst_case_result = engine.run_scenario(scenario)
@@ -283,13 +300,18 @@ if result:
     k5.metric("Avg Delay Increase", f"{result.average_delay_increase_s:.1f}s")
 
     risk_color = _risk_color(result.overall_risk)
+    fire_origin_name = html.escape(str(result.fire_origin_name))
+    fire_origin = html.escape(str(result.fire_origin))
+    blocked_node_text = ", ".join(html.escape(str(node)) for node in result.blocked_nodes)
+    blocked_edge_text = ", ".join(html.escape(str(edge)) for edge in result.blocked_edges)
+    affected_exit_text = ", ".join(html.escape(str(exit_id)) for exit_id in result.affected_exits)
     st.markdown(
         f"""
         <div style="border-left: 6px solid {risk_color}; background: {risk_color}15; padding: 1rem; border-radius: 6px;">
-        <strong>Fire Origin:</strong> {result.fire_origin_name} ({result.fire_origin})<br>
-        <strong>Blocked nodes:</strong> {', '.join(result.blocked_nodes) or 'None'}<br>
-        <strong>Blocked edges:</strong> {', '.join(result.blocked_edges) or 'None'}<br>
-        <strong>Affected exits:</strong> {', '.join(result.affected_exits) or 'None'}
+        <strong>Fire Origin:</strong> {fire_origin_name} ({fire_origin})<br>
+        <strong>Blocked nodes:</strong> {blocked_node_text or 'None'}<br>
+        <strong>Blocked edges:</strong> {blocked_edge_text or 'None'}<br>
+        <strong>Affected exits:</strong> {affected_exit_text or 'None'}
         </div>
         """,
         unsafe_allow_html=True,

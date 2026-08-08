@@ -14,6 +14,7 @@ import streamlit as st
 
 from src.fire.fire_scenario_engine import FireScenarioEngine
 from src.scenario.ifc_dataset_exporter import building_to_worst_case_dataset
+from src.ui.export_helpers import safe_uploaded_filename
 from src.ui.visualization_3d import create_dataset_3d_figure
 from src.scenario.worst_case_engine import (
     DEFAULT_DATASET_PATH,
@@ -63,14 +64,21 @@ try:
             ifc_schema=getattr(latest_pipeline_result, "ifc_schema", "UNKNOWN"),
         )
         validate_scenario_dataset(dataset)
-        dataset_label = f"IFC-DERIVED DATASET: {getattr(latest_pipeline_result, 'source_file_name', 'current upload')}"
+        source_name = safe_uploaded_filename(
+            getattr(latest_pipeline_result, "source_file_name", "current_upload.ifc"),
+            "current_upload.ifc",
+        )
+        dataset_label = f"IFC-DERIVED DATASET: {source_name}"
     elif dataset_source == "Upload custom JSON dataset":
         if uploaded_dataset is None:
             st.info("Upload a JSON scenario dataset to enable Fire Scenario Testing.")
             st.stop()
         dataset = json.loads(uploaded_dataset.getvalue().decode("utf-8"))
         validate_scenario_dataset(dataset)
-        dataset_label = f"UPLOADED CUSTOM DATASET: {uploaded_dataset.name}"
+        dataset_label = (
+            "UPLOADED CUSTOM DATASET: "
+            f"{safe_uploaded_filename(uploaded_dataset.name, 'scenario_dataset.json')}"
+        )
     else:
         dataset = load_worst_case_dataset()
         dataset_label = "BUNDLED DEMONSTRATION DATASET"
@@ -107,6 +115,20 @@ with st.sidebar:
     run_scenario = st.button("Run Fire Scenario", type="primary")
 
 scenario = scenario_by_label[selected_label]
+control_token = hashlib.sha256(json.dumps({
+    "dataset": dataset_token,
+    "scenario": selected_label,
+    "growth_class": growth_class,
+    "duration": duration,
+    "time_step": time_step,
+    "pre_movement": pre_movement,
+    "ventilation": ventilation,
+    "suppression": suppression,
+}, sort_keys=True).encode("utf-8")).hexdigest()
+if st.session_state.get("fire_control_token") != control_token:
+    st.session_state.fire_control_token = control_token
+    st.session_state.fire_scenario_result = None
+
 summary = dataset_summary(dataset)
 st.warning(
     f"Active source: **{dataset_label}**. IFC-derived datasets are converted from the "
