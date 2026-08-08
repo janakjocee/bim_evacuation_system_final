@@ -382,9 +382,10 @@ def render_selected_scenario_details(result, scenario):
     building = result.building
     geometry_mode = result.source_mode == "geometry_derived"
     alternative_exits = max(0, len(building.exits) - 1)
-    route_reliability = getattr(scenario.evacuation_route, "route_reliability", "review")
-    verified_edges = getattr(scenario.evacuation_route, "verified_edges", 0)
-    inferred_edges = getattr(scenario.evacuation_route, "inferred_edges", 0)
+    route_evidence = scenario.to_dict()["evacuation_route"]
+    route_reliability = route_evidence["route_reliability"]
+    verified_edges = route_evidence["verified_edge_count"]
+    inferred_edges = route_evidence["inferred_edge_count"]
     edge_sources = getattr(scenario.evacuation_route, "edge_sources", []) or []
     scenario_id = html.escape(str(scenario.scenario_id))
     scenario_name = html.escape(str(scenario.name))
@@ -691,12 +692,19 @@ def process_files(ifc_file, regulation_file, max_scenarios, enable_rag):
         
         if result.source_mode == "geometry_derived":
             st.success(
-                f"✅ Analysis Complete! Generated **{len(result.scenarios)}** evacuation scenarios."
+                f"✅ Geometry screening complete! Generated **{len(result.scenarios)}** exploratory route scenarios."
             )
             st.info(
                 "The uploaded IFC was analyzed directly in geometry-derived mode. "
                 "Connectivity and boundary egress points were inferred only from the "
                 "file's actual elements, geometry, and properties."
+            )
+            st.warning(
+                f"Operational processing readiness: "
+                f"{result.readiness.get('processing_readiness_score', 0)}/100. "
+                f"Engineering evidence quality: "
+                f"{result.readiness.get('engineering_evidence_score', 0)}/100. "
+                "The second score controls whether outputs may be treated as verified evacuation evidence."
             )
         elif result.source_mode == "semantic_spaces_inferred_topology":
             st.success(
@@ -864,8 +872,19 @@ def render_bim_insights(result):
         st.markdown("### Uploaded IFC Readiness")
         st.write(f"**Detected schema:** {readiness['schema']}")
         st.caption(readiness["target_compatibility"])
-        st.metric("Readiness Score", f"{readiness['model_readiness_score']}/100")
+        readiness_columns = st.columns(2)
+        readiness_columns[0].metric(
+            "Processing Readiness",
+            f"{readiness.get('processing_readiness_score', readiness['model_readiness_score'])}/100",
+            help="Whether the application can parse, graph and screen the available IFC-derived data.",
+        )
+        readiness_columns[1].metric(
+            "Engineering Evidence Quality",
+            f"{readiness.get('engineering_evidence_score', readiness['model_readiness_score'])}/100",
+            help="Quality of semantic rooms, doors, exits, dimensions and verified route connectivity.",
+        )
         st.write(f"**{readiness['readiness_label']}**")
+        st.caption(f"Permitted analysis scope: `{readiness.get('analysis_scope', 'screening')}`")
         for issue in readiness["critical_issues"]:
             if geometry_mode:
                 st.warning(f"Geometry-derived analysis: {issue}")
@@ -1216,8 +1235,12 @@ def render_regulation_intelligence(result):
         cols = st.columns(4)
         cols[0].metric("Extracted Clauses", getattr(result, "regulation_clause_count", 0))
         cols[1].metric("Numeric Rules", getattr(result, "regulation_rule_count", 0))
-        cols[2].metric("Supported Rule Candidates", application.get("uploaded_rule_count", 0))
+        cols[2].metric("Applied Uploaded Thresholds", application.get("active_uploaded_threshold_count", 0))
         cols[3].metric("Unsupported Rules", application.get("unsupported_rule_count", 0))
+        st.caption(
+            f"Supported uploaded candidates: {application.get('supported_uploaded_rule_candidate_count', application.get('uploaded_rule_count', 0))}. "
+            "Conditional candidates use a conservative screening value and remain subject to expert applicability review."
+        )
 
         active_rows = application.get("active_thresholds", [])
         if active_rows:

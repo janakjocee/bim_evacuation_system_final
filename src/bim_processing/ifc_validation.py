@@ -61,6 +61,12 @@ def validate_ifc_model(ifc_model: Any = None, extracted_data: Optional[Dict[str,
         counts[key] = int(extracted_data.get(key, _count_by_type(ifc_model, name) if ifc_model is not None else 0))
 
     possible_exits = int(extracted_data.get("possible_exits_count", extracted_data.get("exit_count", 0)))
+    analysis_space_count = int(extracted_data.get("analysis_space_count", counts["space_count"]))
+    analysis_door_count = int(extracted_data.get("analysis_door_count", counts["door_count"]))
+    analysis_mode = str(extracted_data.get("analysis_mode", "semantic_ifc"))
+    verified_edge_count = int(extracted_data.get("verified_edge_count", 0))
+    inferred_edge_count = int(extracted_data.get("inferred_edge_count", 0))
+    inferred_exit_count = int(extracted_data.get("inferred_exit_count", 0))
     missing_door_widths = int(extracted_data.get("missing_door_widths", 0))
     missing_space_areas = int(extracted_data.get("missing_space_areas", 0))
     missing_storey_placement = int(extracted_data.get("missing_storey_placement", 0))
@@ -68,6 +74,7 @@ def validate_ifc_model(ifc_model: Any = None, extracted_data: Optional[Dict[str,
     missing_occupancy = int(extracted_data.get("missing_occupancy", 0))
     missing_fire_properties = bool(extracted_data.get("missing_material_fuel_fire_properties", True))
     graph_connected = bool(extracted_data.get("graph_connectivity_complete", False))
+    graph_confidence = float(extracted_data.get("graph_confidence_score", 1.0 if graph_connected else 0.0))
 
     warnings: List[str] = []
     critical_issues: List[str] = []
@@ -97,24 +104,62 @@ def validate_ifc_model(ifc_model: Any = None, extracted_data: Optional[Dict[str,
     if not graph_connected:
         warnings.append("Graph connectivity completeness has not been verified; disconnected spaces may exist.")
 
+    if analysis_mode == "geometry_derived":
+        warnings.append(
+            "Geometry-derived nodes are IFC elements, not verified rooms; inferred connectors and egress points "
+            "support exploratory visualization only."
+        )
+    elif analysis_mode == "semantic_spaces_inferred_topology":
+        warnings.append(
+            "Room geometry comes from IfcSpace entities, but route links or egress points are inferred."
+        )
+    if inferred_exit_count:
+        warnings.append(f"{inferred_exit_count} egress point(s) are inferred and require manual confirmation.")
+
+    processing_score = 100
+    processing_score -= 40 if analysis_space_count == 0 else 0
+    processing_score -= 25 if analysis_door_count == 0 else 0
+    processing_score -= 20 if possible_exits == 0 else 0
+    processing_score -= 15 if not graph_connected else 0
+    processing_score = max(0, processing_score)
+
     score = 100
-    score -= 25 if counts["space_count"] == 0 else 0
-    score -= 25 if counts["door_count"] == 0 else 0
+    score -= 20 if counts["space_count"] == 0 else 0
+    score -= 20 if counts["door_count"] == 0 else 0
     score -= 15 if possible_exits == 0 else 0
-    score -= min(20, missing_door_widths * 3)
+    score -= 15 if possible_exits and inferred_exit_count >= possible_exits else 0
+    score -= min(15, missing_door_widths * 3)
     score -= min(15, missing_space_areas * 2)
     score -= min(10, missing_occupancy * 2)
     score -= 10 if not graph_connected else 0
+    if analysis_mode == "geometry_derived":
+        score -= 15
+    elif analysis_mode == "semantic_spaces_inferred_topology":
+        score -= 10
+    total_edges = verified_edge_count + inferred_edge_count
+    if total_edges:
+        score -= round(10 * inferred_edge_count / total_edges)
+        score -= round(10 * max(0.0, 1.0 - min(1.0, graph_confidence)))
     score = max(0, score)
 
-    if score >= 90:
+    if analysis_mode == "geometry_derived":
+        readiness = "Geometry-derived exploratory screening only"
+        analysis_scope = "ifc_element_geometry_screening"
+    elif analysis_mode == "semantic_spaces_inferred_topology":
+        readiness = "Semantic spaces with inferred routing; expert verification required"
+        analysis_scope = "room_screening_with_inferred_routes"
+    elif score >= 90:
         readiness = "Ready for scenario generation"
+        analysis_scope = "semantic_evacuation_screening"
     elif score >= 70:
         readiness = "Usable with warnings"
+        analysis_scope = "semantic_evacuation_screening"
     elif score >= 50:
         readiness = "Limited reliability"
+        analysis_scope = "limited_evacuation_screening"
     else:
         readiness = "Not safe for automated scenario generation"
+        analysis_scope = "insufficient_for_automated_evacuation_analysis"
 
     return {
         "schema": schema,
@@ -131,6 +176,16 @@ def validate_ifc_model(ifc_model: Any = None, extracted_data: Optional[Dict[str,
         "missing_occupancy": missing_occupancy,
         "missing_material_fuel_fire_properties": missing_fire_properties,
         "graph_connectivity_complete": graph_connected,
+        "analysis_mode": analysis_mode,
+        "analysis_scope": analysis_scope,
+        "analysis_space_count": analysis_space_count,
+        "analysis_door_count": analysis_door_count,
+        "verified_edge_count": verified_edge_count,
+        "inferred_edge_count": inferred_edge_count,
+        "inferred_exit_count": inferred_exit_count,
+        "graph_confidence_score": round(graph_confidence, 2),
+        "processing_readiness_score": processing_score,
+        "engineering_evidence_score": score,
         "model_readiness_score": score,
         "readiness_label": readiness,
         "warnings": warnings,

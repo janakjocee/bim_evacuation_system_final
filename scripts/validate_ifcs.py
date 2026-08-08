@@ -182,7 +182,13 @@ def audit_file(path: Path, max_scenarios: int, regulation_text: str | None = Non
         space_areas_found = sum(1 for space in building.spaces.values() if not space.assumptions.get("area"))
         space_areas_assumed = sum(1 for space in building.spaces.values() if space.assumptions.get("area"))
         inferred_connections = sum(1 for door in building.doors.values() if str(door.connection_source).startswith("inferred"))
-        inferred_exits = sum(1 for door in building.exits.values() if door.assumptions.get("exit_detection"))
+        inferred_exits = sum(
+            1
+            for door in building.exits.values()
+            if str(door.connection_source).startswith("inferred")
+            or "exit_detection" in door.assumptions
+            or "topology" in door.assumptions
+        )
         doors_without_connected_spaces = sorted(
             door_id for door_id, door in building.doors.items() if not door.connected_spaces
         )
@@ -234,12 +240,19 @@ def audit_file(path: Path, max_scenarios: int, regulation_text: str | None = Non
         "route_reliabilities": scenario_summary["route_reliabilities"],
         "reliability": _reliability(result, graph),
         "readiness_score": result.readiness.get("model_readiness_score", 0),
+        "processing_readiness_score": result.readiness.get("processing_readiness_score", 0),
+        "engineering_evidence_score": result.readiness.get("engineering_evidence_score", 0),
+        "analysis_scope": result.readiness.get("analysis_scope", ""),
         "readiness_label": result.readiness.get("readiness_label", ""),
         "readiness_warnings": result.readiness.get("warnings", []),
         "readiness_critical_issues": result.readiness.get("critical_issues", []),
         "regulation_clause_count": result.regulation_clause_count,
         "regulation_rule_count": result.regulation_rule_count,
-        "applied_uploaded_rules": result.regulation_application.get("uploaded_rule_count", 0),
+        "supported_uploaded_rule_candidates": result.regulation_application.get(
+            "supported_uploaded_rule_candidate_count",
+            result.regulation_application.get("uploaded_rule_count", 0),
+        ),
+        "applied_uploaded_rules": result.regulation_application.get("active_uploaded_threshold_count", 0),
         "unsupported_rules": result.regulation_application.get("unsupported_rule_count", 0),
         "errors": result.errors,
     }
@@ -295,6 +308,9 @@ def write_csv(rows: list[dict], path: Path) -> None:
         "compliance_statuses",
         "route_reliabilities",
         "graph_confidence",
+        "processing_readiness_score",
+        "engineering_evidence_score",
+        "analysis_scope",
         "readiness_score",
         "readiness_label",
         "reliability",
@@ -302,6 +318,7 @@ def write_csv(rows: list[dict], path: Path) -> None:
         "candidate_geometry_elements",
         "regulation_clause_count",
         "regulation_rule_count",
+        "supported_uploaded_rule_candidates",
         "applied_uploaded_rules",
         "unsupported_rules",
         "errors",

@@ -1,13 +1,18 @@
 """Regression tests for geometry-only IFC compatibility behavior."""
 
+import os
 from pathlib import Path
 
 import pytest
 
 from src.pipeline.evacuation_pipeline import EvacuationPipeline
+from scripts.verify_practical_workflow import verify
 
 
-IFC_PATH = Path(__file__).parent / "fixtures" / "11134_V_Motebello_Heistopp_Rev.ifc"
+IFC_PATH = Path(os.environ.get(
+    "BIM_TEST_IFC",
+    Path(__file__).parent / "fixtures" / "11134_V_Motebello_Heistopp_Rev.ifc",
+))
 requires_optional_ifc = pytest.mark.skipif(
     not IFC_PATH.exists(),
     reason="Optional IFC regression fixture is not included in this checkout",
@@ -23,6 +28,9 @@ def test_geometry_only_ifc_uses_file_geometry():
     assert result.building.name == "Villa Montebello"
     assert len(result.scenarios) == 3
     assert result.readiness["critical_issues"]
+    assert result.readiness["processing_readiness_score"] == 100
+    assert result.readiness["engineering_evidence_score"] < 50
+    assert all(scenario.name.startswith("Exploratory geometry route") for scenario in result.scenarios)
     assert all(not scenario.origin_space_name.startswith("Office") for scenario in result.scenarios)
 
 
@@ -45,6 +53,17 @@ def test_geometry_only_ifc_topology_comes_from_file_elements():
     assert all(scenario.confidence_score <= 0.5 for scenario in result.scenarios)
     assert result.source_file_name == IFC_PATH.name
     assert len(result.source_file_sha256) == 64
+
+
+@requires_optional_ifc
+def test_practical_verifier_reconciles_real_ifc_exports(tmp_path):
+    report = verify(IFC_PATH, None, tmp_path / "verification", max_scenarios=4)
+
+    assert report["operational_verdict"] == "PASS_WITH_REVIEW_LIMITATIONS"
+    assert report["pipeline"]["scenario_count"] == 4
+    assert all(gate["status"] == "PASS" for gate in report["gates"])
+    assert (tmp_path / "verification" / "verification_report.json").exists()
+    assert (tmp_path / "verification" / "verification_report.md").exists()
 
 
 def test_git_lfs_pointer_upload_gets_clear_error(tmp_path):

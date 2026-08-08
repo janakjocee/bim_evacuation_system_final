@@ -273,9 +273,14 @@ class ScenarioGenerator:
         )
         
         # Create scenario
+        scenario_prefix = (
+            "Exploratory geometry route from"
+            if self.building.extraction_mode == "geometry_derived"
+            else "Evacuation from"
+        )
         scenario = EvacuationScenario(
             scenario_id=generate_id("SCEN"),
-            name=f"Evacuation from {space.name}",
+            name=f"{scenario_prefix} {space.name}",
             origin_space_id=space.id,
             origin_space_name=space.name,
             risk_level=risk_level,

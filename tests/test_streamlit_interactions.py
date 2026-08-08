@@ -79,6 +79,9 @@ def test_main_scenario_details_close_reopen_review_and_exports():
     app.run(timeout=30)
     assert not app.exception
     assert _button(app, "Close Details")
+    detail_markup = "\n".join(str(getattr(element, "value", "")) for element in app.markdown)
+    assert "Route reliability:</strong> verified" in detail_markup
+    assert "Edge evidence:</strong> verified=1, inferred=0" in detail_markup
 
     _button(app, "Close Details").click().run(timeout=30)
     assert not app.exception

@@ -59,6 +59,68 @@ class EvacuationPipeline:
         self.building: Optional[BuildingData] = None
         self.graph_builder: Optional[SpatialGraphBuilder] = None
         self.scenario_generator: Optional[ScenarioGenerator] = None
+
+    def _build_readiness(self, graph_stats: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Assess both operational processing and engineering evidence quality."""
+        building = self.building
+        graph_stats = graph_stats or {}
+        if building is None:
+            return validate_ifc_model(self.ifc_parser.ifc_file)
+
+        def model_count(entity_name: str) -> int:
+            try:
+                return len(self.ifc_parser.ifc_file.by_type(entity_name))
+            except Exception:
+                return 0
+
+        inferred_exits = sum(
+            1
+            for door in building.exits.values()
+            if str(door.connection_source).startswith("inferred")
+            or "exit_detection" in door.assumptions
+            or "topology" in door.assumptions
+        )
+        missing_door_widths = sum(
+            1 for door in building.doors.values() if door.assumptions.get("width")
+        )
+        missing_space_areas = sum(
+            1 for space in building.spaces.values() if space.assumptions.get("area")
+        )
+        missing_storey_placement = sum(
+            1 for space in building.spaces.values() if not space.level
+        )
+        semantic_rooms = model_count("IfcSpace")
+        missing_occupancy = semantic_rooms
+        graph_complete = bool(
+            graph_stats.get("is_connected")
+            and building.exits
+            and not graph_stats.get("disconnected_spaces")
+            and not graph_stats.get("spaces_without_exit_route")
+        )
+
+        return validate_ifc_model(
+            self.ifc_parser.ifc_file,
+            extracted_data={
+                "space_count": semantic_rooms,
+                "door_count": model_count("IfcDoor"),
+                "stair_count": model_count("IfcStair"),
+                "buildingstorey_count": model_count("IfcBuildingStorey"),
+                "possible_exits_count": len(building.exits),
+                "analysis_space_count": len(building.spaces),
+                "analysis_door_count": len(building.doors),
+                "analysis_mode": building.extraction_mode,
+                "missing_door_widths": missing_door_widths,
+                "missing_space_areas": missing_space_areas,
+                "missing_storey_placement": missing_storey_placement,
+                "missing_exit_identification": bool(inferred_exits),
+                "missing_occupancy": missing_occupancy,
+                "graph_connectivity_complete": graph_complete,
+                "verified_edge_count": graph_stats.get("verified_edges_count", 0),
+                "inferred_edge_count": graph_stats.get("inferred_edges_count", 0),
+                "inferred_exit_count": inferred_exits,
+                "graph_confidence_score": graph_stats.get("graph_confidence_score", 0),
+            },
+        )
     
     def run(
         self,
@@ -117,28 +179,13 @@ class EvacuationPipeline:
                 source_file_sha256=source_file_sha256,
             )
 
-        readiness = validate_ifc_model(
-            self.ifc_parser.ifc_file,
-            extracted_data={
-                "space_count": len(self.building.spaces),
-                "door_count": len(self.building.doors),
-                "stair_count": len(self.building.stairs),
-                "possible_exits_count": len(self.building.exits),
-                "graph_connectivity_complete": bool(self.building.doors and self.building.exits),
-            },
-        )
-        source_mode = "semantic_ifc"
+        source_mode = self.building.extraction_mode or "semantic_ifc"
+        readiness = self._build_readiness()
 
         if self.building.extraction_mode == "geometry_derived":
             source_mode = "geometry_derived"
-            readiness["readiness_label"] = (
-                "Geometry-derived structural screening available; semantic room/door review required"
-            )
         elif self.building.extraction_mode == "semantic_spaces_inferred_topology":
             source_mode = "semantic_spaces_inferred_topology"
-            readiness["readiness_label"] = (
-                "Semantic spaces with inferred route topology; door/exit assumptions require review"
-            )
         elif readiness["critical_issues"]:
             errors.extend(readiness["critical_issues"])
             errors.append(
@@ -168,6 +215,7 @@ class EvacuationPipeline:
         if not graph_success:
             logger.warning("Graph building had issues, continuing with limited functionality")
         graph_stats = self.graph_builder.get_graph_stats() if self.graph_builder else {}
+        readiness = self._build_readiness(graph_stats)
         
         # Step 4: Parse regulations (if provided)
         regulation_clauses = []

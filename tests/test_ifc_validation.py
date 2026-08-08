@@ -40,7 +40,34 @@ def test_ifc_validation_good_model_gets_high_score():
         "graph_connectivity_complete": True,
     })
     assert result["model_readiness_score"] >= 90
+    assert result["processing_readiness_score"] == 100
+    assert result["engineering_evidence_score"] >= 90
     assert result["readiness_label"] == "Ready for scenario generation"
+
+
+def test_geometry_processing_can_pass_without_claiming_semantic_evidence():
+    result = validate_ifc_model(extracted_data={
+        "schema": "IFC2X3",
+        "space_count": 0,
+        "door_count": 0,
+        "buildingstorey_count": 1,
+        "possible_exits_count": 2,
+        "analysis_space_count": 16,
+        "analysis_door_count": 17,
+        "analysis_mode": "geometry_derived",
+        "missing_door_widths": 17,
+        "missing_exit_identification": True,
+        "inferred_exit_count": 2,
+        "graph_connectivity_complete": True,
+        "verified_edge_count": 0,
+        "inferred_edge_count": 32,
+        "graph_confidence_score": 0.35,
+    })
+
+    assert result["processing_readiness_score"] == 100
+    assert result["engineering_evidence_score"] < 50
+    assert result["analysis_scope"] == "ifc_element_geometry_screening"
+    assert "exploratory" in result["readiness_label"].lower()
 
 
 def test_parser_infers_topology_for_spaces_without_doors():
@@ -238,6 +265,9 @@ def test_batch_ifc_diagnostics_supports_input_output_flags(tmp_path):
         "exit_count",
         "verified_edges_count",
         "inferred_edges_count",
+        "processing_readiness_score",
+        "engineering_evidence_score",
+        "analysis_scope",
         "scenarios_generated",
         "pass_partial_fail_status",
         "failure_reason",
