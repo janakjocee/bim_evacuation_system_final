@@ -1,6 +1,8 @@
 """
 UI components and visualization helpers for the Streamlit interface.
 """
+import html
+
 import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
@@ -15,6 +17,9 @@ from src.scenario.scenario_generator import EvacuationScenario
 
 def render_metric_card(title: str, value: str, subtitle: str = "", color: str = "#1f77b4"):
     """Render a metric card with custom styling."""
+    safe_title = html.escape(str(title))
+    safe_value = html.escape(str(value))
+    safe_subtitle = html.escape(str(subtitle))
     st.markdown(f"""
     <div style="
         background-color: var(--app-panel, #f8f9fa);
@@ -23,9 +28,9 @@ def render_metric_card(title: str, value: str, subtitle: str = "", color: str = 
         border-radius: 8px;
         margin-bottom: 1rem;
     ">
-        <p style="margin: 0; color: var(--app-muted, #666); font-size: 0.85rem; text-transform: uppercase;">{title}</p>
-        <p style="margin: 0; color: var(--app-heading, #333); font-size: 1.8rem; font-weight: bold;">{value}</p>
-        {f'<p style="margin: 0; color: var(--app-muted, #777); font-size: 0.8rem;">{subtitle}</p>' if subtitle else ''}
+        <p style="margin: 0; color: var(--app-muted, #666); font-size: 0.85rem; text-transform: uppercase;">{safe_title}</p>
+        <p style="margin: 0; color: var(--app-heading, #333); font-size: 1.8rem; font-weight: bold;">{safe_value}</p>
+        {f'<p style="margin: 0; color: var(--app-muted, #777); font-size: 0.8rem;">{safe_subtitle}</p>' if subtitle else ''}
     </div>
     """, unsafe_allow_html=True)
 
@@ -362,7 +367,7 @@ def render_scenario_card(scenario: EvacuationScenario, index: int):
             background-color: var(--app-panel-strong, white);
         ">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                <h4 style="margin: 0; color: var(--app-heading, #333);">#{index + 1} {scenario.name}</h4>
+                <h4 style="margin: 0; color: var(--app-heading, #333);">#{index + 1} {html.escape(str(scenario.name))}</h4>
                 <div>
                     <span style="background-color: {risk_color}; color: white; padding: 4px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; margin-right: 8px;">
                         {scenario.risk_level.value.upper()}
@@ -401,7 +406,7 @@ def render_explanation_panel(scenario: EvacuationScenario):
     ]
     
     for step in steps:
-        st.markdown(f"<div style='padding: 4px 0;'>{step}</div>", unsafe_allow_html=True)
+        st.markdown(step)
     
     # IFC Data Used
     st.markdown("### 📊 IFC Data Used")
@@ -465,10 +470,12 @@ def render_expert_review_controls(scenario: EvacuationScenario, scenario_id: str
     
     # Show review history
     if status != "Not Reviewed":
+        safe_status = html.escape(str(status))
+        safe_comments = html.escape(str(comments)) if comments else "No comments"
         st.markdown(f"""
         <div style="background-color: var(--app-panel, #f8f9fa); color: var(--app-text, #222); padding: 10px; border-radius: 5px; margin-top: 10px;">
-            <strong>Current Status:</strong> {status}<br>
-            <strong>Comments:</strong> {comments if comments else 'No comments'}
+            <strong>Current Status:</strong> {safe_status}<br>
+            <strong>Comments:</strong> {safe_comments}
         </div>
         """, unsafe_allow_html=True)
 

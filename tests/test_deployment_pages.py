@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from streamlit.testing.v1 import AppTest
+
 
 def test_deployed_pages_are_self_contained_inside_src():
     repo_root = Path(__file__).resolve().parents[1]
@@ -14,3 +16,13 @@ def test_deployed_pages_are_self_contained_inside_src():
         assert 'REPO_ROOT / "pages"' not in source
         assert "Path(__file__).resolve().parents[3]" in source
         compile(source, str(page), "exec")
+
+
+def test_legacy_page_entrypoints_delegate_without_errors():
+    repo_root = Path(__file__).resolve().parents[1]
+    for page in (
+        repo_root / "pages/Fire_Scenario_Testing.py",
+        repo_root / "pages/🔥_Worst_Case_Testing.py",
+    ):
+        app = AppTest.from_file(str(page), default_timeout=30).run(timeout=30)
+        assert not app.exception, [exception.value for exception in app.exception]

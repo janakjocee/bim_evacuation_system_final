@@ -542,7 +542,7 @@ def render_sidebar():
         
         # IFC Upload Section
         st.markdown("### 1. BIM Model (IFC)")
-        st.markdown("<p style='font-size:0.8rem;color:#666;'>Upload Building Information Model</p>", unsafe_allow_html=True)
+        st.markdown("<p style='font-size:0.8rem;color:var(--app-muted);'>Upload Building Information Model</p>", unsafe_allow_html=True)
         
         ifc_file = st.file_uploader(
             "Select IFC file",
@@ -558,7 +558,7 @@ def render_sidebar():
         
         # Regulation Upload Section
         st.markdown("### 2. Safety Regulations")
-        st.markdown("<p style='font-size:0.8rem;color:#666;'>Upload building safety codes</p>", unsafe_allow_html=True)
+        st.markdown("<p style='font-size:0.8rem;color:var(--app-muted);'>Upload building safety codes</p>", unsafe_allow_html=True)
         
         regulation_file = st.file_uploader(
             "Select regulation document",
@@ -1496,11 +1496,13 @@ def render_explainability(result):
         ]
         
         for title, desc in steps:
+            safe_title = html.escape(str(title))
+            safe_desc = html.escape(str(desc).replace("**", ""))
             with st.container():
                 st.markdown(f"""
-                <div style="background-color: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 8px;">
-                    <strong style="color: #1a1a2e;">{title}</strong><br>
-                    <span style="color: #555; font-size: 0.9rem;">{desc}</span>
+                <div style="background-color: var(--app-panel); color: var(--app-text); padding: 12px; border: 1px solid var(--app-border); border-radius: 6px; margin-bottom: 8px;">
+                    <strong style="color: var(--app-heading);">{safe_title}</strong><br>
+                    <span style="color: var(--app-muted); font-size: 0.9rem;">{safe_desc}</span>
                 </div>
                 """, unsafe_allow_html=True)
     
@@ -1559,8 +1561,8 @@ def render_explainability(result):
     st.markdown("### Natural Language Explanation")
     
     st.markdown(f"""
-    <div style="background-color: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 1.5rem;">
-        <p style="font-size: 1.05rem; line-height: 1.6; color: #333;">
+    <div style="background-color: var(--app-panel-strong); border: 1px solid var(--app-border); border-radius: 8px; padding: 1.5rem;">
+        <p style="font-size: 1.05rem; line-height: 1.6; color: var(--app-text);">
             {html.escape(str(scenario.explanation))}
         </p>
     </div>
@@ -1913,7 +1915,7 @@ def render_export(result):
         total_violations = sum(len(s.violated_regulations) for s in scenarios)
         
         st.markdown(f"""
-        <div style="background-color: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 1.5rem;">
+        <div style="background-color: var(--app-panel-strong); color: var(--app-text); border: 1px solid var(--app-border); border-radius: 8px; padding: 1.5rem;">
             <h4>Building: {html.escape(str(result.building.name)) if result.building else 'N/A'}</h4>
             <p><strong>Total Scenarios Analyzed:</strong> {len(scenarios)}</p>
             <p><strong>Risk Distribution:</strong> {risk_counts.get('low', 0)} Low, {risk_counts.get('medium', 0)} Medium, {risk_counts.get('high', 0)} High</p>
@@ -2065,15 +2067,15 @@ def main():
         st.markdown("""
         <div style="text-align: center; padding: 3rem;">
             <h2>👋 Welcome to the BIM Evacuation Fire Strategy Platform</h2>
-            <p style="color: #666; font-size: 1.1rem;">
+            <p style="color: var(--app-muted); font-size: 1.1rem;">
                 This rule-based decision-support system generates evacuation screening scenarios from BIM models,<br>
                 checks them against parsed/default safety constraints, and provides explainable recommendations<br>
                 for fire safety engineering review.
             </p>
             <br>
-            <div style="background-color: #f8f9fa; border-radius: 8px; padding: 2rem; display: inline-block;">
+            <div style="background-color: var(--app-panel); color: var(--app-text); border: 1px solid var(--app-border); border-radius: 8px; padding: 2rem; display: inline-block;">
                 <h4 style="margin-top: 0;">🚀 Getting Started</h4>
-                <ol style="text-align: left; color: #555;">
+                <ol style="text-align: left; color: var(--app-text);">
                     <li>Upload your <strong>IFC building model</strong> in the sidebar</li>
                     <li>Optionally upload <strong>safety regulations</strong> (e.g., Approved Document B)</li>
                     <li>Configure analysis settings</li>
@@ -2084,7 +2086,7 @@ def main():
                 </ol>
             </div>
             <br><br>
-            <p style="color: #999; font-size: 0.9rem;">
+            <p style="color: var(--app-muted); font-size: 0.9rem;">
                 <strong>Documented IFC targets:</strong> IFC2X3, IFC4, IFC4X3, IFC4X3_ADD2 | <strong>NLP:</strong> spaCy | <strong>RAG:</strong> keyword + optional vector retrieval | <strong>Graph:</strong> NetworkX
             </p>
         </div>

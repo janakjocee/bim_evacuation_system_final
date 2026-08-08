@@ -27,6 +27,8 @@ def test_dark_mode_uses_adaptive_theme_variables():
     assert "@media (prefers-color-scheme: dark)" in source
     assert "--app-panel-strong" in source
     assert "--app-heading" in source
+    assert 'background-color: white; border: 1px solid #e0e0e0' not in source
+    assert 'background-color: #f8f9fa; padding: 12px' not in source
 
 
 def test_badges_do_not_use_fragile_multiline_html():
