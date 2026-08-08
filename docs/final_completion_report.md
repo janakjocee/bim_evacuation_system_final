@@ -48,6 +48,7 @@ Observed regulation results:
 ### UI, exports and operational safety
 
 - Scenario `View Details` opens, closes and reopens against a stable scenario ID.
+- The inspection workspace renders directly inside the selected scenario card; it is no longer hidden below the complete scenario list.
 - Expert review decisions and comments persist in session state.
 - Main JSON, CSV and XML exports are direct downloads; XML is generated with safe escaping.
 - Manual correction and IFC-derived fire dataset exports are present and executable.
@@ -73,8 +74,8 @@ Observed regulation results:
 Complete local suite:
 
 ```text
-93 tests collected
-90 passed
+94 tests collected
+91 passed
 3 skipped
 ```
 
