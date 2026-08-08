@@ -2,6 +2,8 @@
 
 Verification date: 29 June 2026
 
+Latest deployment verification: 8 August 2026
+
 ## What Was Completed
 
 - Scenario `View Details` now uses a stable selected-scenario inspection workspace instead of rendering inside each scenario card.
@@ -33,6 +35,12 @@ Full automated suite:
 73 passed, 3 skipped
 ```
 
+8 August 2026 re-verification from the Downloads checkout:
+
+```text
+73 passed, 3 skipped
+```
+
 Focused workflow tests:
 
 ```text
@@ -44,6 +52,17 @@ Browser smoke tests:
 - Main Streamlit page loaded without traceback.
 - Fire Scenario Testing page loaded, ran a fire scenario and displayed Overall Risk / Fire Growth outputs.
 - Worst Case Testing page loaded, ran a worst-case scenario and displayed summary / room-by-room outputs.
+
+8 August 2026 Streamlit AppTest smoke:
+
+- `src/ui/streamlit_app.py`: OK
+- `src/ui/pages/Fire_Scenario_Testing.py`: OK
+- `src/ui/pages/Worst_Case_Testing.py`: OK
+
+GitHub Actions main-branch smoke was successful for the latest merged update
+(`cba8108`, PR #16). The public Streamlit URL responds, but unauthenticated
+HTTP clients are redirected to Streamlit Cloud authentication; that is a Cloud
+visibility/access setting, not an application traceback.
 
 ## IFC Compatibility Matrix Result
 
@@ -76,4 +95,3 @@ This is intentionally not a black box. Scenario outputs include route path, rout
 - Geometry-derived and inferred-topology results are useful for academic screening and visual decision support, but they require expert validation.
 - The three failed files must be replaced with real Git LFS contents before they can be validated.
 - The 3D/diagram views are schematic connectivity visualisations, not certified BIM geometry rendering.
-
