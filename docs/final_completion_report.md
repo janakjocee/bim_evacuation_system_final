@@ -56,6 +56,10 @@ Observed regulation results:
 - Uploaded IFC/regulation files use collision-resistant names and are removed after each analysis.
 - IFC-derived labels are HTML-escaped before entering custom UI markup.
 - The dashboard uses Streamlit's native dataframe path, avoiding a Linux PyArrow `Styler` crash found by CI.
+- Fire and worst-case results are invalidated whenever a scenario, origin, route blockage or modelling assumption changes, preventing stale metrics from appearing under new controls.
+- Root `pages/` entry points now delegate to the canonical `src/ui/pages/` implementations, eliminating two diverging copies of each fire workflow.
+- Explanation, export and welcome panels consistently use adaptive theme variables in light and dark modes.
+- Reusable UI components and the worst-case result card escape IFC/reviewer text before inserting it into custom HTML.
 
 ### Dependency and deployment hardening
 
@@ -69,12 +73,23 @@ Observed regulation results:
 Complete local suite:
 
 ```text
-88 tests collected
-85 passed
+93 tests collected
+90 passed
 3 skipped
 ```
 
 This result was repeated in a clean Python 3.10.20 environment using Streamlit 1.61.1, PyArrow 24.0.0 and pytest 9.1.1. `pip check` found no broken requirements.
+
+The component control matrix now executes:
+
+- all 17 main and nested tab labels, including icon-bearing navigation labels;
+- regulation search match/no-match, all four scenario sort options and five risk-filter states;
+- scenario details close/reopen, manual correction apply/reset and all four review decisions;
+- complete-report generation and all release-critical download URLs;
+- all five fire scenarios, four growth classes, eight fire-slider boundaries and suppression mode;
+- all five worst-case presets, all 12 custom origins, four slider boundaries, four empty multiselect states, exit blocking and auto-ranking;
+- both fire pages using an IFC-derived dataset rather than the bundled demonstration dataset;
+- canonical and backward-compatible page entry points.
 
 The three skips are optional compatibility cases whose external model prerequisites are not bundled in the repository. No executed test failed.
 
@@ -96,6 +111,13 @@ Generated artifacts:
 outputs/release_hardening_20260808/final_matrix/compatibility_matrix.csv
 outputs/release_hardening_20260808/final_matrix/compatibility_matrix.json
 outputs/release_hardening_20260808/final_matrix/per_file/*.diagnostic.json
+```
+
+The same 23-file batch was rerun after the component audit and written to:
+
+```text
+outputs/component_audit_20260808/compatibility_matrix.csv
+outputs/component_audit_20260808/compatibility_matrix.json
 ```
 
 | Matrix | Inputs | Partial | Fail |
