@@ -19,9 +19,11 @@ import streamlit as st
 import pandas as pd
 import copy
 import hashlib
+import html
 import json
 import plotly.express as px
 import plotly.graph_objects as go
+import tempfile
 import time
 from typing import List, Dict, Any, Optional
 
@@ -384,21 +386,28 @@ def render_selected_scenario_details(result, scenario):
     verified_edges = getattr(scenario.evacuation_route, "verified_edges", 0)
     inferred_edges = getattr(scenario.evacuation_route, "inferred_edges", 0)
     edge_sources = getattr(scenario.evacuation_route, "edge_sources", []) or []
+    scenario_id = html.escape(str(scenario.scenario_id))
+    scenario_name = html.escape(str(scenario.name))
+    origin_name = html.escape(str(scenario.origin_space_name))
+    destination = html.escape(str(scenario.evacuation_route.destination))
+    route_nodes = " &rarr; ".join(html.escape(str(node)) for node in scenario.evacuation_route.path)
+    route_reliability_text = html.escape(str(route_reliability))
+    edge_source_text = ", ".join(html.escape(str(source)) for source in edge_sources)
     st.markdown(
         f"""
         <div class="scenario-detail-card">
             <h4>Selected Scenario Inspection Workspace</h4>
-            <strong>Scenario ID:</strong> {scenario.scenario_id}<br>
-            <strong>Name:</strong> {scenario.name}<br>
-            <strong>Origin:</strong> {scenario.origin_space_name}<br>
-            <strong>Destination:</strong> {scenario.evacuation_route.destination}<br>
-            <strong>Route nodes:</strong> {' → '.join(scenario.evacuation_route.path)}<br>
+            <strong>Scenario ID:</strong> {scenario_id}<br>
+            <strong>Name:</strong> {scenario_name}<br>
+            <strong>Origin:</strong> {origin_name}<br>
+            <strong>Destination:</strong> {destination}<br>
+            <strong>Route nodes:</strong> {route_nodes}<br>
             <strong>Risk:</strong> {scenario.risk_level.value.upper()} ·
             <strong>Compliance:</strong> {scenario.compliance_score * 100:.0f}% ·
             <strong>Confidence:</strong> {scenario.confidence_score * 100:.0f}%<br>
-            <strong>Route reliability:</strong> {route_reliability}<br>
+            <strong>Route reliability:</strong> {route_reliability_text}<br>
             <strong>Edge evidence:</strong> verified={verified_edges}, inferred={inferred_edges}<br>
-            <strong>Edge sources:</strong> {', '.join(edge_sources) or 'No route-edge source metadata'}<br>
+            <strong>Edge sources:</strong> {edge_source_text or 'No route-edge source metadata'}<br>
             <strong>Analysis basis:</strong> {'Geometry-derived structural screening' if geometry_mode else 'Semantic IFC space and door data'}
         </div>
         """,
@@ -641,32 +650,32 @@ def process_files(ifc_file, regulation_file, max_scenarios, enable_rag):
     
     try:
         st.session_state.rag_enabled = enable_rag
-        # Save IFC file
-        progress_bar.progress(10, text="Loading IFC model...")
-        ifc_path = save_uploaded_file(ifc_file, "./data/temp")
-        
-        # Read regulation text
-        regulation_text = None
-        if regulation_file:
-            progress_bar.progress(20, text="Loading regulations...")
-            regulation_path = save_uploaded_file(regulation_file, "./data/temp")
-            regulation_text = extract_regulation_text(regulation_path, regulation_file.name)
-            st.session_state['regulation_text'] = regulation_text
-        
-        # Run pipeline
-        progress_bar.progress(30, text="Parsing BIM model...")
-        pipeline = EvacuationPipeline()
-        
-        progress_bar.progress(50, text="Extracting features...")
-        progress_bar.progress(70, text="Building spatial graph...")
-        progress_bar.progress(85, text="Generating scenarios...")
-        
-        result = pipeline.run(
-            ifc_path,
-            regulation_text,
-            max_scenarios=max_scenarios,
-            enable_rag=enable_rag,
-        )
+        temp_root = Path("./data/temp")
+        temp_root.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="analysis_", dir=temp_root) as upload_dir:
+            progress_bar.progress(10, text="Loading IFC model...")
+            ifc_path = save_uploaded_file(ifc_file, upload_dir)
+
+            regulation_text = None
+            if regulation_file:
+                progress_bar.progress(20, text="Loading regulations...")
+                regulation_path = save_uploaded_file(regulation_file, upload_dir)
+                regulation_text = extract_regulation_text(regulation_path, regulation_file.name)
+                st.session_state['regulation_text'] = regulation_text
+
+            progress_bar.progress(30, text="Parsing BIM model...")
+            pipeline = EvacuationPipeline()
+
+            progress_bar.progress(50, text="Extracting features...")
+            progress_bar.progress(70, text="Building spatial graph...")
+            progress_bar.progress(85, text="Generating scenarios...")
+
+            result = pipeline.run(
+                ifc_path,
+                regulation_text,
+                max_scenarios=max_scenarios,
+                enable_rag=enable_rag,
+            )
         result.source_file_name = safe_uploaded_filename(ifc_file.name, "uploaded.ifc")
         
         progress_bar.progress(100, text="Complete!")
@@ -834,14 +843,7 @@ def render_dashboard(result):
         })
     
     df_summary = pd.DataFrame(summary_data)
-    
-    # Color code risk column
-    def color_risk(val):
-        colors = {'LOW': 'background-color: #d4edda', 'MEDIUM': 'background-color: #fff3cd', 'HIGH': 'background-color: #f8d7da'}
-        return colors.get(val, '')
-    
-    styled_df = df_summary.style.map(color_risk, subset=['Risk'])
-    st.dataframe(styled_df, height=300)
+    st.dataframe(df_summary, height=300, width='stretch')
 
 # ==============================================================================
 # TAB 2: BIM MODEL INSIGHTS
@@ -1366,8 +1368,8 @@ def render_evacuation_scenarios(result):
             with col_h1:
                 st.markdown(f"""
                 <div style="border-left: 5px solid {risk_color}; padding-left: 10px;">
-                    <h4 style="margin:0;">#{i+1} {scenario.name}</h4>
-                    <p style="margin:0;color:var(--app-muted);font-size:0.8rem;">ID: {scenario.scenario_id}</p>
+                    <h4 style="margin:0;">#{i+1} {html.escape(str(scenario.name))}</h4>
+                    <p style="margin:0;color:var(--app-muted);font-size:0.8rem;">ID: {html.escape(str(scenario.scenario_id))}</p>
                 </div>
                 """, unsafe_allow_html=True)
             
@@ -1518,8 +1520,8 @@ def render_explainability(result):
             </small>
         </div>
         """.format(
-            scenario.origin_space_name,
-            scenario.evacuation_route.destination,
+            html.escape(str(scenario.origin_space_name)),
+            html.escape(str(scenario.evacuation_route.destination)),
             len(scenario.evacuation_route.path),
             scenario.evacuation_route.distance,
             scenario.evacuation_route.estimated_time
@@ -1534,7 +1536,7 @@ def render_explainability(result):
             </small>
         </div>
         """.format(
-            "<br>".join([f"• {v}" for v in scenario.violated_regulations]) if scenario.violated_regulations else "• No violations detected"
+            "<br>".join([f"• {html.escape(str(v))}" for v in scenario.violated_regulations]) if scenario.violated_regulations else "• No violations detected"
         ), unsafe_allow_html=True)
         
         # Model Confidence
@@ -1559,7 +1561,7 @@ def render_explainability(result):
     st.markdown(f"""
     <div style="background-color: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 1.5rem;">
         <p style="font-size: 1.05rem; line-height: 1.6; color: #333;">
-            {scenario.explanation}
+            {html.escape(str(scenario.explanation))}
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -1912,7 +1914,7 @@ def render_export(result):
         
         st.markdown(f"""
         <div style="background-color: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 1.5rem;">
-            <h4>Building: {result.building.name if result.building else 'N/A'}</h4>
+            <h4>Building: {html.escape(str(result.building.name)) if result.building else 'N/A'}</h4>
             <p><strong>Total Scenarios Analyzed:</strong> {len(scenarios)}</p>
             <p><strong>Risk Distribution:</strong> {risk_counts.get('low', 0)} Low, {risk_counts.get('medium', 0)} Medium, {risk_counts.get('high', 0)} High</p>
             <p><strong>Average Compliance Score:</strong> {avg_compliance * 100:.1f}%</p>
