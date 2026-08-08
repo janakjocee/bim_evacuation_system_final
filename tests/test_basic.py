@@ -295,6 +295,53 @@ def test_structured_parser_extracts_multiple_rules_from_one_clause():
     assert metrics["min_exit_width"] == 1.2
 
 
+def test_parser_normalizes_length_units_to_metres():
+    parser = RegulationParser()
+    parser.parse(
+        "2.1 Exit width\n"
+        "Final exit doors shall have a minimum clear opening width of 1050mm."
+    )
+
+    rule = next(item for item in parser.rules if item.metric == "min_exit_width")
+
+    assert rule.value == 1.05
+    assert rule.unit == "m"
+
+
+def test_parser_distinguishes_alternative_escape_from_one_direction():
+    parser = RegulationParser()
+    parser.parse(
+        "2.1 Travel distance\n"
+        "Maximum travel distance in one direction is 18 metres. "
+        "Maximum travel distance in more than one direction is 45 metres."
+    )
+
+    values = {(item.metric, item.value) for item in parser.rules}
+    conditions = {item.metric: item.condition for item in parser.rules}
+
+    assert ("max_single_direction_travel_distance", 18.0) in values
+    assert ("max_alternative_travel_distance", 45.0) in values
+    assert conditions["max_single_direction_travel_distance"] == "single_direction_escape"
+    assert conditions["max_alternative_travel_distance"] == "alternative_escape"
+
+
+def test_direct_and_small_premises_distances_are_not_global_route_thresholds():
+    parser = RegulationParser()
+    clauses = parser.parse(
+        "2.1 Scoped distances\n"
+        "Direct distance should be no more than 12 metres for one-direction travel. "
+        "Small premises maximum travel distance with one exit is 27 metres."
+    )
+    checker = ComplianceChecker()
+    checker.update_regulation_rules(parser.rules)
+    summary = checker.get_rule_application_summary()
+
+    assert clauses
+    assert summary["active_uploaded_threshold_count"] == 0
+    assert summary["unsupported_rule_count"] == 2
+    assert checker.check_route(SpaceData(id="S1", name="Room", area=10), 30.0)[0].required_value == 45.0
+
+
 def test_parser_does_not_inherit_exit_metric_for_unrelated_measurement():
     parser = RegulationParser()
     parser.parse(
@@ -439,6 +486,9 @@ def test_rule_application_summary_reports_defaults_and_unsupported_rules():
     summary = checker.get_rule_application_summary()
 
     assert summary["uploaded_rule_count"] == 1
+    assert summary["supported_uploaded_rule_candidate_count"] == 1
+    assert summary["active_uploaded_threshold_count"] == 1
+    assert summary["extracted_uploaded_rule_count"] == 2
     assert summary["unsupported_rule_count"] == 1
     assert any(row["rule_key"] == "max_travel_distance" and row["source"] == "uploaded_regulation_rule" for row in summary["active_thresholds"])
 

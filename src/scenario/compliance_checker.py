@@ -148,23 +148,37 @@ class ComplianceChecker:
         active_thresholds = []
         for key, value in sorted(self.regulations.items()):
             rule = self.rule_sources.get(key)
+            candidates = self.rule_candidates.get(key, [])
+            conditional_candidates = [item for item in candidates if item.condition != "general"]
             active_thresholds.append({
                 "rule_key": key,
                 "value": value,
+                "unit": rule.unit if rule else "m",
                 "source": "uploaded_regulation_rule" if rule else "default_config",
                 "rule_id": rule.rule_id if rule else "",
+                "condition": rule.condition if rule else "general",
                 "source_text": rule.source_text[:300] if rule else "",
-                "candidate_count": len(self.rule_candidates.get(key, [])),
+                "candidate_count": len(candidates),
+                "conditional_candidate_count": len(conditional_candidates),
                 "selection_strategy": (
-                    "conservative uploaded candidate"
-                    if self.rule_candidates.get(key)
+                    "conservative screening candidate; confirm conditional applicability"
+                    if conditional_candidates
+                    else "conservative uploaded candidate"
+                    if candidates
                     else "configured default"
                 ),
             })
 
+        supported_candidates = sum(len(items) for items in self.rule_candidates.values())
+        active_uploaded_thresholds = sum(
+            1 for item in active_thresholds if item["source"] == "uploaded_regulation_rule"
+        )
         return {
             "active_threshold_count": len(active_thresholds),
-            "uploaded_rule_count": sum(len(items) for items in self.rule_candidates.values()),
+            "uploaded_rule_count": supported_candidates,
+            "supported_uploaded_rule_candidate_count": supported_candidates,
+            "active_uploaded_threshold_count": active_uploaded_thresholds,
+            "extracted_uploaded_rule_count": supported_candidates + len(self.unsupported_rules),
             "default_threshold_count": sum(1 for item in active_thresholds if item["source"] == "default_config"),
             "unsupported_rule_count": len(self.unsupported_rules),
             "active_thresholds": active_thresholds,

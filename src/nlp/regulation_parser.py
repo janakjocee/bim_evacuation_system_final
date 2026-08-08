@@ -50,10 +50,10 @@ class RegulationParser:
     
     # Patterns for extracting measurements
     MEASUREMENT_PATTERNS = [
-        (r'(\d+(?:\.\d+)?)\s*(m²|sqm|square\s*m)\b', 1.0),
-        (r'(\d+(?:\.\d+)?)\s*(mm|millimetres?)\b', 0.001),  # Convert to meters
-        (r'(\d+(?:\.\d+)?)\s*(cm|centimetres?)\b', 0.01),
-        (r'(\d+(?:\.\d+)?)\s*(m|metres?)\b', 1.0),
+        (r'(\d+(?:\.\d+)?)\s*(m²|sqm|square\s*m)\b', 1.0, "m2"),
+        (r'(\d+(?:\.\d+)?)\s*(mm|millimetres?)\b', 0.001, "m"),
+        (r'(\d+(?:\.\d+)?)\s*(cm|centimetres?)\b', 0.01, "m"),
+        (r'(\d+(?:\.\d+)?)\s*(m|metres?)\b', 1.0, "m"),
     ]
     
     def __init__(self):
@@ -263,10 +263,14 @@ class RegulationParser:
         text_lower = text.lower()
 
         if constraint_type == "max_distance" and ("travel" in text_lower or "distance" in text_lower):
-            if "single direction" in text_lower or "one direction" in text_lower:
-                return "max_single_direction_travel_distance"
+            if "direct distance" in text_lower:
+                return "max_direct_travel_distance"
+            if "small premises" in text_lower or "small-premises" in text_lower:
+                return "max_small_premises_travel_distance"
             if "alternative" in text_lower or "more than one direction" in text_lower:
                 return "max_alternative_travel_distance"
+            if "single direction" in text_lower or "one direction" in text_lower:
+                return "max_single_direction_travel_distance"
             return "max_travel_distance"
 
         if constraint_type == "min_width":
@@ -301,10 +305,20 @@ class RegulationParser:
     def _condition_from_text(self, text: str) -> str:
         """Extract a short human-readable condition for the rule."""
         text_lower = text.lower()
-        if "single direction" in text_lower or "one direction" in text_lower:
-            return "single_direction_escape"
+        occupants_up_to = re.search(r'occupants?\s+(?:up to|not more than|maximum)\s*(\d+)', text_lower)
+        if occupants_up_to:
+            return f"occupants_at_most:{occupants_up_to.group(1)}"
+        occupants_above = re.search(r'(?:more than|above)\s*(\d+)\s+occupants?', text_lower)
+        if occupants_above:
+            return f"occupants_above:{occupants_above.group(1)}"
+        if "direct distance" in text_lower:
+            return "direct_distance_method"
+        if "small premises" in text_lower or "small-premises" in text_lower:
+            return "small_premises_scope"
         if "alternative" in text_lower or "more than one direction" in text_lower:
             return "alternative_escape"
+        if "single direction" in text_lower or "one direction" in text_lower:
+            return "single_direction_escape"
         if "final exit" in text_lower:
             return "final_exit"
         return "general"
@@ -332,11 +346,10 @@ class RegulationParser:
     def _extract_measurements(self, text: str) -> List[tuple]:
         """Extract all measurement values and normalized units from text."""
         measurements = []
-        for pattern, multiplier in self.MEASUREMENT_PATTERNS:
+        for pattern, multiplier, normalized_unit in self.MEASUREMENT_PATTERNS:
             for match in re.finditer(pattern, text, re.IGNORECASE):
                 value = float(match.group(1))
-                unit = match.group(2)
-                measurements.append((value * multiplier, unit, match.start(), match.end()))
+                measurements.append((value * multiplier, normalized_unit, match.start(), match.end()))
 
         measurements.sort(key=lambda item: item[2])
         return measurements
