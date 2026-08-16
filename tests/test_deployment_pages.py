@@ -1,6 +1,9 @@
 """Deployment packaging regression tests for Streamlit multipage entrypoints."""
 
+import json
 from pathlib import Path
+import subprocess
+import sys
 
 from streamlit.testing.v1 import AppTest
 
@@ -41,3 +44,34 @@ def test_main_page_survives_stale_streamlit_cloud_package(monkeypatch):
     assert not app.exception, [exception.value for exception in app.exception]
     markup = "\n".join(str(element.value) for element in app.markdown)
     assert "AI-Driven Generation of Evacuation Scenarios" in markup
+
+
+def test_landing_page_defers_ifc_and_nlp_analysis_imports():
+    repo_root = Path(__file__).resolve().parents[1]
+    probe = """
+import json
+import sys
+import src.ui.streamlit_app
+print(json.dumps({
+    "spacy": "spacy" in sys.modules,
+    "ifcopenshell": "ifcopenshell" in sys.modules,
+    "pipeline": "src.pipeline.evacuation_pipeline" in sys.modules,
+    "scenario_generator": "src.scenario.scenario_generator" in sys.modules,
+}))
+"""
+    completed = subprocess.run(
+        [sys.executable, "-c", probe],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    )
+    loaded = json.loads(completed.stdout.strip().splitlines()[-1])
+
+    assert loaded == {
+        "spacy": False,
+        "ifcopenshell": False,
+        "pipeline": False,
+        "scenario_generator": False,
+    }

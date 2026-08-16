@@ -1,6 +1,8 @@
 """
 UI components and visualization helpers for the Streamlit interface.
 """
+from __future__ import annotations
+
 import html
 
 import streamlit as st
@@ -9,12 +11,14 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import pandas as pd
 import numpy as np
-from typing import List, Dict, Any, Optional
+from typing import TYPE_CHECKING, List, Dict, Any, Optional
 
 from src.utils.helpers import RiskLevel, ComplianceStatus
-from src.scenario.scenario_generator import EvacuationScenario
 from src.ui.theme import ACCENT, RISK_COLORS, STATUS_COLORS
 from src.utils.model_transparency import ACADEMIC_USE_NOTICE, screening_index_semantics
+
+if TYPE_CHECKING:
+    from src.scenario.scenario_generator import EvacuationScenario
 
 
 def render_metric_card(title: str, value: str, subtitle: str = "", color: str = ACCENT):

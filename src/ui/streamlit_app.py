@@ -28,11 +28,8 @@ import time
 from typing import List, Dict, Any, Optional
 
 import src as project_package
-from src.pipeline.evacuation_pipeline import EvacuationPipeline, PipelineResult
-from src.pipeline.manual_corrections import apply_manual_corrections
 from src.bim_processing.ifc_validation import SUPPORTED_SCHEMA_LABEL
 from src.nlp.document_loader import RegulationDocumentError, extract_regulation_text
-from src.scenario.ifc_dataset_exporter import building_to_worst_case_dataset
 from src.utils.logger import get_logger
 from src.utils.helpers import RiskLevel, ComplianceStatus
 from src.ui.ui_components import (
@@ -490,6 +487,8 @@ def save_uploaded_file(uploaded_file, directory: str) -> str:
 
 def process_files(ifc_file, regulation_file, regulation_metadata, max_scenarios, enable_rag):
     """Process uploaded files through the pipeline."""
+    from src.pipeline.evacuation_pipeline import EvacuationPipeline
+
     progress_bar = st.progress(0, text="Initializing pipeline...")
     
     try:
@@ -1002,6 +1001,8 @@ def render_bim_insights(result):
             col_apply, col_reset, col_export = st.columns(3)
             with col_apply:
                 if st.button("Apply manual corrections and rerun", type="primary", width='stretch'):
+                    from src.pipeline.manual_corrections import apply_manual_corrections
+
                     corrections = {"doors": edited.to_dict(orient="records")}
                     st.session_state.manual_corrections = corrections
                     correction_base = copy.deepcopy(
@@ -1043,6 +1044,8 @@ def render_bim_insights(result):
             "Exports the uploaded IFC-derived graph into the JSON schema used by the "
             "Worst Case Testing page. Inferred data remains labelled for review."
         )
+        from src.scenario.ifc_dataset_exporter import building_to_worst_case_dataset
+
         fire_dataset = building_to_worst_case_dataset(
             building,
             graph_builder=None,
