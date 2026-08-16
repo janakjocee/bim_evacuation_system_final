@@ -74,6 +74,9 @@ st.markdown("""
         --app-warning: #fff6db;
         --app-danger: #ffe9ec;
         --app-success: #e7f6ed;
+        --app-status-pass: #176b35;
+        --app-status-fail: #b42318;
+        --app-status-warn: #765500;
     }
     @media (prefers-color-scheme: dark) {
         :root {
@@ -87,6 +90,9 @@ st.markdown("""
             --app-warning: #4a3c13;
             --app-danger: #4a2028;
             --app-success: #153d2b;
+            --app-status-pass: #7ee2a8;
+            --app-status-fail: #ff9b9b;
+            --app-status-warn: #ffd166;
         }
         div[style*="background-color: #f8f9fa"],
         div[style*="background-color: white"] {
@@ -140,15 +146,15 @@ st.markdown("""
     
     /* Status indicators */
     .status-pass {
-        color: #28a745;
+        color: var(--app-status-pass);
         font-weight: bold;
     }
     .status-fail {
-        color: #dc3545;
+        color: var(--app-status-fail);
         font-weight: bold;
     }
     .status-warn {
-        color: #ffc107;
+        color: var(--app-status-warn);
         font-weight: bold;
     }
     
@@ -219,6 +225,12 @@ st.markdown("""
     .stButton>button:hover {
         transform: translateY(-1px);
         box-shadow: 0 5px 16px rgba(27, 94, 170, 0.22);
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .stButton>button, [data-baseweb="tab"], .scenario-card {
+            transition: none !important;
+            transform: none !important;
+        }
     }
     [data-testid="stSidebar"] {
         border-right: 1px solid var(--app-border);
@@ -503,6 +515,7 @@ def build_complete_export_payload(result):
             "rule_count": result.regulation_rule_count,
             "application": result.regulation_application,
             "rag_enabled": result.rag_enabled,
+            "retrieval_mode": result.retrieval_mode,
         },
         "manual_corrections": st.session_state.get("manual_corrections"),
         "research_review_records": [
@@ -524,7 +537,7 @@ def render_header():
     
     with col1:
         st.markdown('<p class="main-title">🏗️ BIM Evacuation Screening Platform</p>', unsafe_allow_html=True)
-        st.markdown('<p class="sub-title">Rule-Based BIM + NLP/RAG Decision-Support for Fire Safety Review</p>', unsafe_allow_html=True)
+        st.markdown('<p class="sub-title">Rule-Based BIM + NLP Evidence Retrieval for Fire Safety Review</p>', unsafe_allow_html=True)
     
     with col2:
         st.markdown(f"""
@@ -594,9 +607,9 @@ def render_sidebar():
         )
         
         enable_rag = st.toggle(
-            "Enable RAG Grounding",
+            "Enable Regulation Evidence Retrieval",
             value=True,
-            help="Use Retrieval-Augmented Generation for regulation validation"
+            help="Attach ranked source clauses to supported checks; this does not interpret law or generate compliance decisions."
         )
 
         st.markdown("---")
@@ -630,7 +643,7 @@ def render_sidebar():
         status_items = [
             ("IFC Parser", "✅ Ready" if ifc_file else "⏳ Waiting"),
             ("NLP Engine", "✅ Ready"),
-            ("RAG System", "✅ Ready" if enable_rag else "⏹️ Disabled"),
+            ("Evidence Retrieval", "✅ TF-IDF ready" if enable_rag else "⏹️ Disabled"),
             ("Graph Builder", "✅ Ready"),
         ]
         
@@ -1293,9 +1306,9 @@ def render_regulation_intelligence(result):
         else:
             st.warning("No matching regulations found")
     
-    # RAG Status
+    # Evidence retrieval status
     st.markdown("---")
-    st.markdown("### RAG System Status")
+    st.markdown("### Evidence Retrieval Status")
     rag_status = (
         "Active for uploaded regulation text"
         if st.session_state.get("rag_enabled", True) and regulation_text
@@ -1306,7 +1319,7 @@ def render_regulation_intelligence(result):
     with rag_col1:
         st.markdown(f"""
         <div class="success-box">
-            <strong>Default Retrieval:</strong> keyword evidence search<br>
+            <strong>Default Retrieval:</strong> evaluated TF-IDF lexical ranking<br>
             <strong>Optional Vector Mode:</strong> SentenceTransformers + FAISS when enabled in config<br>
             <strong>Reason:</strong> stable deployment first; native vector libraries are opt-in<br>
             <strong>Status:</strong> {rag_status}
@@ -1318,7 +1331,7 @@ def render_regulation_intelligence(result):
         <div class="info-box">
             <strong>Grounding Pipeline:</strong><br>
             1. Document chunking (size=512, overlap=50)<br>
-            2. Keyword retrieval by compliance-check query<br>
+            2. TF-IDF lexical retrieval by compliance-check query<br>
             3. Optional vector retrieval if enabled<br>
             4. Evidence snippets attached to each check<br>
             5. Expert review and source verification
@@ -1495,9 +1508,9 @@ def render_explainability(result):
         else "Used built-in default screening constraints because no regulation file was uploaded"
     )
     rag_phrase = (
-        "RAG grounding was enabled for uploaded regulation evidence."
+        f"Regulation evidence retrieval was enabled using {result.retrieval_mode}."
         if result.rag_enabled
-        else "RAG grounding was not used for this run."
+        else "Regulation evidence retrieval was not used for this run."
     )
     
     st.markdown("---")
@@ -2087,7 +2100,7 @@ def main():
             </div>
             <br><br>
             <p style="color: var(--app-muted); font-size: 0.9rem;">
-                <strong>Documented IFC targets:</strong> IFC2X3, IFC4, IFC4X3, IFC4X3_ADD2 | <strong>NLP:</strong> spaCy | <strong>RAG:</strong> keyword + optional vector retrieval | <strong>Graph:</strong> NetworkX
+                <strong>Documented IFC targets:</strong> IFC2X3, IFC4, IFC4X3, IFC4X3_ADD2 | <strong>NLP:</strong> spaCy | <strong>Evidence retrieval:</strong> TF-IDF + optional embeddings | <strong>Graph:</strong> NetworkX
             </p>
         </div>
         """, unsafe_allow_html=True)

@@ -1,0 +1,64 @@
+{
+  "benchmark_id": "deterministic_scenario_regression_v1",
+  "evidence_status": "project_declared_expected_behavior_not_independent_engineering_validation",
+  "cases": [
+    {
+      "case_id": "IFC_VERIFIED_ROUTES",
+      "engine": "evacuation_pipeline",
+      "description": "All controlled semantic spaces have verified routes to the final exit.",
+      "expected": {"scenario_count": 3, "route_reliability": "verified", "compatibility_status": "pass"}
+    },
+    {
+      "case_id": "WORST_WC01_REROUTE",
+      "engine": "worst_case",
+      "scenario_id": "WC01",
+      "expected": {"risk_one_of": ["High", "Critical"], "reroute_or_affected": true}
+    },
+    {
+      "case_id": "WORST_WC02_TRAPPED",
+      "engine": "worst_case",
+      "scenario_id": "WC02",
+      "expected": {"risk": "Critical", "minimum_trapped_rooms": 1}
+    },
+    {
+      "case_id": "WORST_WC03_EXIT_LOSS",
+      "engine": "worst_case",
+      "scenario_id": "WC03",
+      "expected": {"affected_exit": "E2", "available_routes_avoid_exit": "E2"}
+    },
+    {
+      "case_id": "FIRE_WC01_ASET_RSET",
+      "engine": "fire_scenario",
+      "scenario_id": "WC01",
+      "expected": {"minimum_aset_rset_rows": 1, "qualified_review_required": true}
+    },
+    {
+      "case_id": "FIRE_NO_ROUTE_TRAPPED",
+      "engine": "fire_scenario",
+      "scenario": {
+        "scenario_id": "NO_ROUTE",
+        "scenario_name": "No route regression",
+        "fire_origin": "C1",
+        "fire_origin_name": "Main Corridor",
+        "room_type": "corridor",
+        "growth_class": "fast",
+        "detection_time": 30,
+        "alarm_time": 15,
+        "pre_movement_delay": 60,
+        "ventilation_factor": 1.0,
+        "smoke_spread_speed": 1.0,
+        "blocked_nodes": ["C1", "C2"],
+        "blocked_edges": ["D9", "D10", "D11"],
+        "affected_exit": "E1",
+        "suppression_enabled": false,
+        "occupancy_multiplier": 1.0
+      },
+      "expected": {"risk": "Critical", "minimum_trapped_occupants": 1}
+    }
+  ],
+  "limitations": [
+    "The fire and worst-case cases use the bundled demonstration graph.",
+    "Passing this benchmark proves deterministic expected behavior, not physical calibration.",
+    "ASET/RSET and smoke spread remain simplified research screening models, not CFD."
+  ]
+}

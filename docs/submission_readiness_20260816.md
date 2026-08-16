@@ -25,9 +25,9 @@ BIM_TEST_IFC="/Users/janakjocee/Downloads/11134_V_Motebello_Heistopp_Rev.ifc" \
   python3 -m pytest -q -rs
 ```
 
-Result: **104 passed, 0 failed, 0 skipped**.
+Result: **120 passed, 0 failed, 0 skipped**.
 
-Measured line coverage: **79.1%** (3,831 of 4,841 statements). Coverage is a
+Measured raw line coverage: **79.51%** (4,339 of 5,457 statements; 80% displayed). Coverage is a
 software-test measure; it is not evidence of fire-engineering correctness.
 
 Coverage includes:
@@ -43,6 +43,12 @@ Coverage includes:
 - Worst Case Testing, origin ranking and every tested control boundary;
 - plan, graph and 3D visualization helpers;
 - canonical and compatibility Streamlit page entry points.
+
+The final research-evaluation additions also cover a deterministic strict-pass
+IFC fixture, exact parser/connectivity/route ground truth, source-family-grouped
+space classification, regulation retrieval metrics, scenario repeatability and
+custom light/dark palette contrast. See
+`docs/research_evaluation_results_20260816.md`.
 
 Python compilation and `git diff --check` also passed.
 

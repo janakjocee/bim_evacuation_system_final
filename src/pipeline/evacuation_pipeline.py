@@ -45,6 +45,7 @@ class PipelineResult:
     regulation_rule_count: int = 0
     regulation_application: Dict[str, Any] = field(default_factory=dict)
     rag_enabled: bool = False
+    retrieval_mode: str = "not_used"
 
 
 class EvacuationPipeline:
@@ -230,11 +231,11 @@ class EvacuationPipeline:
             regulation_clauses = self.regulation_parser.parse(regulation_text)
             regulation_rules = self.regulation_parser.rules
             
-            # Build the optional retrieval index only when enabled.
+            # Build the evaluated lexical index and optional embedding index.
             if regulation_clauses and enable_rag:
                 self.rag_engine.build_index(regulation_clauses)
             elif regulation_clauses:
-                logger.info("RAG grounding disabled; using parsed regulation constraints only")
+                logger.info("Evidence retrieval disabled; using parsed regulation constraints only")
         else:
             logger.info("Step 4: No regulations provided, using defaults")
         
@@ -281,6 +282,11 @@ class EvacuationPipeline:
             regulation_rule_count=len(regulation_rules),
             regulation_application=regulation_application,
             rag_enabled=bool(regulation_clauses and enable_rag),
+            retrieval_mode=(
+                self.rag_engine.retrieval_mode()
+                if regulation_clauses and enable_rag
+                else "disabled" if regulation_clauses else "not_used"
+            ),
         )
 
     
@@ -324,6 +330,7 @@ class EvacuationPipeline:
                 'regulation_application': result.regulation_application,
                 'graph_stats': result.graph_stats,
                 'rag_enabled': result.rag_enabled,
+                'retrieval_mode': result.retrieval_mode,
                 'scenarios': [s.to_dict() for s in result.scenarios],
                 'summary': self.scenario_generator.get_summary() if self.scenario_generator else {}
             }

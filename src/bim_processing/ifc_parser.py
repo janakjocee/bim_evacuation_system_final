@@ -41,6 +41,7 @@ class DoorData:
     is_external: bool = False
     is_exit: bool = False
     connected_spaces: List[str] = field(default_factory=list)
+    connection_sources: Dict[str, str] = field(default_factory=dict)
     properties: Dict[str, Any] = field(default_factory=dict)
     data_quality_flags: List[str] = field(default_factory=list)
     assumptions: Dict[str, str] = field(default_factory=dict)
@@ -461,6 +462,7 @@ class IFCParser:
                         door = building.doors[door_id]
                         if space_id not in door.connected_spaces:
                             door.connected_spaces.append(space_id)
+                        door.connection_sources[space_id] = "IfcRelSpaceBoundary"
                         if door_id not in building.spaces[space_id].connected_doors:
                             building.spaces[space_id].connected_doors.append(door_id)
                         door.connection_source = "IfcRelSpaceBoundary"
@@ -484,6 +486,7 @@ class IFCParser:
             candidates.sort(key=lambda item: item[0])
             for _, space_id in candidates[:2]:
                 door.connected_spaces.append(space_id)
+                door.connection_sources[space_id] = "inferred_proximity"
                 building.spaces[space_id].connected_doors.append(door_id)
             if candidates:
                 door.connection_source = "inferred_proximity"
@@ -491,6 +494,32 @@ class IFCParser:
                 door.assumptions["connectivity"] = (
                     "Door-space relationship inferred from door location and space bounding boxes."
                 )
+
+        # Some exports provide boundaries for most rooms but omit a minority of
+        # door-space links. Add only the nearest very-close door for a completely
+        # disconnected space and retain inference provenance on that edge.
+        for space_id, space in building.spaces.items():
+            if space.connected_doors or not space.bounding_box:
+                continue
+            candidates = sorted(
+                (
+                    self._point_to_box_distance(door.location, space.bounding_box),
+                    door_id,
+                )
+                for door_id, door in building.doors.items()
+            )
+            if not candidates or candidates[0][0] > 0.35:
+                continue
+            _, door_id = candidates[0]
+            door = building.doors[door_id]
+            door.connected_spaces.append(space_id)
+            door.connection_sources[space_id] = "inferred_proximity_supplement"
+            space.connected_doors.append(door_id)
+            space.data_quality_flags.append("space_door_connection_inferred_by_close_proximity")
+            space.assumptions["connectivity"] = (
+                "Nearest door linked within 0.35m because the IFC omitted a direct space boundary."
+            )
+            door.data_quality_flags.append("supplementary_space_connection_inferred_by_close_proximity")
 
     def _door_ids_from_boundary_element(self, element) -> List[str]:
         """Resolve a boundary element or opening element to one or more door ids."""
@@ -532,20 +561,34 @@ class IFCParser:
             )
         ).lower()
         
-        if "office" in name:
+        if "office" in name or "workstation" in name or "reception" in name or "admin" in name:
             return "office"
         elif "corridor" in name or "hall" in name:
             return "corridor"
         elif "stair" in name:
             return "stair"
-        elif "lobby" in name:
+        elif "lobby" in name or "foyer" in name or "vestibule" in name or "vest." in name:
             return "lobby"
         elif "bedroom" in name or "dorm" in name or "residential" in name:
             return "residential"
-        elif "storage" in name or "store" in name or "plant" in name:
+        elif any(term in name for term in (
+            "storage", "store", "plant", "utility", "mechanical", "electrical",
+            "equipment", "roof", "janitor", "housekeeping",
+        )):
             return "industrial"
-        elif "toilet" in name or "wc" in name:
+        elif "toilet" in name or "bathroom" in name or "washroom" in name or " wc" in name:
             return "toilet"
+        elif "kitchen" in name:
+            return "kitchen"
+        elif any(term in name for term in (
+            "exam", "treatment", "trmt", "clinical", "dental", "pharm", "laboratory", " lab",
+            "x-ray", "radiograph", "specimen",
+        )):
+            return "clinical"
+        elif any(term in name for term in (
+            "waiting", "classroom", "training", "library", "lounge", "conference", "activity",
+        )):
+            return "assembly"
         
         return "unknown"
     

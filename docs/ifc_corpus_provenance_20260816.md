@@ -24,6 +24,8 @@ formal IFC validation.
 | `IFC4_Wall_Opening_Window.ifc` | `73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832` | [buildingSMART Reference View example](https://github.com/buildingSMART/Sample-Test-Files/tree/main/IFC%204.0.2.1%20%28IFC%204%29/ISO%20Spec%20-%20ReferenceView_V1.2), [CC BY 4.0](https://github.com/buildingSMART/Sample-Test-Files/blob/main/LICENSE) | Exact byte match |
 | `11134_V_Motebello_Heistopp_Rev.ifc` | `d0dd573388317907e6aa59f86319b5408306f0dbe9feea99cb7b83ed1d62ba3a` | [bimfag/intro-python-bim model](https://github.com/bimfag/intro-python-bim/blob/master/Models/11134_V_Motebello_Heistopp_Rev.ifc), repository declares MIT | Exact byte match |
 | `Duplex_A_20110907.ifc` | `b347a2c8aa8fff6db896a4417a9c50c22ac0ccd7c5cfc22b99b8d29336c606ed` | [buildingSMART community Duplex sample](https://github.com/buildingsmart-community/Community-Sample-Test-Files/tree/main/IFC%202.3.0.1%20%28IFC%202x3%29/Duplex%20Apartment), [CC BY 4.0](https://github.com/buildingsmart-community/Community-Sample-Test-Files/blob/main/LICENSE) | Local hash equals the source Git LFS object OID |
+| `official_Duplex_Rooms_And_Spaces.ifc` | `3cd577ecff9daf91632789a408070251a431b198de7be47f64e01c7fda1be92b` | [Duplex rooms and spaces source](https://github.com/buildingsmart-community/Community-Sample-Test-Files/blob/main/IFC%202.3.0.1%20%28IFC%202x3%29/Duplex%20Apartment/Duplex_M_20111024_ROOMS_AND_SPACES.ifc), CC BY 4.0 | Exact Git LFS object recovered and hash verified |
+| `official_Clinic_Architectural.ifc` | `2ac970ce065ecac4e0c9e5f453a257169e90d0067f419b7e33533a64ef837880` | [buildingSMART community Clinic sample](https://github.com/buildingsmart-community/Community-Sample-Test-Files/tree/main/IFC%202.3.0.1%20%28IFC%202x3%29/Medical-Dental%20Clinic), CC BY 4.0 | Exact Git LFS object recovered and hash verified |
 
 ## Source Pointers, Not IFC Models
 
@@ -51,7 +53,12 @@ source and reuse terms are recorded. Header metadata is not a licence.
 | `STRUC_NordicLCA_Housing_Timber_BuildingPermit.ifc` | `26aad2086dc1b7328f2dfde9f088f35d4db743aef5346a7d8e921e5e2d37904f` | IFC4; Tekla 2023 structural export | Record original URL/owner and licence or exclude. |
 | `STRUC_NordicLCA_Office_Concrete_BuildingPermit.ifc` | `c36f33de483c6c0aa9917d281dbbdff0727ca051c586922463277e59fd59801b` | IFC4; Tekla 2023 structural export | Record original URL/owner and licence or exclude. |
 | `STRUC_NordicLCA_Office_Timber_BuildingPermit.ifc` | `3beff5c872c55184e0747e5c5faf17bbb5cd6877d8a26a653c4be98a3bf7c25d` | IFC4; Tekla 2023 structural export | Record original URL/owner and licence or exclude. |
-| `Clinic_Architectural.ifc` | `4ef2a77d63aecabd7d8d0b77fca268e80a07b1e4bef1ab28f030f2f5b3095c16` | IFC2X3; same name/size class as community Clinic, but hash differs from source LFS OID | Recover the exact licensed object or document the actual source. |
+| `Clinic_Architectural.ifc` | `4ef2a77d63aecabd7d8d0b77fca268e80a07b1e4bef1ab28f030f2f5b3095c16` | IFC2X3; same name/size class as community Clinic, but hash differs from source LFS OID | Exclude this variant; use the recovered exact `official_Clinic_Architectural.ifc` payload instead. |
+
+The machine-readable subset used by the final research evaluations is recorded
+in `evaluation/ifc_corpus_manifest.json`. The unresolved Dormitory and NordicLCA
+files are excluded from the claimed licensed evaluation corpus until provenance
+is supplied.
 
 ## Duplicate Accounting
 

@@ -125,7 +125,10 @@ class SpatialGraphBuilder:
                 for space_id in door.connected_spaces:
                     if space_id in self.graph:
                         distance = self._space_to_door_distance(space_id, door)
-                        edge_type = door.connection_source or "explicit_connection"
+                        edge_type = door.connection_sources.get(
+                            space_id,
+                            door.connection_source or "explicit_connection",
+                        )
                         self.graph.add_edge(
                             space_id,
                             door_id,

@@ -1,0 +1,35 @@
+{"query_id":"S01","source_id":"sample_demo","query":"maximum travel distance to the nearest exit","relevant_clause_ids":["2.2"]}
+{"query_id":"S02","source_id":"sample_demo","query":"dead end corridor travel distance limit","relevant_clause_ids":["2.2","2.10"]}
+{"query_id":"S03","source_id":"sample_demo","query":"sprinkler system increased travel distance","relevant_clause_ids":["2.2"]}
+{"query_id":"S04","source_id":"sample_demo","query":"minimum clear opening width for doors on escape routes","relevant_clause_ids":["2.3","2.9"]}
+{"query_id":"S05","source_id":"sample_demo","query":"door opens in direction of travel above fifty occupants","relevant_clause_ids":["2.3"]}
+{"query_id":"S06","source_id":"sample_demo","query":"escape stair minimum width and riser height","relevant_clause_ids":["2.4"]}
+{"query_id":"S07","source_id":"sample_demo","query":"minimum stair tread length","relevant_clause_ids":["2.4"]}
+{"query_id":"S08","source_id":"sample_demo","query":"exit flow capacity people per minute per metre","relevant_clause_ids":["2.5"]}
+{"query_id":"S09","source_id":"sample_demo","query":"office occupancy persons per square metre","relevant_clause_ids":["2.6"]}
+{"query_id":"S10","source_id":"sample_demo","query":"maximum evacuation time for high risk building","relevant_clause_ids":["2.7"]}
+{"query_id":"S11","source_id":"sample_demo","query":"minimum number of independent exits","relevant_clause_ids":["2.8"]}
+{"query_id":"S12","source_id":"sample_demo","query":"three exits for occupancy over five hundred","relevant_clause_ids":["2.8"]}
+{"query_id":"S13","source_id":"sample_demo","query":"protected stairway door width","relevant_clause_ids":["2.9"]}
+{"query_id":"S14","source_id":"sample_demo","query":"corridor width for wheelchair users","relevant_clause_ids":["2.10"]}
+{"query_id":"S15","source_id":"sample_demo","query":"illuminated exit signs and emergency lighting","relevant_clause_ids":["2.11"]}
+{"query_id":"S16","source_id":"sample_demo","query":"protected corridor fire resistance duration","relevant_clause_ids":["2.12"]}
+{"query_id":"P01","source_id":"practical_adb","query":"decision support only with final approval by fire safety expert","relevant_clause_ids":["PARA_2"]}
+{"query_id":"P02","source_id":"practical_adb","query":"escape available from any point on storey to storey exit","relevant_clause_ids":["PARA_3"]}
+{"query_id":"P03","source_id":"practical_adb","query":"office one direction travel distance eighteen metres","relevant_clause_ids":["PARA_4"]}
+{"query_id":"P04","source_id":"practical_adb","query":"review required when travel distance is within ten percent","relevant_clause_ids":["PARA_4"]}
+{"query_id":"P05","source_id":"practical_adb","query":"alternative routes should be forty five degrees apart","relevant_clause_ids":["PARA_5"]}
+{"query_id":"P06","source_id":"practical_adb","query":"routes compromised by same local fire are not independent","relevant_clause_ids":["PARA_5"]}
+{"query_id":"P07","source_id":"practical_adb","query":"occupants between sixty one and six hundred need two exits","relevant_clause_ids":["PARA_6"]}
+{"query_id":"P08","source_id":"practical_adb","query":"more than six hundred occupants need three exits","relevant_clause_ids":["PARA_6"]}
+{"query_id":"P09","source_id":"practical_adb","query":"clear route width for up to one hundred ten occupants","relevant_clause_ids":["PARA_7"]}
+{"query_id":"P10","source_id":"practical_adb","query":"door width means clear width not nominal BIM object size","relevant_clause_ids":["PARA_7"]}
+{"query_id":"P11","source_id":"practical_adb","query":"final exit must reach safe external dispersal point","relevant_clause_ids":["PARA_8"]}
+{"query_id":"P12","source_id":"practical_adb","query":"escape route minimum clear headroom","relevant_clause_ids":["PARA_9"]}
+{"query_id":"P13","source_id":"practical_adb","query":"access control and locked doors must not obstruct evacuation","relevant_clause_ids":["PARA_9"]}
+{"query_id":"P14","source_id":"practical_adb","query":"small premises ground storey single exit distance","relevant_clause_ids":["PARA_10"]}
+{"query_id":"P15","source_id":"practical_adb","query":"inner room should not be a bedroom","relevant_clause_ids":["PARA_11"]}
+{"query_id":"P16","source_id":"practical_adb","query":"IFC model readiness requires spaces doors storeys stairs and connectivity","relevant_clause_ids":["PARA_12"]}
+{"query_id":"P17","source_id":"practical_adb","query":"missing occupant number should be estimated or requested not invented","relevant_clause_ids":["PARA_12"]}
+{"query_id":"P18","source_id":"practical_adb","query":"high risk when route lacks final exit or width is insufficient","relevant_clause_ids":["PARA_13"]}
+{"query_id":"P19","source_id":"practical_adb","query":"export scenario path distance width risk and expert review status","relevant_clause_ids":["PARA_14"]}
