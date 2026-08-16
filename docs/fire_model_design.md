@@ -2,7 +2,10 @@
 
 ## Purpose
 
-This note documents the design decision for the upgraded fire-safety layer in the MSc prototype **AI-Assisted Generation of Evacuation Screening Scenarios from Building Information Models**.
+This note documents the fire-safety layer in the MSc research prototype
+**AI-Driven Generation of Evacuation Scenarios from Building Information
+Models**. The runtime boundary remains AI-assisted and deterministic; this layer
+does not claim CFD or professional fire-engineering validation.
 
 The project now uses a simplified, explainable fire-origin scenario layer based on:
 

@@ -1,5 +1,10 @@
 # Final Completion and QA Report
 
+> **Historical verification snapshot (8 August 2026).** The 99-test result below
+> records the state on that date. The current submission baseline is maintained in
+> `docs/submission_readiness_20260816.md` and contains 136 passing tests plus the
+> subsequent controlled research evaluations. Do not cite 99 as the final result.
+
 Verification date: 8 August 2026
 
 Repository: `janakjocee/bim_evacuation_system_final`

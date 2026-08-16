@@ -27,6 +27,7 @@ import tempfile
 import time
 from typing import List, Dict, Any, Optional
 
+from src import PROJECT_SUBTITLE, PROJECT_TITLE
 from src.pipeline.evacuation_pipeline import EvacuationPipeline, PipelineResult
 from src.pipeline.manual_corrections import apply_manual_corrections
 from src.bim_processing.ifc_validation import SUPPORTED_SCHEMA_LABEL
@@ -61,7 +62,7 @@ from src.utils.model_transparency import (
 # PAGE CONFIGURATION
 # ==============================================================================
 st.set_page_config(
-    page_title="BIM Evacuation Screening Platform",
+    page_title=PROJECT_TITLE,
     page_icon="🚨",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -552,8 +553,14 @@ def render_header():
     col1, col2 = st.columns([3, 1])
     
     with col1:
-        st.markdown('<p class="main-title">🏗️ BIM Evacuation Screening Platform</p>', unsafe_allow_html=True)
-        st.markdown('<p class="sub-title">Rule-Based BIM + NLP Evidence Retrieval for Fire Safety Review</p>', unsafe_allow_html=True)
+        st.markdown(
+            f'<p class="main-title">🏗️ {PROJECT_TITLE}</p>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            f'<p class="sub-title">{PROJECT_SUBTITLE}</p>',
+            unsafe_allow_html=True,
+        )
     
     with col2:
         st.markdown(f"""
@@ -2395,9 +2402,9 @@ def main():
         st.markdown("---")
         st.markdown("""
         <div style="text-align: center; padding: 3rem;">
-            <h2>👋 Welcome to the BIM Evacuation Screening Platform</h2>
+            <h2>👋 Welcome to AI-Driven Generation of Evacuation Scenarios from Building Information Models</h2>
             <p style="color: var(--app-muted); font-size: 1.1rem;">
-                This rule-based decision-support system generates evacuation screening scenarios from BIM models,<br>
+                This AI-assisted, deterministic decision-support system generates evacuation screening scenarios from BIM models,<br>
                 checks them against parsed/default safety constraints, and provides explainable recommendations<br>
                 for fire safety engineering review.
             </p>

@@ -1,6 +1,6 @@
-# BIM Evacuation Scenario Generator
+# AI-Driven Generation of Evacuation Scenarios from Building Information Models
 
-**AI-Assisted Generation of Evacuation Screening Scenarios from Building Information Models**
+**AI-Assisted Research Prototype: Deterministic IFC/Graph Analysis + NLP Evidence Retrieval**
 
 Developed by **Janak Raj Joshi**<br>
 Email: [janakjocee@gmail.com](mailto:janakjocee@gmail.com)<br>
@@ -15,6 +15,10 @@ Repository: [janakjocee/bim_evacuation_system_final](https://github.com/janakjoc
 ## Overview
 
 This MSc research prototype turns IFC/BIM building data into evacuation screening suggestions for qualified review. It combines openBIM parsing, spatial graph analysis, NLP-assisted rule extraction and evidence retrieval, compliance-oriented checks, explainable scenario generation, session-scoped research review and export.
+
+The heading above is the exact approved proposal title. In this implementation,
+"AI-driven" means an AI/NLP-assisted research workflow; it does not mean that an
+autonomous or generative model decides routes, legal compliance or building safety.
 
 ### What “AI” Means in This Prototype
 

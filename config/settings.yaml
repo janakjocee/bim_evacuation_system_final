@@ -3,7 +3,7 @@
 
 # Application Settings
 app:
-  name: "BIM Evacuation Scenario Generator"
+  name: "AI-Driven Generation of Evacuation Scenarios from Building Information Models"
   version: "1.0.0"
   debug: false
 
