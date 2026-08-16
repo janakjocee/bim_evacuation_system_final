@@ -11,6 +11,8 @@ except ImportError:  # pragma: no cover
     NETWORKX_AVAILABLE = False
 import plotly.graph_objects as go
 
+from src.ui.theme import ACCENT, RISK_COLORS, STATUS_COLORS
+
 
 BOX_TRIANGLES = (
     (0, 1, 2), (0, 2, 3), (4, 5, 6), (4, 6, 7),
@@ -99,7 +101,7 @@ def create_ifc_plan_figure(building: Any) -> go.Figure:
             x=connection_x,
             y=connection_y,
             mode="lines",
-            line=dict(color="#f9a825", width=3),
+            line=dict(color=RISK_COLORS["medium"], width=3),
             name="Evacuation connectivity",
             hoverinfo="skip",
         ))
@@ -109,7 +111,12 @@ def create_ifc_plan_figure(building: Any) -> go.Figure:
             x=[door.location.x for door in building.exits.values()],
             y=[door.location.y for door in building.exits.values()],
             mode="markers+text",
-            marker=dict(size=15, color="#00c853", symbol="diamond", line=dict(color="white", width=2)),
+            marker=dict(
+                size=15,
+                color=RISK_COLORS["low"],
+                symbol="diamond",
+                line=dict(color="white", width=2),
+            ),
             text=[door.name for door in building.exits.values()],
             textposition="top center",
             name="Exits / inferred egress",
@@ -122,7 +129,8 @@ def create_ifc_plan_figure(building: Any) -> go.Figure:
         margin=dict(l=10, r=10, t=50, b=10),
         hovermode="closest",
         legend=dict(orientation="h", y=1.02),
-        plot_bgcolor="#f7f9fc",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
         xaxis=dict(title="X", scaleanchor="y", scaleratio=1),
         yaxis=dict(title="Y"),
     )
@@ -160,7 +168,7 @@ def create_ifc_3d_figure(building: Any) -> go.Figure:
             y=[point[1] for point in centers.values()],
             z=[point[2] for point in centers.values()],
             mode="markers",
-            marker=dict(size=5, color="#0d47a1", line=dict(color="white", width=1)),
+            marker=dict(size=5, color=ACCENT, line=dict(color="white", width=1)),
             text=[building.spaces[item].name for item in centers],
             hoverinfo="text",
             name="Element / space centers",
@@ -183,7 +191,7 @@ def create_ifc_3d_figure(building: Any) -> go.Figure:
             y=connection_y,
             z=connection_z,
             mode="lines",
-            line=dict(color="#ffb300", width=5),
+            line=dict(color=RISK_COLORS["medium"], width=5),
             name="Connectivity / routes",
             hoverinfo="skip",
         ))
@@ -194,7 +202,7 @@ def create_ifc_3d_figure(building: Any) -> go.Figure:
             y=[door.location.y for door in building.exits.values()],
             z=[door.location.z for door in building.exits.values()],
             mode="markers+text",
-            marker=dict(size=8, color="#00c853", symbol="diamond"),
+            marker=dict(size=8, color=RISK_COLORS["low"], symbol="diamond"),
             text=[door.name for door in building.exits.values()],
             textposition="top center",
             name="Exits / inferred egress",
@@ -205,13 +213,14 @@ def create_ifc_3d_figure(building: Any) -> go.Figure:
         title="Uploaded IFC 3D Screening View",
         height=700,
         margin=dict(l=0, r=0, t=45, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
         legend=dict(orientation="h", y=0),
         scene=dict(
             aspectmode="data",
             xaxis_title="X",
             yaxis_title="Y",
             zaxis_title="Z / elevation",
-            bgcolor="#f7f9fc",
+            bgcolor="rgba(0,0,0,0)",
         ),
     )
     return figure
@@ -259,22 +268,22 @@ def create_dataset_3d_figure(
             f"<br>Occupancy: {details.get('occupancy', 0)}"
         )
         if node == fire_origin:
-            colors.append("#c62828")
+            colors.append(RISK_COLORS["high"])
             sizes.append(14)
         elif node in blocked:
-            colors.append("#212121")
+            colors.append(STATUS_COLORS["unknown"])
             sizes.append(12)
         elif node in high_risk:
-            colors.append("#6a1b9a")
+            colors.append(STATUS_COLORS["insufficient"])
             sizes.append(12)
         elif node in smoke:
-            colors.append("#fb8c00")
+            colors.append(RISK_COLORS["medium"])
             sizes.append(11)
         elif node in exits:
-            colors.append("#00c853")
+            colors.append(RISK_COLORS["low"])
             sizes.append(13)
         else:
-            colors.append("#1976d2")
+            colors.append(ACCENT)
             sizes.append(9)
 
     nodes = list(graph.nodes())
@@ -294,13 +303,14 @@ def create_dataset_3d_figure(
         title="3D Scenario Schematic (not BIM geometry)",
         height=650,
         margin=dict(l=0, r=0, t=45, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
         showlegend=False,
         scene=dict(
             aspectmode="cube",
             xaxis=dict(visible=False),
             yaxis=dict(visible=False),
             zaxis=dict(visible=False),
-            bgcolor="#f7f9fc",
+            bgcolor="rgba(0,0,0,0)",
         ),
     )
     return figure

@@ -13,25 +13,20 @@ from typing import List, Dict, Any, Optional
 
 from src.utils.helpers import RiskLevel, ComplianceStatus
 from src.scenario.scenario_generator import EvacuationScenario
+from src.ui.theme import ACCENT, RISK_COLORS, STATUS_COLORS
 from src.utils.model_transparency import ACADEMIC_USE_NOTICE, screening_index_semantics
 
 
-def render_metric_card(title: str, value: str, subtitle: str = "", color: str = "#1f77b4"):
+def render_metric_card(title: str, value: str, subtitle: str = "", color: str = ACCENT):
     """Render a metric card with custom styling."""
     safe_title = html.escape(str(title))
     safe_value = html.escape(str(value))
     safe_subtitle = html.escape(str(subtitle))
     st.markdown(f"""
-    <div style="
-        background-color: var(--app-panel, #f8f9fa);
-        border-left: 5px solid {color};
-        padding: 1rem;
-        border-radius: 8px;
-        margin-bottom: 1rem;
-    ">
-        <p style="margin: 0; color: var(--app-muted, #666); font-size: 0.85rem; text-transform: uppercase;">{safe_title}</p>
-        <p style="margin: 0; color: var(--app-heading, #333); font-size: 1.8rem; font-weight: bold;">{safe_value}</p>
-        {f'<p style="margin: 0; color: var(--app-muted, #777); font-size: 0.8rem;">{safe_subtitle}</p>' if subtitle else ''}
+    <div class="metric-card" style="--metric-accent:{color};">
+        <p class="metric-card__label">{safe_title}</p>
+        <p class="metric-card__value">{safe_value}</p>
+        {f'<p class="metric-card__subtitle">{safe_subtitle}</p>' if subtitle else ''}
     </div>
     """, unsafe_allow_html=True)
 
@@ -39,11 +34,11 @@ def render_metric_card(title: str, value: str, subtitle: str = "", color: str = 
 def get_risk_color(risk_level: RiskLevel) -> str:
     """Get color for risk level."""
     colors = {
-        RiskLevel.LOW: "#28a745",
-        RiskLevel.MEDIUM: "#ffc107",
-        RiskLevel.HIGH: "#dc3545"
+        RiskLevel.LOW: RISK_COLORS["low"],
+        RiskLevel.MEDIUM: RISK_COLORS["medium"],
+        RiskLevel.HIGH: RISK_COLORS["high"],
     }
-    return colors.get(risk_level, "#6c757d")
+    return colors.get(risk_level, STATUS_COLORS["unknown"])
 
 
 def get_risk_badge(risk_level: RiskLevel) -> str:
@@ -59,14 +54,14 @@ def get_risk_badge(risk_level: RiskLevel) -> str:
 def get_compliance_badge(status: ComplianceStatus) -> str:
     """Describe the outcome of implemented prototype checks without legal claims."""
     colors = {
-        ComplianceStatus.COMPLIANT: ("#28a745", "✓ Checks Passed"),
-        ComplianceStatus.NON_COMPLIANT: ("#dc3545", "✗ Check Findings"),
-        ComplianceStatus.PARTIAL: ("#ffc107", "◐ Partial Checks"),
-        ComplianceStatus.REQUIRES_REVIEW: ("#17a2b8", "⚠ Review Required"),
-        ComplianceStatus.INSUFFICIENT_DATA: ("#6f42c1", "◌ Insufficient Evidence"),
-        ComplianceStatus.UNKNOWN: ("#6c757d", "? Unknown"),
+        ComplianceStatus.COMPLIANT: (STATUS_COLORS["pass"], "✓ Checks Passed"),
+        ComplianceStatus.NON_COMPLIANT: (STATUS_COLORS["fail"], "✗ Check Findings"),
+        ComplianceStatus.PARTIAL: (STATUS_COLORS["warn"], "◐ Partial Checks"),
+        ComplianceStatus.REQUIRES_REVIEW: (STATUS_COLORS["review"], "⚠ Review Required"),
+        ComplianceStatus.INSUFFICIENT_DATA: (STATUS_COLORS["insufficient"], "◌ Insufficient Evidence"),
+        ComplianceStatus.UNKNOWN: (STATUS_COLORS["unknown"], "? Unknown"),
     }
-    color, label = colors.get(status, ("#6c757d", "? Unknown"))
+    color, label = colors.get(status, (STATUS_COLORS["unknown"], "? Unknown"))
     return (
         f'<span style="background:{color};color:white;padding:5px 12px;'
         f'border-radius:999px;font-size:.75rem;font-weight:700;">{label}</span>'
@@ -91,7 +86,6 @@ def create_risk_pie_chart(scenarios: List[EvacuationScenario]) -> go.Figure:
     for s in scenarios:
         risk_counts[s.risk_level.value] = risk_counts.get(s.risk_level.value, 0) + 1
     
-    colors = ['#28a745', '#ffc107', '#dc3545']
     labels = [k.upper() for k in risk_counts.keys()]
     values = list(risk_counts.values())
     
@@ -101,9 +95,9 @@ def create_risk_pie_chart(scenarios: List[EvacuationScenario]) -> go.Figure:
         title="Screening Priority Distribution",
         color=labels,
         color_discrete_map={
-            'LOW': '#28a745',
-            'MEDIUM': '#ffc107',
-            'HIGH': '#dc3545'
+            'LOW': RISK_COLORS['low'],
+            'MEDIUM': RISK_COLORS['medium'],
+            'HIGH': RISK_COLORS['high'],
         },
         hole=0.4
     )
@@ -135,8 +129,8 @@ def create_scenario_bar_chart(scenarios: List[EvacuationScenario]) -> go.Figure:
         barmode='group',
         title="Evidence Confidence vs Implemented Checks Passed",
         color_discrete_map={
-            'Evidence Confidence': '#1f77b4',
-            'Implemented Checks Passed': '#ff7f0e',
+            'Evidence Confidence': ACCENT,
+            'Implemented Checks Passed': RISK_COLORS['medium'],
         },
     )
     fig.update_layout(
@@ -166,8 +160,7 @@ def create_route_comparison_chart(scenarios: List[EvacuationScenario]) -> go.Fig
         specs=[[{"type": "bar"}, {"type": "bar"}]]
     )
     
-    colors = {'low': '#28a745', 'medium': '#ffc107', 'high': '#dc3545'}
-    bar_colors = [colors.get(r, '#6c757d') for r in df['Risk']]
+    bar_colors = [RISK_COLORS.get(r, STATUS_COLORS['unknown']) for r in df['Risk']]
     
     fig.add_trace(
         go.Bar(x=df['Scenario'], y=df['Distance (m)'], marker_color=bar_colors, name='Distance'),
@@ -296,7 +289,11 @@ def create_network_graph_viz(building_data) -> go.Figure:
             showlegend=False,
         ))
 
-    colors = {"space": "#1f77b4", "exit": "#28a745", "door": "#ff7f0e"}
+    colors = {
+        "space": ACCENT,
+        "exit": RISK_COLORS["low"],
+        "door": RISK_COLORS["medium"],
+    }
 
     # Add a scatter trace for each node type
     for node_type in node_df["type"].unique():
@@ -311,7 +308,7 @@ def create_network_graph_viz(building_data) -> go.Figure:
             textposition='top center',
             marker=dict(
                 size=subset["size"],
-                color=colors.get(node_type, "#6c757d"),
+                color=colors.get(node_type, STATUS_COLORS["unknown"]),
                 line=dict(width=2, color='white')
             ),
             hovertemplate='<b>%{text}</b><br>Type: ' + node_type.capitalize() + '<extra></extra>'
@@ -349,7 +346,11 @@ def create_risk_heatmap(scenarios: List[EvacuationScenario]) -> go.Figure:
     fig = px.imshow(
         df.set_index('Scenario').T,
         title="Screening Indicator Heatmap",
-        color_continuous_scale=['#28a745', '#ffc107', '#dc3545'],
+        color_continuous_scale=[
+            RISK_COLORS['low'],
+            RISK_COLORS['medium'],
+            RISK_COLORS['high'],
+        ],
         aspect='auto'
     )
     fig.update_layout(
@@ -364,35 +365,27 @@ def render_scenario_card(scenario: EvacuationScenario, index: int):
     """Render a scenario card with full details."""
     risk_color = get_risk_color(scenario.risk_level)
     compliance_color = {
-        ComplianceStatus.COMPLIANT: '#28a745',
-        ComplianceStatus.NON_COMPLIANT: '#dc3545',
-        ComplianceStatus.PARTIAL: '#ffc107',
-        ComplianceStatus.REQUIRES_REVIEW: '#17a2b8',
-        ComplianceStatus.INSUFFICIENT_DATA: '#6f42c1',
-        ComplianceStatus.UNKNOWN: '#6c757d',
-    }.get(scenario.compliance_status, '#6c757d')
+        ComplianceStatus.COMPLIANT: STATUS_COLORS['pass'],
+        ComplianceStatus.NON_COMPLIANT: STATUS_COLORS['fail'],
+        ComplianceStatus.PARTIAL: STATUS_COLORS['warn'],
+        ComplianceStatus.REQUIRES_REVIEW: STATUS_COLORS['review'],
+        ComplianceStatus.INSUFFICIENT_DATA: STATUS_COLORS['insufficient'],
+        ComplianceStatus.UNKNOWN: STATUS_COLORS['unknown'],
+    }.get(scenario.compliance_status, STATUS_COLORS['unknown'])
     
     with st.container():
         st.markdown(f"""
-        <div style="
-            border: 1px solid #e0e0e0;
-            border-left: 5px solid {risk_color};
-            border-radius: 8px;
-            padding: 1rem;
-            margin-bottom: 1rem;
-            background-color: var(--app-panel-strong, white);
-        ">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                <h4 style="margin: 0; color: var(--app-heading, #333);">#{index + 1} {html.escape(str(scenario.name))}</h4>
-                <div>
-                    <span style="background-color: {risk_color}; color: white; padding: 4px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; margin-right: 8px;">
-                        {scenario.risk_level.value.upper()} PRIORITY
-                    </span>
-                    <span style="background-color: {compliance_color}; color: white; padding: 4px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">
-                        {get_check_outcome_label(scenario.compliance_status)}
-                    </span>
-                </div>
-            </div>
+        <div class="scenario-card" style="--scenario-accent:{risk_color};">
+            <span class="scenario-kicker">Scenario #{index + 1}</span>
+            <h3>{html.escape(str(scenario.name))}</h3>
+            <p class="scenario-card__meta">
+                <span style="background:{risk_color};color:#fff;padding:4px 10px;border-radius:999px;font-weight:700;">
+                    {scenario.risk_level.value.upper()} PRIORITY
+                </span>
+                <span style="background:{compliance_color};color:#fff;padding:4px 10px;border-radius:999px;font-weight:700;">
+                    {get_check_outcome_label(scenario.compliance_status)}
+                </span>
+            </p>
         </div>
         """, unsafe_allow_html=True)
         

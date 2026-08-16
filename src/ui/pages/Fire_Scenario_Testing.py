@@ -15,6 +15,7 @@ import streamlit as st
 from src.fire.fire_scenario_engine import FireScenarioEngine
 from src.scenario.ifc_dataset_exporter import building_to_worst_case_dataset
 from src.ui.export_helpers import safe_uploaded_filename
+from src.ui.theme import apply_app_theme
 from src.ui.visualization_3d import create_dataset_3d_figure
 from src.scenario.worst_case_engine import (
     DEFAULT_DATASET_PATH,
@@ -25,6 +26,7 @@ from src.scenario.worst_case_engine import (
 
 
 st.set_page_config(page_title="Fire Scenario Testing", page_icon="🔥", layout="wide")
+apply_app_theme()
 st.title("🔥 ASET/RSET Fire Scenario Testing")
 st.warning(
     "Indicative academic decision support only. Results require validation by "
