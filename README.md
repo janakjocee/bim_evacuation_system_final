@@ -221,8 +221,13 @@ This writes:
 ```text
 outputs/ifc_diagnostics/compatibility_matrix.csv
 outputs/ifc_diagnostics/compatibility_matrix.json
+outputs/ifc_diagnostics/compatibility_summary.json
 outputs/ifc_diagnostics/per_file/*.diagnostic.json
 ```
+
+The summary distinguishes tested input paths from unique IFC payloads by
+SHA-256. Repeated downloads or renamed copies remain visible in the matrix but
+are not counted as independent models when reporting corpus diversity.
 
 Run a strict end-to-end acceptance check for one real IFC and an optional
 regulation document:
@@ -271,6 +276,18 @@ documented in:
 
 ```text
 docs/final_completion_report.md
+```
+
+The proposal, marking-scheme and final-report claim audit is documented in:
+
+```text
+docs/proposal_report_alignment_20260816.md
+```
+
+The duplicate-aware IFC source and licence audit is documented in:
+
+```text
+docs/ifc_corpus_provenance_20260816.md
 ```
 
 The earlier June practical IFC verification loop is retained in:
@@ -506,11 +523,12 @@ Install test-only fixture tools and run:
 ```bash
 pip install -r requirements-dev.txt
 pytest
+pytest --cov=src --cov=scripts --cov-report=term
 ```
 
 The geometry-only regression tests run when
 `tests/fixtures/11134_V_Motebello_Heistopp_Rev.ifc` is present. Fresh GitHub
-checkouts without that optional IFC fixture skip those two tests; use
+checkouts without that optional IFC fixture skip three real-model tests; use
 `scripts/validate_ifcs.py` with local IFC files for the full real-model audit.
 
 Test coverage includes:
