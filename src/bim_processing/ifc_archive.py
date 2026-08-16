@@ -5,7 +5,7 @@ from pathlib import Path, PurePosixPath
 from zipfile import BadZipFile, ZIP_DEFLATED, ZIP_STORED, ZipFile
 
 
-MAX_IFCZIP_UNCOMPRESSED_BYTES = 512 * 1024 * 1024
+MAX_IFCZIP_UNCOMPRESSED_BYTES = 200 * 1024 * 1024
 MAX_IFCZIP_COMPRESSION_RATIO = 100
 
 
@@ -39,7 +39,7 @@ def validate_ifczip(path: str | Path) -> dict[str, int | str]:
         raise IFCArchiveError("The IFCZIP uses an unsupported compression method.")
     if entry.file_size > MAX_IFCZIP_UNCOMPRESSED_BYTES:
         raise IFCArchiveError(
-            "The uncompressed IFC exceeds the 512 MB research-prototype safety limit."
+            "The uncompressed IFC exceeds the 200 MB research-prototype safety limit."
         )
 
     compressed_size = max(entry.compress_size, 1)

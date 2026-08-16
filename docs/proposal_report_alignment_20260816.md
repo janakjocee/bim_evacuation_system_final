@@ -164,9 +164,9 @@ cannot honestly replace missing external engineering validation.
 - Add Hugging Face IFC models to the reported evaluation corpus only after the
   dataset revision, licence, attribution, model hash and source-family identity
   are recorded. Use unverified models for local robustness testing only.
-- Prefer IFCZIP for large STEP-text models. Keep the 200 MB compressed-upload
-  guardrail unless deployment memory has been measured under realistic parsing
-  and geometry workloads.
+- Prefer IFCZIP for compressible STEP-text models, but enforce the 200 MB limit
+  on both the upload and its uncompressed IFC payload. Larger models require a
+  deployment with memory measured under realistic parsing and geometry loads.
 - The seven provenance-pending Hugging Face files now produce seven partial and
   zero failed diagnostics. This demonstrates parser robustness, not engineering
   correctness: all seven still depend on inferred topology or have unresolved
