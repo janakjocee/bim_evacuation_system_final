@@ -10,6 +10,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional, Tuple
 
+from src.utils.helpers import sha256_file
+
 
 LABEL_RULES = {
     "circulation": (
@@ -114,7 +116,7 @@ def extract_silver_records(ifc_paths: Iterable[Path]) -> list[Dict[str, Any]]:
 
     records = []
     for path in sorted(Path(item) for item in ifc_paths):
-        source_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+        source_hash = sha256_file(path)
         model = ifcopenshell.open(str(path))
         family = infer_family(path)
         for space in model.by_type("IfcSpace"):
@@ -351,7 +353,7 @@ def evaluate_classifier(
     return {
         "experiment": "ifc_space_use_text_classification_v1",
         "dataset": str(dataset_path),
-        "dataset_sha256": hashlib.sha256(Path(dataset_path).read_bytes()).hexdigest(),
+        "dataset_sha256": sha256_file(dataset_path),
         "record_count": len(rows),
         "model_family_count": len(unique_groups),
         "model_families": unique_groups,

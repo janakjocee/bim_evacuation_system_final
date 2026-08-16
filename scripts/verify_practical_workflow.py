@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import hashlib
 import importlib.metadata
 import json
 import platform
@@ -16,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts.validate_ifcs import _ifc_entity_counts, route_loguru_to_stderr_for_json
 from src.nlp.document_loader import extract_regulation_text
 from src.pipeline.evacuation_pipeline import EvacuationPipeline, _looks_like_git_lfs_pointer
+from src.utils.helpers import sha256_file
 
 
 DEPENDENCIES = [
@@ -143,7 +143,7 @@ def verify(ifc_path: Path, regulation_path: Path | None, output_dir: Path, max_s
     export_dir = output_dir / "exports"
     exported = pipeline.export_results(result, str(export_dir), formats=["json", "csv"])
 
-    source_hash = hashlib.sha256(ifc_path.read_bytes()).hexdigest()
+    source_hash = sha256_file(ifc_path)
     raw = _ifc_entity_counts(ifc_path)
     graph = result.graph_stats or {}
     application = result.regulation_application or {}

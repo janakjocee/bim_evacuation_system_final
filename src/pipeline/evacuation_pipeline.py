@@ -2,7 +2,6 @@
 Main evacuation pipeline orchestrator.
 """
 import json
-import hashlib
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -15,12 +14,14 @@ from ..utils.model_transparency import (
     standard_assumption_registry,
 )
 from ..bim_processing.ifc_parser import IFCParser, BuildingData
+from ..bim_processing.ifc_archive import IFCArchiveError, validate_ifczip
 from ..bim_processing.ifc_validation import validate_ifc_model
 from ..bim_processing.feature_extractor import FeatureExtractor, ExtractedFeatures
 from ..bim_processing.spatial_graph import SpatialGraphBuilder
 from ..nlp.regulation_parser import RegulationParser
 from ..nlp.rag_engine import RAGEngine
 from ..scenario.scenario_generator import ScenarioGenerator, EvacuationScenario
+from ..utils.helpers import sha256_file
 
 logger = get_logger("evacuation_pipeline")
 
@@ -44,6 +45,7 @@ class PipelineResult:
     regulation_clause_count: int = 0
     regulation_rule_count: int = 0
     regulation_application: Dict[str, Any] = field(default_factory=dict)
+    regulation_document: Dict[str, Any] = field(default_factory=dict)
     rag_enabled: bool = False
     retrieval_mode: str = "not_used"
 
@@ -150,7 +152,7 @@ class EvacuationPipeline:
         source_path = Path(ifc_path)
         source_file_name = source_path.name
         try:
-            source_file_sha256 = hashlib.sha256(source_path.read_bytes()).hexdigest()
+            source_file_sha256 = sha256_file(source_path)
         except OSError:
             source_file_sha256 = ""
         
@@ -159,6 +161,18 @@ class EvacuationPipeline:
         logger.info("=" * 60)
         
         errors = []
+
+        if source_path.suffix.lower() == ".ifczip":
+            try:
+                validate_ifczip(source_path)
+            except IFCArchiveError as exc:
+                errors.append(str(exc))
+                return PipelineResult(
+                    success=False,
+                    errors=errors,
+                    source_file_name=source_file_name,
+                    source_file_sha256=source_file_sha256,
+                )
         
         if _looks_like_git_lfs_pointer(source_path):
             errors.append(
@@ -328,6 +342,7 @@ class EvacuationPipeline:
                 'regulation_clause_count': result.regulation_clause_count,
                 'regulation_rule_count': result.regulation_rule_count,
                 'regulation_application': result.regulation_application,
+                'regulation_document': result.regulation_document,
                 'graph_stats': result.graph_stats,
                 'rag_enabled': result.rag_enabled,
                 'retrieval_mode': result.retrieval_mode,
@@ -362,7 +377,8 @@ class EvacuationPipeline:
 def _looks_like_git_lfs_pointer(path: Path) -> bool:
     """Return True when a file is a Git LFS pointer instead of real IFC SPF text."""
     try:
-        header = path.read_text(encoding="utf-8", errors="ignore")[:200]
+        with path.open("rb") as stream:
+            header = stream.read(200).decode("utf-8", errors="ignore")
     except OSError:
         return False
     return (

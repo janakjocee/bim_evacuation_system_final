@@ -167,6 +167,20 @@ Testing pages clearly show their active dataset source and provide controls to:
 Main IFC results include the uploaded filename, detected schema, analysis mode
 and SHA-256 fingerprint for provenance.
 
+The main uploader accepts plain `.ifc` and compressed `.ifczip`. IFCZIP is the
+preferred route for large STEP-text models: it must contain exactly one IFC
+file, is inspected before parsing, and is limited to 512 MB after decompression.
+The Streamlit upload remains capped at 200 MB because uploads are held in memory
+and IFC geometry parsing needs additional working memory. For example:
+
+```bash
+zip -j building.ifczip building.ifc
+```
+
+Do not raise the cloud limit merely to accept a large plain-text IFC. A model
+that is still too large after compression should be tested locally or on a
+deployment with measured memory capacity.
+
 The IFC under `tests/fixtures/` is used only by automated regression tests. The
 Streamlit application does not load it automatically; main analysis always uses
 the file selected by the user.
@@ -399,6 +413,29 @@ Correct wording:
 > analysis also depends on usable semantic entities or element geometry.
 
 Do **not** claim that the prototype works with every IFC version or every IFC file.
+
+IFCs downloaded from Hugging Face or another public host may be used for local
+robustness and compatibility testing. Before counting them as dissertation
+evaluation evidence, record the exact dataset URL, revision/commit, model
+filename, SHA-256, licence, attribution and any redistribution restriction in
+`docs/ifc_corpus_provenance_20260816.md`. Hosting location alone is not evidence
+of permission or independent ground truth.
+
+---
+
+## Regulation Source Evidence
+
+The application accepts TXT, MD, PDF and DOCX regulation documents. For UK
+Approved Document B work, use the official GOV.UK publication page and declare
+the jurisdiction, edition/amendment status and source URL in the sidebar. The
+export records those user-declared fields together with the uploaded filename,
+file type and SHA-256 fingerprint.
+
+Approved Document B is statutory guidance for England, not a machine-readable
+legal approval API. The parser activates only supported numeric screening
+metrics, identifies unsupported extracted candidates, and does not resolve
+building classification, commencement dates or transitional provisions. See
+`docs/regulation_source_protocol.md`.
 
 ---
 

@@ -1,12 +1,12 @@
 """Quantitative checks for the project-generated controlled IFC fixture."""
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 from typing import Any, Dict, Iterable, Tuple
 
 from src.pipeline.evacuation_pipeline import EvacuationPipeline
+from src.utils.helpers import sha256_file
 
 
 def _pair_set(values: Iterable[Iterable[str]]) -> set[Tuple[str, str]]:
@@ -30,7 +30,7 @@ def evaluate_controlled_ifc(ifc_path: Path, truth_path: Path) -> Dict[str, Any]:
             "fixture_id": truth["fixture_id"],
             "passed": False,
             "errors": result.errors,
-            "source_sha256": hashlib.sha256(ifc_path.read_bytes()).hexdigest(),
+            "source_sha256": sha256_file(ifc_path),
         }
 
     building = result.building
@@ -115,7 +115,7 @@ def evaluate_controlled_ifc(ifc_path: Path, truth_path: Path) -> Dict[str, Any]:
     }
     return {
         "fixture_id": truth["fixture_id"],
-        "source_sha256": hashlib.sha256(ifc_path.read_bytes()).hexdigest(),
+        "source_sha256": sha256_file(ifc_path),
         "ground_truth_scope": truth["purpose"],
         "independent_ground_truth": truth["independent_ground_truth"],
         "passed": all(checks.values()),

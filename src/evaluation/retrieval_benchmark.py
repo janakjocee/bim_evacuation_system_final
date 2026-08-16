@@ -1,7 +1,6 @@
 """Reproducible regulation evidence-retrieval benchmark."""
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 from pathlib import Path
@@ -10,6 +9,7 @@ from typing import Any, Dict, Iterable
 import numpy as np
 
 from src.nlp.regulation_parser import RegulationClause, RegulationParser
+from src.utils.helpers import sha256_file
 
 
 def load_queries(path: Path) -> list[Dict[str, Any]]:
@@ -146,7 +146,7 @@ def evaluate_source(
     return {
         "source_id": source_id,
         "source_file_name": source_path.name,
-        "source_sha256": hashlib.sha256(source_path.read_bytes()).hexdigest(),
+        "source_sha256": sha256_file(source_path),
         "clause_count": len(clauses),
         "query_count": len(queries),
         "methods": methods,

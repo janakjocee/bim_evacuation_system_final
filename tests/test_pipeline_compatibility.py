@@ -2,10 +2,14 @@
 
 import os
 from pathlib import Path
+from zipfile import ZipFile
 
 import pytest
 
 from src.pipeline.evacuation_pipeline import EvacuationPipeline
+from src.bim_processing.ifc_archive import IFCArchiveError, validate_ifczip
+from scripts.generate_controlled_ifc import build_controlled_ifc
+from scripts.validate_ifcs import discover_ifcs
 from scripts.verify_practical_workflow import verify
 
 
@@ -78,3 +82,36 @@ def test_git_lfs_pointer_upload_gets_clear_error(tmp_path):
 
     assert not result.success
     assert "Git LFS pointer" in result.errors[0]
+
+
+def test_ifczip_runs_the_same_real_ifc_pipeline(tmp_path):
+    ifc_path = build_controlled_ifc(tmp_path / "controlled.ifc")
+    archive_path = tmp_path / "controlled.ifczip"
+    with ZipFile(archive_path, "w") as archive:
+        archive.write(ifc_path, arcname=ifc_path.name)
+
+    archive = validate_ifczip(archive_path)
+    result = EvacuationPipeline().run(str(archive_path), max_scenarios=3, enable_rag=False)
+
+    assert archive["model_name"] == "controlled.ifc"
+    assert archive["uncompressed_bytes"] > 0
+    assert result.success
+    assert result.ifc_schema == "IFC4"
+    assert result.source_file_name == "controlled.ifczip"
+    assert len(result.source_file_sha256) == 64
+    assert len(result.scenarios) == 3
+    assert discover_ifcs([str(tmp_path)]) == [ifc_path.resolve(), archive_path.resolve()]
+
+
+def test_ifczip_rejects_multiple_payloads_and_reports_pipeline_error(tmp_path):
+    archive_path = tmp_path / "ambiguous.ifczip"
+    with ZipFile(archive_path, "w") as archive:
+        archive.writestr("first.ifc", "ISO-10303-21;")
+        archive.writestr("second.ifc", "ISO-10303-21;")
+
+    with pytest.raises(IFCArchiveError, match="exactly one"):
+        validate_ifczip(archive_path)
+
+    result = EvacuationPipeline().run(str(archive_path), max_scenarios=1)
+    assert not result.success
+    assert "exactly one IFC model" in result.errors[0]
