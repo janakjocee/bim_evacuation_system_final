@@ -118,4 +118,7 @@ def test_main_export_uses_complete_evidence_payload():
     assert "\"retrieval_mode\": result.retrieval_mode" in source
     assert "\"manual_corrections\": st.session_state.get(\"manual_corrections\")" in source
     assert "\"research_review_records\":" in source
+    assert "\"preliminary_domain_review_records\":" in source
+    assert "\"manual_accessibility_audit_records\":" in source
+    assert "\"space_label_review_validation\":" in source
     assert "export_data = build_complete_export_payload(result)" in source

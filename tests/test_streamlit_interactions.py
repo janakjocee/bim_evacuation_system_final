@@ -10,6 +10,8 @@ from src.bim_processing.ifc_validation import validate_ifc_model
 from src.bim_processing.spatial_graph import SpatialGraphBuilder
 from src.pipeline.evacuation_pipeline import PipelineResult
 from src.scenario.scenario_generator import ScenarioGenerator
+from src.evaluation.expert_review import RATING_FIELDS
+from src.ui.accessibility import MANUAL_ACCESSIBILITY_CHECKS
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -150,6 +152,57 @@ def test_selected_details_render_inside_the_selected_scenario_card():
         if 'class="scenario-detail-card"' in value
     )
     assert card_positions[0] < detail_position < card_positions[1]
+
+
+def test_structured_domain_and_accessibility_records_are_exportable():
+    result = _main_pipeline_result()
+    app = _app_test("src/ui/streamlit_app.py")
+    app.session_state["processing_done"] = True
+    app.session_state["pipeline_result"] = result
+    app.session_state["baseline_pipeline_result"] = result
+    app.run(timeout=30)
+    assert not app.exception
+
+    def text_input(label):
+        return next(item for item in app.text_input if item.label == label)
+
+    def selectbox(label):
+        return next(item for item in app.selectbox if item.label == label)
+
+    text_input("Ethics or supervisor confirmation reference").set_value(
+        "supervisor-email-2026-08-16"
+    ).run(timeout=30)
+    text_input("Reviewer competence scope").set_value(
+        "Fire engineer reviewing route evidence"
+    ).run(timeout=30)
+    text_input("Reviewer sign-off or consent reference").set_value(
+        "signed-review-001"
+    ).run(timeout=30)
+    for label in RATING_FIELDS.values():
+        selectbox(label).set_value(4).run(timeout=30)
+    _button(app, "Save preliminary domain-review record").click().run(timeout=30)
+    assert not app.exception
+    domain_record = app.session_state["domain_review_records"][-1]
+    assert domain_record["execution_status"] == "preliminary_review_recorded"
+    assert domain_record["software_assurance"]["professional_validation_claim_allowed_automatically"] is False
+
+    text_input("Accessibility test browser and version").set_value("Chrome 140").run(timeout=30)
+    text_input("Accessibility test operating system").set_value("macOS 15").run(timeout=30)
+    text_input("Accessibility evidence reference").set_value(
+        "screenshots/accessibility-2026-08-16"
+    ).run(timeout=30)
+    for label in MANUAL_ACCESSIBILITY_CHECKS.values():
+        selectbox(f"Accessibility check: {label}").set_value("Pass").run(timeout=30)
+    _button(app, "Save manual accessibility record").click().run(timeout=30)
+    assert not app.exception
+    accessibility_record = app.session_state["accessibility_audit_records"][-1]
+    assert accessibility_record["execution_status"] == "completed_author_accessibility_check"
+    assert accessibility_record["wcag_conformance_claim_allowed"] is False
+
+    download_labels = {element.label for element in app.get("download_button")}
+    assert "Download preliminary domain-review records JSON" in download_labels
+    assert "Download manual accessibility records JSON" in download_labels
+    assert "Download blinded independent-label review pack CSV" in download_labels
 
 
 def test_fire_scenario_page_runs_and_exposes_result_exports():

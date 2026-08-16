@@ -1,5 +1,5 @@
 {
-  "protocol_version": 1,
+  "protocol_version": 2,
   "execution_status": "not_executed",
   "ethics_or_supervisor_confirmation_reference": "",
   "reviewer_competence_scope": "",
@@ -16,5 +16,12 @@
   "other_findings": [],
   "required_corrections": [],
   "reviewer_signoff_or_consent_reference": "",
-  "project_author_disposition": []
+  "project_author_disposition": [],
+  "missing_fields": [],
+  "software_assurance": {
+    "reviewer_identity_verified_by_software": false,
+    "reviewer_qualification_verified_by_software": false,
+    "professional_validation_claim_allowed_automatically": false,
+    "scope": "preliminary_one-reviewer_evidence_not_generalizable_validation"
+  }
 }

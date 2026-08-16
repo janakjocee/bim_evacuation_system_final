@@ -1,9 +1,18 @@
 # Qualified Review Protocol
 
-Execution status: **NOT EXECUTED**
+Workflow implementation status: **EXECUTABLE IN THE RESEARCH REVIEW TAB**
+
+Review execution status: **NOT EXECUTED**
 
 This protocol prepares a bounded domain-review activity. It does not claim that
 expert validation has occurred.
+
+The Streamlit workflow records the governance reference, competence scope,
+cases reviewed, five ratings, safety-critical findings, required corrections,
+reviewer sign-off reference and project-author disposition. Records are
+exportable and included in the complete JSON evidence package. The software
+does not verify reviewer identity or qualifications and never converts a saved
+record into automatic professional validation.
 
 ## Governance gate
 
@@ -52,3 +61,14 @@ Objective 5 may be described as externally reviewed only after at least one
 qualified reviewer has completed the protocol and every safety-critical correction
 has been resolved or explicitly dispositioned. One reviewer remains preliminary
 evidence, not generalisable validation.
+
+## Execution steps
+
+1. Obtain the written supervisor/ethics confirmation reference.
+2. Run a representative IFC and open `Research Review`.
+3. Expand `Structured Preliminary Domain Review`.
+4. Have the permitted reviewer complete the record without collecting
+   unnecessary personal data.
+5. Download the preliminary review JSON and retain the referenced sign-off.
+6. Resolve or explicitly disposition every safety-critical correction.
+7. Report the review as preliminary external evidence, not certification.

@@ -10,11 +10,17 @@ from scripts.generate_controlled_ifc import build_controlled_ifc, stable_guid
 from src.evaluation.ifc_ground_truth import evaluate_controlled_ifc
 from src.evaluation.retrieval_benchmark import evaluate_sources, retrieval_metrics
 from src.evaluation.scenario_benchmark import run_scenario_benchmark
+from src.evaluation.expert_review import RATING_FIELDS, build_preliminary_domain_review
 from src.evaluation.space_classification import (
+    build_blinded_label_review_pack,
     deterministic_baseline,
     evaluate_classifier,
+    parse_label_review_pack_csv,
+    serialise_label_review_pack,
     silver_label,
+    validate_label_review_pack,
 )
+from src.ui.accessibility import MANUAL_ACCESSIBILITY_CHECKS, build_manual_accessibility_record
 from src.nlp.rag_engine import RAGEngine
 from src.nlp.regulation_parser import RegulationClause
 
@@ -57,7 +63,129 @@ def test_space_classifier_uses_grouped_evaluation():
     assert len(report["folds"]) == 2
     assert report["validation"] == "leave-one-source-model-family-out"
     assert report["ground_truth_status"].startswith("rule_seeded_silver")
-    assert isinstance(report["ml_eligible_for_runtime_default"], bool)
+    assert report["ml_eligible_for_runtime_default"] is False
+
+
+def test_blinded_label_pack_requires_complete_reviewer_evidence():
+    rows = [
+        {
+            "record_id": "R1",
+            "source_file": "building.ifc",
+            "source_sha256": "a" * 64,
+            "source_model_family": "building",
+            "ifc_schema": "IFC4",
+            "ifc_global_id": "SPACE1",
+            "name": "Room 1",
+            "long_name": "Bedroom",
+            "normalized_text": "room 1 bedroom",
+            "silver_label": "residential",
+        },
+        {
+            "record_id": "R2",
+            "source_file": "clinic.ifc",
+            "source_sha256": "b" * 64,
+            "source_model_family": "clinic",
+            "ifc_schema": "IFC2X3",
+            "ifc_global_id": "SPACE2",
+            "name": "Room 2",
+            "long_name": "Exam",
+            "normalized_text": "room 2 exam",
+            "silver_label": "clinical",
+        },
+    ]
+    pack = build_blinded_label_review_pack(rows)
+
+    assert "silver_label" not in pack[0]
+    assert pack[0]["independent_label"] == ""
+    assert validate_label_review_pack(pack)["status"] == "incomplete"
+    assert parse_label_review_pack_csv(serialise_label_review_pack(pack)) == pack
+
+    for row, label in zip(pack, ("residential", "clinical")):
+        row.update({
+            "independent_label": label,
+            "reviewer_confidence": "5",
+            "reviewer_confirmation_reference": "signed-review-001",
+            "review_status": "reviewer_confirmed",
+        })
+    report = validate_label_review_pack(pack)
+    assert report["status"] == "complete_reviewer_supplied_labels"
+    assert report["eligible_for_grouped_model_evaluation"] is True
+    assert report["eligible_for_runtime_promotion_evaluation"] is False
+    assert report["reviewer_qualification_verified_by_software"] is False
+
+
+def test_domain_review_never_self_certifies_professional_validation():
+    blocked = build_preliminary_domain_review(
+        source_file_sha256="b" * 64,
+        ifc_schema="IFC4",
+        ethics_confirmation_reference="",
+        reviewer_competence_scope="",
+        cases_reviewed=[],
+        ratings={},
+    )
+    assert blocked["execution_status"] == "blocked_missing_ethics_or_supervisor_confirmation"
+    assert "ethics_confirmation_reference" in blocked["missing_fields"]
+
+    unresolved = build_preliminary_domain_review(
+        source_file_sha256="b" * 64,
+        ifc_schema="IFC4",
+        ethics_confirmation_reference="supervisor-email-2026-08-16",
+        reviewer_competence_scope="Fire engineer",
+        cases_reviewed=["SCENARIO-1"],
+        ratings={field: 4 for field in RATING_FIELDS},
+        safety_critical_findings="Exit evidence is unclear",
+        reviewer_signoff_reference="signed-review-001",
+    )
+    assert unresolved["execution_status"] == "incomplete_preliminary_review"
+    assert "project_author_disposition" in unresolved["missing_fields"]
+
+    record = build_preliminary_domain_review(
+        source_file_sha256="b" * 64,
+        ifc_schema="IFC4",
+        ethics_confirmation_reference="supervisor-email-2026-08-16",
+        reviewer_competence_scope="Chartered fire engineer; route-evidence review",
+        cases_reviewed=["SCENARIO-1"],
+        ratings={field: 4 for field in RATING_FIELDS},
+        reviewer_signoff_reference="signed-review-001",
+    )
+
+    assert record["execution_status"] == "preliminary_review_recorded"
+    assert record["missing_fields"] == []
+    assert record["software_assurance"]["professional_validation_claim_allowed_automatically"] is False
+    assert record["software_assurance"]["reviewer_qualification_verified_by_software"] is False
+
+
+def test_accessibility_record_distinguishes_complete_from_certified():
+    failed = build_manual_accessibility_record(
+        browser="Chrome 140",
+        operating_system="macOS 15",
+        evidence_reference="screenshots/accessibility-2026-08-16",
+        outcomes={
+            check: "fail" if check == "keyboard_traversal" else "not tested"
+            for check in MANUAL_ACCESSIBILITY_CHECKS
+        },
+    )
+    assert failed["execution_status"] == "executed_issues_found"
+    assert failed["failed_checks"] == ["keyboard_traversal"]
+
+    not_applicable = build_manual_accessibility_record(
+        browser="Chrome 140",
+        operating_system="macOS 15",
+        evidence_reference="screenshots/accessibility-2026-08-16",
+        outcomes={check: "not applicable" for check in MANUAL_ACCESSIBILITY_CHECKS},
+    )
+    assert not_applicable["execution_status"] == "executed_incomplete"
+
+    record = build_manual_accessibility_record(
+        browser="Chrome 140",
+        operating_system="macOS 15",
+        evidence_reference="screenshots/accessibility-2026-08-16",
+        outcomes={check: "pass" for check in MANUAL_ACCESSIBILITY_CHECKS},
+    )
+
+    assert record["execution_status"] == "completed_author_accessibility_check"
+    assert record["failed_checks"] == []
+    assert record["wcag_conformance_claim_allowed"] is False
 
 
 def test_retrieval_metrics_use_first_relevant_rank():

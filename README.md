@@ -415,6 +415,18 @@ The project can export structured scenario data for downstream expert validation
 
 The FDS skeleton is only a starting template. It includes fire-origin and HRR preview comments plus placeholders for mesh, geometry, vents, devices, materials and outputs. It is **not** a complete or certified FDS input file.
 
+The `Research Review` tab also provides three guarded evidence workflows:
+
+- a structured preliminary domain-review record covering governance reference,
+  competence scope, ratings, safety findings, corrections and sign-off;
+- a manual accessibility record covering keyboard, focus, zoom, screen-reader,
+  chart-equivalent, message and mobile-width checks;
+- a blinded independent-label CSV handoff for the space-use ML experiment.
+
+The forms make evidence collection reproducible, but they do not verify a
+reviewer's identity or qualifications, grant ethics permission, certify WCAG
+conformance or establish professional fire-engineering validation.
+
 Specialist tools that may be used for professional validation include:
 
 - NIST FDS/Smokeview
@@ -540,6 +552,18 @@ ground truth, evaluates the grouped space-use classifier, benchmarks regulation
 retrieval and repeats declared evacuation/fire/worst-case outcomes. CI uploads
 these reports as the `research-evaluation-evidence` artifact.
 
+Create and validate the blinded human-label review pack with:
+
+```bash
+python scripts/create_space_label_review_pack.py
+python scripts/validate_space_label_review_pack.py \
+  outputs/space_label_review/independent_label_review.csv
+```
+
+The blank pack must fail validation until an authorised reviewer independently
+supplies every label, confidence, confirmation reference and review status.
+Silver-label evaluation can never promote the classifier into the runtime.
+
 The geometry-only regression tests run when
 `tests/fixtures/11134_V_Motebello_Heistopp_Rev.ifc` is present. Fresh GitHub
 checkouts without that optional IFC fixture skip three real-model tests; use
@@ -565,6 +589,9 @@ Test coverage includes:
 - regulation Recall@1, Recall@3 and MRR
 - scenario expected-case repeatability
 - custom light/dark palette contrast
+- preliminary domain-review record completeness and non-certification guards
+- manual accessibility record completeness and non-certification guards
+- blinded independent-label pack creation and validation
 
 ---
 

@@ -1,5 +1,8 @@
-"""Small accessibility checks for the custom Streamlit colour palette."""
+"""Accessibility checks and structured manual-audit records."""
 from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Mapping, Optional
 
 
 THEME_PAIRS = {
@@ -22,6 +25,18 @@ THEME_PAIRS = {
     "dark_status_fail": ("#ff9b9b", "#202b3d"),
     "dark_status_warn": ("#ffd166", "#202b3d"),
 }
+
+MANUAL_ACCESSIBILITY_CHECKS = {
+    "keyboard_traversal": "Keyboard-only traversal and logical focus order",
+    "focus_visibility": "Visible focus indicators in light and dark modes",
+    "zoom_200_percent": "Usable layout at 200% browser zoom",
+    "screen_reader_names": "Understandable screen-reader control names",
+    "chart_text_equivalents": "Text equivalents adjacent to route and 3D charts",
+    "message_semantics": "Status messages do not rely on colour alone",
+    "mobile_width": "No hidden critical controls at a mobile-width viewport",
+}
+
+MANUAL_OUTCOMES = {"not_tested", "pass", "fail", "not_applicable"}
 
 
 def _rgb(hex_colour: str) -> tuple[float, float, float]:
@@ -50,4 +65,62 @@ def palette_contrast_report() -> dict[str, float]:
     return {
         name: round(contrast_ratio(foreground, background), 2)
         for name, (foreground, background) in THEME_PAIRS.items()
+    }
+
+
+def build_manual_accessibility_record(
+    *,
+    browser: str,
+    operating_system: str,
+    outcomes: Mapping[str, str],
+    notes: str = "",
+    evidence_reference: str = "",
+    tested_at: Optional[str] = None,
+) -> dict:
+    """Build a transparent manual-check record without claiming WCAG conformance."""
+    normalised = {}
+    for check in MANUAL_ACCESSIBILITY_CHECKS:
+        outcome = str(outcomes.get(check, "not_tested")).strip().lower().replace(" ", "_")
+        if outcome not in MANUAL_OUTCOMES:
+            raise ValueError(f"Unsupported accessibility outcome for {check}: {outcome}")
+        normalised[check] = outcome
+
+    tested = [value for value in normalised.values() if value != "not_tested"]
+    passes = [value for value in normalised.values() if value == "pass"]
+    failures = [check for check, value in normalised.items() if value == "fail"]
+    required = [value for value in normalised.values() if value != "not_applicable"]
+    missing_metadata = [
+        field
+        for field, value in {
+            "browser": browser,
+            "operating_system": operating_system,
+            "evidence_reference": evidence_reference,
+        }.items()
+        if not value.strip()
+    ]
+
+    if not tested:
+        status = "not_executed"
+    elif failures:
+        status = "executed_issues_found"
+    elif not passes:
+        status = "executed_incomplete"
+    elif "not_tested" in required or missing_metadata:
+        status = "executed_incomplete"
+    else:
+        status = "completed_author_accessibility_check"
+
+    return {
+        "audit_version": 1,
+        "execution_status": status,
+        "tested_at": tested_at or datetime.now(timezone.utc).isoformat(),
+        "browser": browser.strip(),
+        "operating_system": operating_system.strip(),
+        "outcomes": normalised,
+        "failed_checks": failures,
+        "missing_metadata": missing_metadata,
+        "notes": notes.strip(),
+        "evidence_reference": evidence_reference.strip(),
+        "wcag_conformance_claim_allowed": False,
+        "scope": "bounded_manual_project_author_check_not_wcag_certification",
     }
