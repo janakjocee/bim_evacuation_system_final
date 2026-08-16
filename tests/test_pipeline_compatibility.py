@@ -7,7 +7,11 @@ from zipfile import ZipFile
 import pytest
 
 from src.pipeline.evacuation_pipeline import EvacuationPipeline
-from src.bim_processing.ifc_archive import IFCArchiveError, validate_ifczip
+from src.bim_processing.ifc_archive import (
+    IFCArchiveError,
+    MAX_IFCZIP_UNCOMPRESSED_BYTES,
+    validate_ifczip,
+)
 from scripts.generate_controlled_ifc import build_controlled_ifc
 from scripts.validate_ifcs import discover_ifcs
 from scripts.verify_practical_workflow import verify
@@ -101,6 +105,23 @@ def test_ifczip_runs_the_same_real_ifc_pipeline(tmp_path):
     assert len(result.source_file_sha256) == 64
     assert len(result.scenarios) == 3
     assert discover_ifcs([str(tmp_path)]) == [ifc_path.resolve(), archive_path.resolve()]
+
+
+def test_ifczip_uncompressed_payload_uses_streamlit_200_mb_limit():
+    assert MAX_IFCZIP_UNCOMPRESSED_BYTES == 200 * 1024 * 1024
+
+
+def test_ifczip_rejects_payload_above_uncompressed_limit(tmp_path, monkeypatch):
+    archive_path = tmp_path / "oversized.ifczip"
+    with ZipFile(archive_path, "w") as archive:
+        archive.writestr("model.ifc", "ISO-10303-21;")
+
+    monkeypatch.setattr(
+        "src.bim_processing.ifc_archive.MAX_IFCZIP_UNCOMPRESSED_BYTES",
+        4,
+    )
+    with pytest.raises(IFCArchiveError, match="exceeds the 200 MB"):
+        validate_ifczip(archive_path)
 
 
 def test_ifczip_rejects_multiple_payloads_and_reports_pipeline_error(tmp_path):

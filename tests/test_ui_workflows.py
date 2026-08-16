@@ -129,6 +129,8 @@ def test_uploader_supports_compressed_ifc_and_regulation_provenance():
     source = (Path(__file__).resolve().parents[1] / "src/ui/streamlit_app.py").read_text()
 
     assert "type=['ifc', 'ifczip']" in source
+    assert "inside an IFCZIP are limited to 200 MB" in source
+    assert "512 MB" not in source
     assert "Regulation source provenance" in source
     assert "user_declared_not_legally_validated" in source
     assert "does not determine legal applicability" in source

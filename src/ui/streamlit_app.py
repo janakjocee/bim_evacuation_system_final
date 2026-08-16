@@ -672,8 +672,8 @@ def render_sidebar():
                 "available spaces/doors or usable element geometry."
             )
             st.caption(
-                "The 200 MB upload setting applies to the compressed upload. IFCZIP permits one "
-                "IFC model up to 512 MB after decompression, subject to available server memory."
+                "Both the uploaded file and the IFC model inside an IFCZIP are limited to 200 MB. "
+                "Larger models require local testing or a deployment with measured memory capacity."
             )
         
         st.markdown("---")

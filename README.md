@@ -169,16 +169,17 @@ and SHA-256 fingerprint for provenance.
 
 The main uploader accepts plain `.ifc` and compressed `.ifczip`. IFCZIP is the
 preferred route for large STEP-text models: it must contain exactly one IFC
-file, is inspected before parsing, and is limited to 512 MB after decompression.
-The Streamlit upload remains capped at 200 MB because uploads are held in memory
-and IFC geometry parsing needs additional working memory. For example:
+file and is inspected before parsing. Both the uploaded file and the
+uncompressed IFC inside an IFCZIP are limited to 200 MB. IFCZIP does not bypass
+the Streamlit upload guardrail because uploads are held in memory and IFC
+geometry parsing needs additional working memory. For example:
 
 ```bash
 zip -j building.ifczip building.ifc
 ```
 
 Do not raise the cloud limit merely to accept a large plain-text IFC. A model
-that is still too large after compression should be tested locally or on a
+whose uncompressed IFC is larger than 200 MB should be tested locally or on a
 deployment with measured memory capacity.
 
 The IFC under `tests/fixtures/` is used only by automated regression tests. The
