@@ -32,7 +32,7 @@ placeholders, inconsistent numbering and claims that exceed the evidence.
 | O2: identify exits, doors, areas, spatial relations, functional/non-functional requirements and ML/NLP features | IfcOpenShell parser, readiness diagnostics, feature extractor, requirements/design chapters | Achieved with IFC-data limitations | Distinguish verified IFC semantics from inferred geometry. State that missing semantics cannot be reconstructed as fact. |
 | O3: design BIM plus regulation reasoning, select algorithms and define JSON/XML outputs | Layered architecture, NetworkX routing, deterministic rule checks, JSON/CSV/XML exports and evidence trace | Achieved for a prototype | Describe JSON/XML as output schemas and retrieval as evidence support, not autonomous regulatory reasoning. |
 | O4: implement backend, scenario logic and expert review/selection/export UI | Streamlit app, scenario details, corrections, exports, fire and worst-case pages | Achieved for a prototype | Demonstrate the complete workflow and keep fire/worst-case outputs labelled as screening models. |
-| O5: evaluate relevance, correctness, explainability and critically compare against objectives | 125 tests, 79.46% raw line coverage, controlled ground truth, grouped ML/retrieval/scenario evaluations, multi-IFC diagnostics, provenance and decision traces | Partially achieved | Say controlled software correctness, behaviour and explainability were evaluated. Say domain correctness/relevance remain unvalidated without qualified review or independent real-building ground truth. |
+| O5: evaluate relevance, correctness, explainability and critically compare against objectives | 133 tests, 79.63% raw line coverage, controlled ground truth, grouped ML/retrieval/scenario evaluations, multi-IFC diagnostics, provenance and decision traces | Partially achieved | Say controlled software correctness, behaviour and explainability were evaluated. Say domain correctness/relevance remain unvalidated without qualified review or independent real-building ground truth. |
 
 ## What The System Actually Does
 
@@ -58,12 +58,12 @@ retrieval" is more precise than autonomous RAG.
 
 | Check | Reproduced result | Meaning |
 |---|---|---|
-| Full pytest suite with real Montebello IFC | 125 passed, 0 failed, 0 skipped | Final expanded automated behavior suite is green. |
+| Full pytest suite with real Montebello IFC | 133 passed, 0 failed, 0 skipped | Final expanded automated behavior suite is green. |
 | Controlled IFC ground truth | Exact recovery across entities, areas, widths, connections, exits and routes | Project-declared software ground truth passes; it is not independent engineering validation. |
 | Space-use classifier | ML macro-F1 0.0992; deterministic baseline 0.8968 | ML is implemented and honestly rejected as runtime default. |
 | Regulation retrieval | Practical TF-IDF Recall@1 0.8421, Recall@3 0.9474, MRR 0.9000 | Bounded source-aware benchmark supports TF-IDF; relevance labels require author review. |
 | Scenario benchmark | 6/6 cases pass twice with identical normalized outcomes | Deterministic expected behavior is repeatable, not physically calibrated. |
-| Coverage | 79.46% raw line coverage (4,522/5,691 statements; 79% displayed) | Good prototype coverage; external format variation and optional embedding error paths remain residual risk. |
+| Coverage | 79.63% raw line coverage (4,622/5,804 statements; 80% displayed) | Good prototype coverage; external format variation and optional embedding error paths remain residual risk. |
 | GitHub Actions | `main` smoke test passed at `503aac4` | The checked-in deployment smoke workflow is green. |
 | Hosted Streamlit access | `/` and `/_stcore/health` redirect unauthenticated clients to Streamlit login | Deployment is authentication-gated; this is not evidence of public availability or an app crash. |
 | Montebello IFC2X3 | 8/8 workflow gates; 16 geometry proxies, 17 inferred connectors, 2 inferred exits, 16 scenarios | Operationally processable, but exploratory because room/door topology is absent. |
@@ -125,7 +125,7 @@ workflows close an implementation gap, not the external-evidence gap.
 6. Separate software verification from engineering validation. Tests and
    coverage do not demonstrate scenario correctness, regulatory compliance or
    real-world safety.
-7. Add the latest reproducibility facts: 125 tests, 79.46% raw coverage, current
+7. Add the latest reproducibility facts: 133 tests, 79.63% raw coverage, current
    commit identifier and the duplicate-aware matrix output.
 8. Correct figure/table references and regenerate both lists. Examples in the
    draft mix `Figure 4.1` with `Figure 1`, `Figures 7.1-7.3` with Figures 14-17,
@@ -147,13 +147,30 @@ workflows close an implementation gap, not the external-evidence gap.
 |---|---|---|
 | Domain understanding | Relevant BIM/fire-safety sources, explicit scope and requirements | Literature is sometimes descriptive; research gap and comparison-derived criteria need stronger synthesis. |
 | Product and ideas | Substantial multi-module implementation and defensible transparent architecture | Alternatives and project-plan changes are thin; proposed ML terminology does not match the delivered default. |
-| Build and evaluation | Working UI, real IFC diagnostics, 125 tests, controlled strict-pass fixture, grouped ML/retrieval/scenario evaluations, coverage, CI and limitations | No qualified expert evaluation, independent real-building ground truth, completed browser accessibility sign-off or engineering validation. |
+| Build and evaluation | Working UI, real IFC diagnostics, 133 tests, controlled strict-pass fixture, grouped ML/retrieval/scenario evaluations, coverage, CI and limitations | No qualified expert evaluation, independent real-building ground truth, completed browser accessibility sign-off or engineering validation. |
 | Conclusions and critical review | Limitations and future work are acknowledged | Must be more explicit about mistakes, changed plans, failed approaches and how evidence changed the claims. |
 | Report presentation | Logical chapter structure and declared word count within the nominal band | Visible comments/markup, placeholders, numbering and residual language errors are submission blockers. |
 
 These gaps make a distinction-level claim difficult to defend today. Correcting
 the report can materially improve presentation and critical reflection, but it
 cannot honestly replace missing external engineering validation.
+
+## Immediate Evidence Work
+
+- Use the official GOV.UK Approved Document B source with recorded URL, edition,
+  jurisdiction, access date, SHA-256 and a human applicability decision. A
+  collated PDF can contain future-dated or transitional provisions that the
+  prototype does not resolve automatically.
+- Add Hugging Face IFC models to the reported evaluation corpus only after the
+  dataset revision, licence, attribution, model hash and source-family identity
+  are recorded. Use unverified models for local robustness testing only.
+- Prefer IFCZIP for large STEP-text models. Keep the 200 MB compressed-upload
+  guardrail unless deployment memory has been measured under realistic parsing
+  and geometry workloads.
+- The seven provenance-pending Hugging Face files now produce seven partial and
+  zero failed diagnostics. This demonstrates parser robustness, not engineering
+  correctness: all seven still depend on inferred topology or have unresolved
+  disconnected spaces, and none is a strict verified pass.
 
 ## Recommended Demo Sequence
 

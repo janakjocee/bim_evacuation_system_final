@@ -11,6 +11,7 @@ try:
     import ifcopenshell
     import ifcopenshell.geom
     import ifcopenshell.util.placement
+    import ifcopenshell.util.unit
     from ifcopenshell import entity_instance
     IFC_AVAILABLE = True
 except ImportError:
@@ -107,6 +108,8 @@ class IFCParser:
         self.config = get_config()
         self.ifc_file = None
         self.building = None
+        self.length_unit_scale = 1.0
+        self.area_unit_scale = 1.0
         
         if not IFC_AVAILABLE:
             logger.error("IfcOpenShell not available. Uploaded IFC files cannot be parsed.")
@@ -133,6 +136,18 @@ class IFCParser:
                 return None
             
             self.ifc_file = ifcopenshell.open(file_path)
+            try:
+                self.length_unit_scale = float(
+                    ifcopenshell.util.unit.calculate_unit_scale(self.ifc_file)
+                )
+            except Exception:
+                self.length_unit_scale = 1.0
+            try:
+                self.area_unit_scale = float(
+                    ifcopenshell.util.unit.calculate_unit_scale(self.ifc_file, "AREAUNIT")
+                )
+            except Exception:
+                self.area_unit_scale = self.length_unit_scale ** 2
             
             # Extract building
             building = self._extract_building()
@@ -162,7 +177,11 @@ class IFCParser:
             # Derive a bounded topology only from real elements in the file.
             if not building.spaces:
                 self._extract_geometry_topology(building)
-            elif not building.doors or not building.exits:
+            elif (
+                not building.doors
+                or not building.exits
+                or not any(door.connected_spaces for door in building.doors.values())
+            ):
                 self._infer_space_topology(building)
             
             logger.info(f"Successfully parsed building: {building.name}")
@@ -262,6 +281,8 @@ class IFCParser:
                     width = 1.2
                     assumptions["width"] = "Assumed 1.2m because no stair width property was found."
                     flags.append("missing_stair_width_assumed")
+                else:
+                    width *= self.length_unit_scale
                 bounds = self._get_bounding_box(ifc_stair)
                 if bounds is None:
                     child_bounds = [
@@ -343,7 +364,12 @@ class IFCParser:
                 "Area",
             ])
             if area_from_properties:
-                return float(area_from_properties), "IFC space property area", 1.0, []
+                return (
+                    float(area_from_properties) * self.area_unit_scale,
+                    "IFC space property area",
+                    1.0,
+                    [],
+                )
 
             for rel in getattr(ifc_space, 'IsDefinedBy', []):
                 if hasattr(rel, 'RelatingPropertyDefinition'):
@@ -353,7 +379,12 @@ class IFCParser:
                             if hasattr(quantity, 'AreaValue') and str(getattr(quantity, "Name", "")).lower() in {
                                 "netfloorarea", "grossfloorarea", "area", "netarea"
                             }:
-                                return float(quantity.AreaValue), "IFC quantity AreaValue", 1.0, []
+                                return (
+                                    float(quantity.AreaValue) * self.area_unit_scale,
+                                    "IFC quantity AreaValue",
+                                    1.0,
+                                    [],
+                                )
 
             bounding_box = self._get_bounding_box(ifc_space)
             if bounding_box:
@@ -392,6 +423,7 @@ class IFCParser:
             flags.append("missing_door_width_assumed")
         else:
             assumptions["width_source"] = width_source
+            width = float(width) * self.length_unit_scale
 
         height = getattr(ifc_door, "OverallHeight", None)
         if not height:
@@ -400,6 +432,8 @@ class IFCParser:
             height = 2.1
             assumptions["height"] = "Assumed 2.1m because no IFC door height was found."
             flags.append("missing_door_height_assumed")
+        else:
+            height = float(height) * self.length_unit_scale
 
         return float(width), float(height), assumptions, confidence, flags
 
@@ -472,6 +506,11 @@ class IFCParser:
         if not building.spaces or not building.doors:
             return
 
+        verified_connections_before = sum(
+            bool(door.connected_spaces) for door in building.doors.values()
+        )
+        inferred_connections = 0
+
         for door_id, door in building.doors.items():
             if door.connected_spaces:
                 continue
@@ -489,6 +528,7 @@ class IFCParser:
                 door.connection_sources[space_id] = "inferred_proximity"
                 building.spaces[space_id].connected_doors.append(door_id)
             if candidates:
+                inferred_connections += 1
                 door.connection_source = "inferred_proximity"
                 door.data_quality_flags.append("door_space_connection_inferred_by_proximity")
                 door.assumptions["connectivity"] = (
@@ -520,6 +560,14 @@ class IFCParser:
                 "Nearest door linked within 0.35m because the IFC omitted a direct space boundary."
             )
             door.data_quality_flags.append("supplementary_space_connection_inferred_by_close_proximity")
+
+        if inferred_connections and not verified_connections_before:
+            building.extraction_mode = "semantic_spaces_inferred_topology"
+            building.geometry_source_types = ["IfcSpace", "IfcDoor"]
+            building.geometry_elements_available = len(building.spaces) + len(building.doors)
+            building.geometry_elements_used = sum(
+                bool(space.bounding_box) for space in building.spaces.values()
+            )
 
     def _door_ids_from_boundary_element(self, element) -> List[str]:
         """Resolve a boundary element or opening element to one or more door ids."""
@@ -599,9 +647,9 @@ class IFCParser:
             if placement:
                 matrix = ifcopenshell.util.placement.get_local_placement(placement)
                 return Point3D(
-                    x=float(matrix[0, 3]),
-                    y=float(matrix[1, 3]),
-                    z=float(matrix[2, 3]),
+                    x=float(matrix[0, 3]) * self.length_unit_scale,
+                    y=float(matrix[1, 3]) * self.length_unit_scale,
+                    z=float(matrix[2, 3]) * self.length_unit_scale,
                 )
         except Exception:
             pass
@@ -740,7 +788,9 @@ class IFCParser:
             return
 
         existing_door_count = len(building.doors)
-        if not building.doors:
+        if not building.doors or not any(
+            door.connected_spaces for door in building.doors.values()
+        ):
             self._add_proxy_connectivity(building, centers)
         if not building.exits:
             self._add_inferred_proxy_exits(building, centers)

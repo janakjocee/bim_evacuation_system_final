@@ -60,6 +60,40 @@ in `evaluation/ifc_corpus_manifest.json`. The unresolved Dormitory and NordicLCA
 files are excluded from the claimed licensed evaluation corpus until provenance
 is supplied.
 
+## Hugging Face Provenance-Pending Stress Corpus
+
+The following seven local files were described by the project author as
+downloaded from Hugging Face. The exact dataset URL, revision and licence were
+not available during this audit. They were therefore used only for local parser
+and robustness testing and are excluded from the claimed licensed evaluation
+corpus.
+
+| Local file | SHA-256 | Bytes | Schema | Final diagnostic |
+|---|---|---:|---|---|
+| `arc.ifc` | `e91ddbbd672bbde946af14631de4c732f0cf8a7cfae5dbbf06fbeab03b5c46df` | 342657851 | IFC2X3 | Partial |
+| `ventilation.ifc` | `c78f6ad085961500f0890bbffda9e171c1342c5865ca152f64098dd4da644cca` | 114891068 | IFC2X3 | Partial |
+| `electrical.ifc` | `adb8d5eda2c706a1fded2a00bd38d845e35f513e2f6ba048fc6228274dfb3986` | 97058912 | IFC2X3 | Partial |
+| `arc_ifc2x3.ifc` | `989ace1d52f694ee94d80bd99aa81d0ff3d76cf21f34fcfd00a286ac897ed8a6` | 80318141 | IFC2X3 | Partial |
+| `arc (2).ifc` | `fe8da4917769c23227468e3be0af6f7f05d53dd8da23c275e2f256343df42f32` | 73945142 | IFC2X3 | Partial |
+| `arc (1).ifc` | `57fafa59f03b18c05be211a456e346bdd0445d5c35d66522e598d339e81dfcf4` | 65078748 | IFC2X3 | Partial |
+| `kitchen.ifc` | `1905b992071729d1c780b18f6103e4d1d08307a4707d5f33a4413216f36776ac` | 49670229 | IFC2X3 | Partial |
+
+The before/after run changed `arc.ifc` from fail to partial after IFC unit
+normalisation and inferred-topology recovery. Across all seven payloads,
+disconnected spaces reduced from 131 to 75 and spaces without an exit route
+reduced from 131 to 110. No payload achieved strict pass because no tested route
+had enough verified edge evidence. Local reproducible evidence is written to:
+
+```text
+outputs/huggingface_ifc_diagnostics_20260816/
+outputs/huggingface_ifc_diagnostics_after_20260816/
+outputs/huggingface_ifc_comparison_20260816/
+```
+
+Required before report inclusion: record the Hugging Face dataset URL, immutable
+revision, dataset-card licence, attribution instructions and each model's source
+family. A platform name alone is not provenance.
+
 ## Duplicate Accounting
 
 The remaining seven tested paths are renamed copies of five verified payloads:

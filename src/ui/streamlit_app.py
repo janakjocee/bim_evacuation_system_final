@@ -33,7 +33,7 @@ from src.bim_processing.ifc_validation import SUPPORTED_SCHEMA_LABEL
 from src.nlp.document_loader import RegulationDocumentError, extract_regulation_text
 from src.scenario.ifc_dataset_exporter import building_to_worst_case_dataset
 from src.utils.logger import get_logger
-from src.utils.helpers import RiskLevel, ComplianceStatus
+from src.utils.helpers import RiskLevel, ComplianceStatus, sha256_file
 from src.ui.ui_components import (
     render_metric_card, get_risk_color, get_risk_badge, get_compliance_badge,
     create_risk_pie_chart, create_scenario_bar_chart, create_route_comparison_chart,
@@ -523,6 +523,7 @@ def build_complete_export_payload(result):
         "graph_stats": result.graph_stats,
         "regulations": {
             "source": result.regulation_source,
+            "document": result.regulation_document,
             "clause_count": result.regulation_clause_count,
             "rule_count": result.regulation_rule_count,
             "application": result.regulation_application,
@@ -579,13 +580,16 @@ def render_sidebar():
         st.markdown("---")
         
         # IFC Upload Section
-        st.markdown("### 1. BIM Model (IFC)")
+        st.markdown("### 1. BIM Model (IFC/IFCZIP)")
         st.markdown("<p style='font-size:0.8rem;color:var(--app-muted);'>Upload Building Information Model</p>", unsafe_allow_html=True)
         
         ifc_file = st.file_uploader(
-            "Select IFC file",
-            type=['ifc'],
-            help="Industry Foundation Classes (IFC) building model",
+            "Select IFC or IFCZIP file",
+            type=['ifc', 'ifczip'],
+            help=(
+                "Industry Foundation Classes model. IFCZIP must contain exactly one .ifc file; "
+                "compressed uploads help large text-based IFC models stay within the cloud limit."
+            ),
             label_visibility="collapsed"
         )
         
@@ -607,6 +611,24 @@ def render_sidebar():
         
         if regulation_file:
             st.success(f"✓ {regulation_file.name}")
+
+        with st.expander("Regulation source provenance"):
+            st.caption(
+                "Optional user-declared citation fields. They improve research traceability but "
+                "do not establish legal applicability or professional approval."
+            )
+            regulation_source_url = st.text_input(
+                "Official source URL",
+                placeholder="https://www.gov.uk/government/publications/fire-safety-approved-document-b",
+            )
+            regulation_jurisdiction = st.text_input(
+                "Jurisdiction / applicability",
+                placeholder="England; building type and effective date to be verified",
+            )
+            regulation_edition = st.text_input(
+                "Edition / amendment status",
+                placeholder="2019 edition incorporating applicable amendments",
+            )
         
         st.markdown("---")
         
@@ -649,6 +671,10 @@ def render_sidebar():
                 "Not every file in these schema families is suitable. Results depend on "
                 "available spaces/doors or usable element geometry."
             )
+            st.caption(
+                "The 200 MB upload setting applies to the compressed upload. IFCZIP permits one "
+                "IFC model up to 512 MB after decompression, subject to available server memory."
+            )
         
         st.markdown("---")
         
@@ -665,7 +691,13 @@ def render_sidebar():
         for label, status in status_items:
             st.markdown(f"<div style='display:flex;justify-content:space-between;font-size:0.8rem;'><span>{label}</span><span>{status}</span></div>", unsafe_allow_html=True)
         
-        return ifc_file, regulation_file, max_scenarios, enable_rag, process_button
+        regulation_metadata = {
+            "source_url": regulation_source_url.strip(),
+            "jurisdiction": regulation_jurisdiction.strip(),
+            "edition": regulation_edition.strip(),
+            "metadata_scope": "user_declared_not_legally_validated",
+        }
+        return ifc_file, regulation_file, regulation_metadata, max_scenarios, enable_rag, process_button
 
 # ==============================================================================
 # FILE PROCESSING
@@ -674,7 +706,7 @@ def save_uploaded_file(uploaded_file, directory: str) -> str:
     """Save an upload under a collision-safe local name and return its path."""
     save_dir = Path(directory)
     save_dir.mkdir(parents=True, exist_ok=True)
-    payload = bytes(uploaded_file.getbuffer())
+    payload = uploaded_file.getbuffer()
     digest = hashlib.sha256(payload).hexdigest()[:12]
     safe_name = safe_uploaded_filename(uploaded_file.name)
     file_path = save_dir / f"{digest}_{safe_name}"
@@ -682,12 +714,13 @@ def save_uploaded_file(uploaded_file, directory: str) -> str:
         f.write(payload)
     return str(file_path)
 
-def process_files(ifc_file, regulation_file, max_scenarios, enable_rag):
+def process_files(ifc_file, regulation_file, regulation_metadata, max_scenarios, enable_rag):
     """Process uploaded files through the pipeline."""
     progress_bar = st.progress(0, text="Initializing pipeline...")
     
     try:
         st.session_state.rag_enabled = enable_rag
+        regulation_document = {}
         temp_root = Path("./data/temp")
         temp_root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="analysis_", dir=temp_root) as upload_dir:
@@ -700,6 +733,12 @@ def process_files(ifc_file, regulation_file, max_scenarios, enable_rag):
                 regulation_path = save_uploaded_file(regulation_file, upload_dir)
                 regulation_text = extract_regulation_text(regulation_path, regulation_file.name)
                 st.session_state['regulation_text'] = regulation_text
+                regulation_document = {
+                    "name": safe_uploaded_filename(regulation_file.name, "regulation_document"),
+                    "sha256": sha256_file(regulation_path),
+                    "file_type": Path(regulation_file.name).suffix.lower().lstrip("."),
+                    **(regulation_metadata or {}),
+                }
 
             progress_bar.progress(30, text="Parsing BIM model...")
             pipeline = EvacuationPipeline()
@@ -715,6 +754,7 @@ def process_files(ifc_file, regulation_file, max_scenarios, enable_rag):
                 enable_rag=enable_rag,
             )
         result.source_file_name = safe_uploaded_filename(ifc_file.name, "uploaded.ifc")
+        result.regulation_document = regulation_document
         
         progress_bar.progress(100, text="Complete!")
         time.sleep(0.5)
@@ -1254,6 +1294,26 @@ def render_regulation_intelligence(result):
     
     if regulation_text:
         st.markdown("### Uploaded Regulations")
+        regulation_document = getattr(result, "regulation_document", {}) or {}
+        if regulation_document:
+            st.markdown("#### Uploaded Regulation Evidence")
+            evidence_columns = st.columns(3)
+            evidence_columns[0].write(f"**File:** {regulation_document.get('name', 'Unknown')}")
+            evidence_columns[1].write(
+                f"**Type:** {str(regulation_document.get('file_type', 'unknown')).upper()}"
+            )
+            evidence_columns[2].write(
+                f"**Jurisdiction:** {regulation_document.get('jurisdiction') or 'Not declared'}"
+            )
+            st.code(regulation_document.get("sha256", "Hash unavailable"), language=None)
+            if regulation_document.get("source_url"):
+                st.write(f"**Declared source:** {regulation_document['source_url']}")
+            if regulation_document.get("edition"):
+                st.write(f"**Declared edition:** {regulation_document['edition']}")
+            st.caption(
+                "Source URL, jurisdiction and edition are user-declared metadata. The prototype "
+                "does not determine legal applicability, commencement dates or transitional provisions."
+            )
         with st.expander("View Raw Regulation Text", expanded=False):
             st.text_area("Regulation Content", regulation_text[:5000], height=300, disabled=True)
     else:
@@ -2271,11 +2331,24 @@ def main():
     render_header()
     
     # Sidebar
-    ifc_file, regulation_file, max_scenarios, enable_rag, process_button = render_sidebar()
+    (
+        ifc_file,
+        regulation_file,
+        regulation_metadata,
+        max_scenarios,
+        enable_rag,
+        process_button,
+    ) = render_sidebar()
     
     # Process if button clicked
     if process_button and ifc_file:
-        process_files(ifc_file, regulation_file, max_scenarios, enable_rag)
+        process_files(
+            ifc_file,
+            regulation_file,
+            regulation_metadata,
+            max_scenarios,
+            enable_rag,
+        )
     
     # Main content area with tabs
     if st.session_state.processing_done and st.session_state.pipeline_result:

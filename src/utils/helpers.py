@@ -1,7 +1,11 @@
 """
 Helper utilities.
 """
+from __future__ import annotations
+
+import hashlib
 import uuid
+from pathlib import Path
 from typing import Dict, List, Any
 from dataclasses import dataclass, asdict
 from enum import Enum
@@ -27,6 +31,15 @@ class ComplianceStatus(str, Enum):
 def generate_id(prefix: str = "ID") -> str:
     """Generate unique identifier."""
     return f"{prefix}_{uuid.uuid4().hex[:8].upper()}"
+
+
+def sha256_file(path: str | Path, chunk_size: int = 1024 * 1024) -> str:
+    """Hash a file without loading the complete payload into memory."""
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as stream:
+        for chunk in iter(lambda: stream.read(chunk_size), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def safe_divide(numerator: float, denominator: float, default: float = 0.0) -> float:

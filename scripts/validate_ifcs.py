@@ -47,8 +47,12 @@ def discover_ifcs(inputs: list[str]) -> list[Path]:
     for value in inputs:
         path = Path(value).expanduser()
         if path.is_dir():
-            files.extend(sorted(path.rglob("*.ifc")))
-        elif path.is_file() and path.suffix.lower() == ".ifc":
+            files.extend(sorted(
+                candidate
+                for candidate in path.rglob("*")
+                if candidate.is_file() and candidate.suffix.lower() in {".ifc", ".ifczip"}
+            ))
+        elif path.is_file() and path.suffix.lower() in {".ifc", ".ifczip"}:
             files.append(path)
     return list(dict.fromkeys(path.resolve() for path in files))
 

@@ -25,9 +25,9 @@ BIM_TEST_IFC="/Users/janakjocee/Downloads/11134_V_Motebello_Heistopp_Rev.ifc" \
   python3 -m pytest -q -rs
 ```
 
-Result: **125 passed, 0 failed, 0 skipped**.
+Result: **133 passed, 0 failed, 0 skipped**.
 
-Measured raw line coverage: **79.46%** (4,522 of 5,691 statements; 79% displayed). Coverage is a
+Measured raw line coverage: **79.63%** (4,622 of 5,804 statements; 80% displayed). Coverage is a
 software-test measure; it is not evidence of fire-engineering correctness.
 
 Coverage includes:

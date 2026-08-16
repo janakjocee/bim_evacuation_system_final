@@ -116,9 +116,19 @@ def test_main_export_uses_complete_evidence_payload():
     assert "\"ifc_readiness\": result.readiness" in source
     assert "\"graph_stats\": result.graph_stats" in source
     assert "\"retrieval_mode\": result.retrieval_mode" in source
+    assert "\"document\": result.regulation_document" in source
     assert "\"manual_corrections\": st.session_state.get(\"manual_corrections\")" in source
     assert "\"research_review_records\":" in source
     assert "\"preliminary_domain_review_records\":" in source
     assert "\"manual_accessibility_audit_records\":" in source
     assert "\"space_label_review_validation\":" in source
     assert "export_data = build_complete_export_payload(result)" in source
+
+
+def test_uploader_supports_compressed_ifc_and_regulation_provenance():
+    source = (Path(__file__).resolve().parents[1] / "src/ui/streamlit_app.py").read_text()
+
+    assert "type=['ifc', 'ifczip']" in source
+    assert "Regulation source provenance" in source
+    assert "user_declared_not_legally_validated" in source
+    assert "does not determine legal applicability" in source

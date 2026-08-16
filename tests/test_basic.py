@@ -2,6 +2,9 @@
 Basic tests for BIM Evacuation System.
 """
 import pytest
+import hashlib
+import io
+import json
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -10,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.utils.config_loader import ConfigLoader
-from src.utils.helpers import RiskLevel, ComplianceStatus, generate_id
+from src.utils.helpers import RiskLevel, ComplianceStatus, generate_id, sha256_file
 from src.bim_processing.ifc_parser import (
     BuildingData,
     DoorData,
@@ -458,6 +461,32 @@ def test_uploaded_rule_candidates_use_conservative_selection():
     assert selected["selection_strategy"] == "conservative uploaded candidate"
 
 
+def test_non_evacuation_distances_and_specialist_stairs_are_not_activated():
+    parser = RegulationParser()
+    parser.parse(
+        """
+16.3 A dry fire main outlet should have a maximum hose distance of 45 metres.
+
+3.22 At least one stair needs to be a firefighting stair, therefore a minimum width of 1100mm.
+
+3.23 The minimum exit width needed for 240 people is 1200mm.
+"""
+    )
+
+    metrics = {rule.metric: rule for rule in parser.rules}
+    assert metrics["max_fire_hose_distance"].value == 45.0
+    assert metrics["min_firefighting_stair_width"].value == 1.1
+    assert metrics["min_exit_width"].condition == "occupants_context:240"
+
+    checker = ComplianceChecker()
+    checker.update_regulation_rules(parser.rules)
+    summary = checker.get_rule_application_summary()
+    assert summary["unsupported_rule_count"] == 2
+    assert checker.regulations["max_travel_distance"] == checker.default_regulations["max_travel_distance"]
+    assert checker.regulations["min_stair_width"] == checker.default_regulations["min_stair_width"]
+    assert checker.regulations["min_exit_width"] == 1.2
+
+
 def test_route_check_uses_single_and_alternative_escape_thresholds():
     checker = ComplianceChecker()
     checker.update_regulation_rules([
@@ -831,14 +860,43 @@ def test_pipeline_exports_json_and_csv_for_generated_scenarios(tmp_path):
         source_file_name="synthetic.ifc",
         ifc_schema="SYNTHETIC",
         graph_stats=graph.get_graph_stats(),
+        regulation_document={
+            "name": "approved_document_b.pdf",
+            "sha256": "b" * 64,
+            "source_url": "https://www.gov.uk/government/publications/fire-safety-approved-document-b",
+            "metadata_scope": "user_declared_not_legally_validated",
+        },
     )
 
     exported = EvacuationPipeline().export_results(result, str(tmp_path), formats=["json", "csv"])
 
     assert Path(exported["json"]).exists()
     assert Path(exported["csv"]).exists()
-    assert "synthetic.ifc" in Path(exported["json"]).read_text()
+    exported_json = json.loads(Path(exported["json"]).read_text())
+    assert exported_json["source_file_name"] == "synthetic.ifc"
+    assert exported_json["regulation_document"]["name"] == "approved_document_b.pdf"
     assert scenarios[0].scenario_id in Path(exported["csv"]).read_text()
+
+
+def test_streaming_file_hash_matches_reference_digest(tmp_path):
+    payload = (b"large-model-chunk" * 100_000) + b"end"
+    source = tmp_path / "model.ifc"
+    source.write_bytes(payload)
+
+    assert sha256_file(source, chunk_size=4096) == hashlib.sha256(payload).hexdigest()
+
+
+def test_uploaded_file_save_preserves_payload_without_bytes_copy(tmp_path):
+    from src.ui.streamlit_app import save_uploaded_file
+
+    class Upload(io.BytesIO):
+        name = "large model.ifczip"
+
+    payload = b"compressed-ifc-payload"
+    saved = Path(save_uploaded_file(Upload(payload), str(tmp_path)))
+
+    assert saved.suffix == ".ifczip"
+    assert saved.read_bytes() == payload
 
 
 def test_ui_export_helpers_produce_safe_names_and_well_formed_outputs():

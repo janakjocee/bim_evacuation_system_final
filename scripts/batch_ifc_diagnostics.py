@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import contextlib
 import csv
-import hashlib
 import json
 import sys
 from pathlib import Path
@@ -13,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.validate_ifcs import audit_file, discover_ifcs, route_loguru_to_stderr_for_json
 from src.nlp.document_loader import extract_regulation_text
+from src.utils.helpers import sha256_file
 
 
 MATRIX_FIELDS = [
@@ -140,7 +140,7 @@ def failed_row(path: Path, exc: Exception) -> dict:
         "path": str(path),
         "file_size_bytes": path.stat().st_size if path.exists() else 0,
         "source_file_sha256": (
-            hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else ""
+            sha256_file(path) if path.exists() else ""
         ),
         "schema": "UNKNOWN",
         "ifcopenshell_open": False,

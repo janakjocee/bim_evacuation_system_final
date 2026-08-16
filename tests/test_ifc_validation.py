@@ -139,6 +139,58 @@ def test_parser_reads_space_planned_area_properties():
     assert flags == []
 
 
+def test_parser_converts_millimetre_lengths_and_areas_to_si_units():
+    parser = IFCParser()
+    parser.length_unit_scale = 0.001
+    parser.area_unit_scale = 0.000001
+    door = SimpleNamespace(OverallWidth=900.0, OverallHeight=2100.0)
+
+    width, height, _, confidence, flags = parser._extract_door_dimensions(door, {})
+    parser._get_properties = lambda element: {"NetPlannedArea": 18_500_000.0}
+    area, _, area_confidence, area_flags = parser._extract_space_area(SimpleNamespace(IsDefinedBy=[]))
+
+    assert width == 0.9
+    assert height == 2.1
+    assert confidence == 1.0
+    assert flags == []
+    assert area == 18.5
+    assert area_confidence == 1.0
+    assert area_flags == []
+
+
+def test_inference_recovers_spaces_when_existing_doors_have_no_connections():
+    building = BuildingData(id="B1", name="Unconnected semantic doors")
+    building.spaces = {
+        "S1": SpaceData(
+            id="S1",
+            name="Room 1",
+            area=10,
+            bounding_box=(Point3D(0, 0, 0), Point3D(4, 4, 3)),
+        ),
+        "S2": SpaceData(
+            id="S2",
+            name="Room 2",
+            area=10,
+            bounding_box=(Point3D(5, 0, 0), Point3D(9, 4, 3)),
+        ),
+    }
+    building.doors["UNCONNECTED"] = DoorData(
+        id="UNCONNECTED",
+        name="Source door without topology",
+        width=0.9,
+        height=2.1,
+        location=Point3D(100, 100, 0),
+    )
+
+    IFCParser()._infer_space_topology(building)
+
+    inferred = [door for door in building.doors.values() if door.connection_source == "inferred_geometry"]
+    assert building.extraction_mode == "semantic_spaces_inferred_topology"
+    assert inferred
+    assert building.exits
+    assert all(space.connected_doors for space in building.spaces.values())
+
+
 def test_parser_uses_long_name_for_space_type():
     parser = IFCParser()
 

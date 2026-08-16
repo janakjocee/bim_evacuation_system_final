@@ -262,7 +262,11 @@ class RegulationParser:
         """Normalize a parsed clause into a compliance metric key."""
         text_lower = text.lower()
 
-        if constraint_type == "max_distance" and ("travel" in text_lower or "distance" in text_lower):
+        if constraint_type == "max_distance":
+            if any(term in text_lower for term in ["hose", "fire main", "firefighting shaft"]):
+                return "max_fire_hose_distance"
+            if "travel" not in text_lower:
+                return "max_other_distance"
             if "direct distance" in text_lower:
                 return "max_direct_travel_distance"
             if "small premises" in text_lower or "small-premises" in text_lower:
@@ -274,6 +278,8 @@ class RegulationParser:
             return "max_travel_distance"
 
         if constraint_type == "min_width":
+            if "firefighting stair" in text_lower or "fire-fighting stair" in text_lower:
+                return "min_firefighting_stair_width"
             if "final exit" in text_lower or ("exit" in text_lower and applies_to == "door"):
                 return "min_exit_width"
             if "corridor" in text_lower or applies_to == "corridor":
@@ -311,6 +317,9 @@ class RegulationParser:
         occupants_above = re.search(r'(?:more than|above)\s*(\d+)\s+occupants?', text_lower)
         if occupants_above:
             return f"occupants_above:{occupants_above.group(1)}"
+        people_context = re.search(r'for\s+(\d+)\s+(?:people|persons?|occupants?)', text_lower)
+        if people_context:
+            return f"occupants_context:{people_context.group(1)}"
         if "direct distance" in text_lower:
             return "direct_distance_method"
         if "small premises" in text_lower or "small-premises" in text_lower:
