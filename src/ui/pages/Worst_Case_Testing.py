@@ -26,6 +26,7 @@ from src.scenario.worst_case_engine import (
 )
 from src.scenario.ifc_dataset_exporter import building_to_worst_case_dataset
 from src.ui.export_helpers import safe_uploaded_filename
+from src.ui.theme import ACCENT, RISK_COLORS, STATUS_COLORS, apply_app_theme
 from src.ui.visualization_3d import create_dataset_3d_figure
 
 
@@ -34,15 +35,16 @@ st.set_page_config(
     page_icon="🔥",
     layout="wide",
 )
+apply_app_theme()
 
 
 def _risk_color(risk: str) -> str:
     return {
-        "Low": "#2e7d32",
-        "Medium": "#f9a825",
-        "High": "#ef6c00",
-        "Critical": "#c62828",
-    }.get(risk, "#607d8b")
+        "Low": RISK_COLORS["low"],
+        "Medium": RISK_COLORS["medium"],
+        "High": RISK_COLORS["high"],
+        "Critical": RISK_COLORS["high"],
+    }.get(risk, STATUS_COLORS["unknown"])
 
 
 def _draw_graph(engine: WorstCaseScenarioEngine, result=None):
@@ -90,19 +92,19 @@ def _draw_graph(engine: WorstCaseScenarioEngine, result=None):
         node_y.append(y)
         labels.append(f"{node}: {engine.space_by_id.get(node, {}).get('name', node)}")
         if node == fire_origin:
-            colors.append("#b71c1c")
+            colors.append(RISK_COLORS["high"])
             sizes.append(24)
         elif node in blocked_nodes:
-            colors.append("#212121")
+            colors.append(STATUS_COLORS["unknown"])
             sizes.append(20)
         elif node in smoke_nodes:
-            colors.append("#ff9800")
+            colors.append(RISK_COLORS["medium"])
             sizes.append(18)
         elif node in exits:
-            colors.append("#2e7d32")
+            colors.append(RISK_COLORS["low"])
             sizes.append(18)
         else:
-            colors.append("#1565c0")
+            colors.append(ACCENT)
             sizes.append(14)
 
     fig.add_trace(go.Scatter(
@@ -118,6 +120,8 @@ def _draw_graph(engine: WorstCaseScenarioEngine, result=None):
     ))
     fig.update_layout(
         height=520,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
         showlegend=False,
         margin=dict(l=10, r=10, t=30, b=10),
         xaxis=dict(visible=False),

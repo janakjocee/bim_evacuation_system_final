@@ -23,14 +23,15 @@ def test_scenario_details_use_stable_inspection_workspace():
     assert "scenario.decision_trace" in source
 
 
-def test_dark_mode_uses_adaptive_theme_variables():
-    source = (Path(__file__).resolve().parents[1] / "src/ui/streamlit_app.py").read_text()
+def test_theme_tracks_streamlit_light_and_dark_variables_without_split_mode():
+    source = (Path(__file__).resolve().parents[1] / "src/ui/theme.py").read_text()
 
-    assert "@media (prefers-color-scheme: dark)" in source
+    assert "--app-background: var(--background-color" in source
+    assert "--app-text: var(--text-color" in source
     assert "--app-panel-strong" in source
     assert "--app-heading" in source
-    assert 'background-color: white; border: 1px solid #e0e0e0' not in source
-    assert 'background-color: #f8f9fa; padding: 12px' not in source
+    assert "@media (prefers-color-scheme: dark)" not in source
+    assert "color-mix(in srgb" in source
 
 
 def test_custom_theme_palette_meets_normal_text_contrast_target():
@@ -41,10 +42,24 @@ def test_custom_theme_palette_meets_normal_text_contrast_target():
 
 
 def test_custom_motion_respects_reduced_motion_preference():
-    source = (Path(__file__).resolve().parents[1] / "src/ui/streamlit_app.py").read_text()
+    source = (Path(__file__).resolve().parents[1] / "src/ui/theme.py").read_text()
 
     assert "@media (prefers-reduced-motion: reduce)" in source
-    assert "transition: none !important" in source
+    assert "transition-duration: .01ms !important" in source
+
+
+def test_submission_theme_is_shared_by_every_streamlit_entrypoint():
+    root = Path(__file__).resolve().parents[1]
+    main_source = (root / "src/ui/streamlit_app.py").read_text()
+    fire_source = (root / "src/ui/pages/Fire_Scenario_Testing.py").read_text()
+    worst_source = (root / "src/ui/pages/Worst_Case_Testing.py").read_text()
+    config = (root / ".streamlit/config.toml").read_text()
+
+    for source in (main_source, fire_source, worst_source):
+        assert "apply_app_theme()" in source
+    assert 'primaryColor = "#0B5F6B"' in config
+    assert "workflow-grid" in main_source
+    assert "system-status-row" in main_source
 
 
 def test_badges_do_not_use_fragile_multiline_html():

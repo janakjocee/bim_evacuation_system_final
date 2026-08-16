@@ -52,6 +52,7 @@ from src.evaluation.space_classification import (
     validate_label_review_pack,
 )
 from src.ui.accessibility import MANUAL_ACCESSIBILITY_CHECKS, build_manual_accessibility_record
+from src.ui.theme import ACCENT, PRIMARY, RISK_COLORS, apply_app_theme
 from src.utils.model_transparency import (
     ACADEMIC_USE_NOTICE,
     screening_index_semantics,
@@ -82,259 +83,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ==============================================================================
-# CUSTOM CSS STYLING
-# ==============================================================================
-st.markdown("""
-<style>
-    :root {
-        --app-text: #172033;
-        --app-muted: #536174;
-        --app-panel: #f7f9fc;
-        --app-panel-strong: #ffffff;
-        --app-border: #d9e1ec;
-        --app-heading: #13213c;
-        --app-info: #e8f3ff;
-        --app-warning: #fff6db;
-        --app-danger: #ffe9ec;
-        --app-success: #e7f6ed;
-        --app-status-pass: #176b35;
-        --app-status-fail: #b42318;
-        --app-status-warn: #765500;
-    }
-    @media (prefers-color-scheme: dark) {
-        :root {
-            --app-text: #edf3fb;
-            --app-muted: #bdc9d8;
-            --app-panel: #172033;
-            --app-panel-strong: #202b3d;
-            --app-border: #3a4a61;
-            --app-heading: #f7fbff;
-            --app-info: #153653;
-            --app-warning: #4a3c13;
-            --app-danger: #4a2028;
-            --app-success: #153d2b;
-            --app-status-pass: #7ee2a8;
-            --app-status-fail: #ff9b9b;
-            --app-status-warn: #ffd166;
-        }
-        div[style*="background-color: #f8f9fa"],
-        div[style*="background-color: white"] {
-            background-color: var(--app-panel-strong) !important;
-            color: var(--app-text) !important;
-        }
-        div[style*="color: #555"],
-        p[style*="color: #666"],
-        p[style*="color: #999"],
-        span[style*="color: #555"] {
-            color: var(--app-muted) !important;
-        }
-        strong[style*="color: #1a1a2e"],
-        h4[style*="color: #333"] {
-            color: var(--app-heading) !important;
-        }
-    }
-    .stApp, [data-testid="stAppViewContainer"] { color: var(--app-text); }
-    p, li, label, .stMarkdown { color: var(--app-text); }
-    /* Main title */
-    .main-title {
-        font-size: 2.2rem;
-        font-weight: 700;
-        color: var(--app-heading);
-        margin-bottom: 0.2rem;
-    }
-    .sub-title {
-        font-size: 1rem;
-        color: var(--app-muted);
-        margin-bottom: 1.5rem;
-    }
-    
-    /* Section headers */
-    .section-header {
-        font-size: 1.3rem;
-        font-weight: 600;
-        color: var(--app-heading);
-        border-bottom: 2px solid var(--app-border);
-        padding-bottom: 0.5rem;
-        margin-top: 1rem;
-        margin-bottom: 1rem;
-    }
-    
-    /* Cards */
-    .metric-container {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 1rem;
-        border-radius: 10px;
-        color: white;
-    }
-    
-    /* Status indicators */
-    .status-pass {
-        color: var(--app-status-pass);
-        font-weight: bold;
-    }
-    .status-fail {
-        color: var(--app-status-fail);
-        font-weight: bold;
-    }
-    .status-warn {
-        color: var(--app-status-warn);
-        font-weight: bold;
-    }
-    
-    /* Info boxes */
-    .info-box {
-        background-color: var(--app-info);
-        color: var(--app-text);
-        border-left: 4px solid #2196F3;
-        padding: 1rem;
-        margin: 1rem 0;
-        border-radius: 0 4px 4px 0;
-    }
-    
-    .warning-box {
-        background-color: var(--app-warning);
-        color: var(--app-text);
-        border-left: 4px solid #FFC107;
-        padding: 1rem;
-        margin: 1rem 0;
-        border-radius: 0 4px 4px 0;
-    }
-    
-    .danger-box {
-        background-color: var(--app-danger);
-        color: var(--app-text);
-        border-left: 4px solid #f44336;
-        padding: 1rem;
-        margin: 1rem 0;
-        border-radius: 0 4px 4px 0;
-    }
-    
-    .success-box {
-        background-color: var(--app-success);
-        color: var(--app-text);
-        border-left: 4px solid #4caf50;
-        padding: 1rem;
-        margin: 1rem 0;
-        border-radius: 0 4px 4px 0;
-    }
-    
-    /* Tab styling */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 2px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        background-color: var(--app-panel);
-        color: var(--app-text);
-        border-radius: 4px 4px 0 0;
-        padding: 10px 16px;
-        font-weight: 500;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #1a1a2e !important;
-        color: white !important;
-    }
-    
-    /* Dataframe styling */
-    .dataframe {
-        font-size: 0.85rem;
-    }
-    
-    /* Buttons */
-    .stButton>button {
-        border-radius: 6px;
-        font-weight: 500;
-        transition: transform 0.15s ease, box-shadow 0.15s ease;
-    }
-    .stButton>button:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 5px 16px rgba(27, 94, 170, 0.22);
-    }
-    @media (prefers-reduced-motion: reduce) {
-        .stButton>button, [data-baseweb="tab"], .scenario-card {
-            transition: none !important;
-            transform: none !important;
-        }
-    }
-    [data-testid="stSidebar"] {
-        border-right: 1px solid var(--app-border);
-        background-image: linear-gradient(180deg, rgba(63, 101, 220, .07), transparent 28%);
-    }
-    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h2,
-    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h3 {
-        letter-spacing: -.02em;
-    }
-    [data-testid="stMetric"] {
-        background: linear-gradient(145deg, var(--app-panel-strong), var(--app-panel));
-        border: 1px solid var(--app-border);
-        border-radius: 12px;
-        padding: .65rem .8rem;
-        box-shadow: 0 5px 16px rgba(20, 42, 80, .06);
-    }
-    [data-baseweb="tab-list"] {
-        background: var(--app-panel);
-        padding: 5px;
-        border-radius: 12px;
-        border: 1px solid var(--app-border);
-    }
-    [data-baseweb="tab"] {
-        transition: transform .15s ease, background-color .15s ease;
-    }
-    [data-baseweb="tab"]:hover {
-        transform: translateY(-1px);
-    }
-    [data-testid="stFileUploaderDropzone"] {
-        border-radius: 14px;
-        border: 1px dashed #6d91ef;
-        background: linear-gradient(135deg, rgba(74, 116, 225, .08), transparent);
-    }
-    .scenario-detail-card {
-        background: var(--app-panel-strong);
-        color: var(--app-text);
-        border: 1px solid var(--app-border);
-        border-radius: 12px;
-        padding: 1rem;
-        margin: 0.75rem 0;
-        box-shadow: 0 8px 24px rgba(15, 33, 57, 0.08);
-    }
-    .scenario-detail-card strong, .scenario-detail-card h4 {
-        color: var(--app-heading);
-    }
-    .scenario-card {
-        position: relative;
-        overflow: hidden;
-        background: linear-gradient(135deg, color-mix(in srgb, var(--app-panel-strong) 92%, #4f8cff 8%), var(--app-panel-strong));
-        border: 1px solid var(--app-border);
-        border-radius: 16px;
-        padding: 1rem 1.1rem;
-        margin-top: 0.5rem;
-        box-shadow: 0 8px 28px rgba(15, 33, 57, 0.09);
-    }
-    .scenario-card::after {
-        content: "";
-        position: absolute;
-        width: 140px;
-        height: 140px;
-        right: -80px;
-        top: -85px;
-        border-radius: 50%;
-        background: radial-gradient(circle, rgba(85, 132, 255, .28), transparent 70%);
-        pointer-events: none;
-    }
-    .scenario-card:hover {
-        border-color: #5b8cff;
-        box-shadow: 0 14px 38px rgba(56, 103, 214, 0.16);
-    }
-    .hero-author {
-        background: linear-gradient(135deg, rgba(50, 92, 210, .12), rgba(126, 80, 220, .12));
-        border: 1px solid var(--app-border);
-        border-radius: 12px;
-        padding: .7rem .9rem;
-        text-align: right;
-        color: var(--app-text);
-    }
-</style>
-""", unsafe_allow_html=True)
+apply_app_theme()
 
 # ==============================================================================
 # SESSION STATE INITIALIZATION
@@ -389,13 +138,13 @@ def create_selected_route_figure(result, scenario):
     if edge_x:
         figure.add_trace(go.Scatter(
             x=edge_x, y=edge_y, mode="lines",
-            line=dict(color="#ff8f00", width=7), name="Selected evacuation route",
+            line=dict(color=RISK_COLORS["medium"], width=7), name="Selected evacuation route",
         ))
     visible_nodes = [node for node in route if node in positions]
     colors = [
-        "#d32f2f" if node == scenario.origin_space_id
-        else "#00c853" if node == scenario.evacuation_route.destination
-        else "#1565c0"
+        RISK_COLORS["high"] if node == scenario.origin_space_id
+        else RISK_COLORS["low"] if node == scenario.evacuation_route.destination
+        else ACCENT
         for node in visible_nodes
     ]
     figure.add_trace(go.Scatter(
@@ -413,7 +162,8 @@ def create_selected_route_figure(result, scenario):
         title="Selected Evacuation Route",
         height=500,
         margin=dict(l=10, r=10, t=50, b=10),
-        plot_bgcolor="#f7f9fc",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
         xaxis=dict(visible=False, scaleanchor="y", scaleratio=1),
         yaxis=dict(visible=False),
         showlegend=False,
@@ -567,19 +317,19 @@ def render_header():
     col1, col2 = st.columns([3, 1])
     
     with col1:
-        st.markdown(
-            f'<p class="main-title">🏗️ {PROJECT_TITLE}</p>',
-            unsafe_allow_html=True,
-        )
-        st.markdown(
-            f'<p class="sub-title">{PROJECT_SUBTITLE}</p>',
-            unsafe_allow_html=True,
-        )
+        st.markdown(f"""
+        <div class="app-hero">
+            <span class="app-kicker">University of Greenwich · MSc Data Science</span>
+            <h1 class="main-title">{PROJECT_TITLE}</h1>
+            <p class="sub-title">{PROJECT_SUBTITLE}</p>
+        </div>
+        """, unsafe_allow_html=True)
     
     with col2:
         st.markdown(f"""
         <div class="hero-author">
-            <strong>Janak Raj Joshi</strong><br>
+            <span class="author-label">Research prototype</span>
+            <strong>Janak Raj Joshi</strong>
             <a href="mailto:janakjocee@gmail.com">janakjocee@gmail.com</a><br>
             <a href="https://github.com/janakjocee/bim_evacuation_system_final" target="_blank">GitHub Repository</a>
         </div>
@@ -710,7 +460,10 @@ def render_sidebar():
         ]
         
         for label, status in status_items:
-            st.markdown(f"<div style='display:flex;justify-content:space-between;font-size:0.8rem;'><span>{label}</span><span>{status}</span></div>", unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="system-status-row"><span>{label}</span><span>{status}</span></div>',
+                unsafe_allow_html=True,
+            )
         
         regulation_metadata = {
             "source_url": regulation_source_url.strip(),
@@ -879,7 +632,7 @@ def render_dashboard(result):
             "TOTAL SCENARIOS",
             str(len(scenarios)),
             "Evacuation routes analyzed",
-            "#1a1a2e"
+            PRIMARY,
         )
     
     with col2:
@@ -887,7 +640,7 @@ def render_dashboard(result):
             "HIGH PRIORITY",
             str(risk_counts.get('high', 0)),
             "Require immediate attention",
-            "#dc3545"
+            RISK_COLORS["high"],
         )
     
     with col3:
@@ -895,7 +648,7 @@ def render_dashboard(result):
             "MEDIUM PRIORITY",
             str(risk_counts.get('medium', 0)),
             "Recommend improvements",
-            "#ffc107"
+            RISK_COLORS["medium"],
         )
     
     with col4:
@@ -903,12 +656,18 @@ def render_dashboard(result):
             "LOW PRIORITY",
             str(risk_counts.get('low', 0)),
             "Fewer issues in implemented checks",
-            "#28a745"
+            RISK_COLORS["low"],
         )
     
     with col5:
         compliance_pct = avg_compliance * 100
-        color = "#28a745" if compliance_pct >= 80 else "#ffc107" if compliance_pct >= 50 else "#dc3545"
+        color = (
+            RISK_COLORS["low"]
+            if compliance_pct >= 80
+            else RISK_COLORS["medium"]
+            if compliance_pct >= 50
+            else RISK_COLORS["high"]
+        )
         render_metric_card(
             "AVG CHECKS PASSED",
             f"{compliance_pct:.0f}%",
@@ -1509,22 +1268,16 @@ def render_evacuation_scenarios(result):
         
         with st.container():
             st.markdown(
-                f'<div class="scenario-card" style="border-left:6px solid {risk_color};">'
-                f'<strong>Scenario #{i + 1}</strong> · {scenario.risk_level.value.upper()} screening priority'
-                f'</div>',
+                f"""
+                <div class="scenario-card" style="--scenario-accent:{risk_color};">
+                    <span class="scenario-kicker">Scenario #{i + 1} · {scenario.risk_level.value} priority</span>
+                    <h3>{html.escape(str(scenario.name))}</h3>
+                    <p class="scenario-card__meta">Evidence ID: {html.escape(str(scenario.scenario_id))}</p>
+                </div>
+                """,
                 unsafe_allow_html=True,
             )
-            # Scenario header
-            col_h1, col_h2, col_h3 = st.columns([3, 2, 1])
-            
-            with col_h1:
-                st.markdown(f"""
-                <div style="border-left: 5px solid {risk_color}; padding-left: 10px;">
-                    <h4 style="margin:0;">#{i+1} {html.escape(str(scenario.name))}</h4>
-                    <p style="margin:0;color:var(--app-muted);font-size:0.8rem;">ID: {html.escape(str(scenario.scenario_id))}</p>
-                </div>
-                """, unsafe_allow_html=True)
-            
+            col_h2, col_h3 = st.columns([4, 1])
             with col_h2:
                 st.markdown(
                     get_risk_badge(scenario.risk_level)
@@ -1541,6 +1294,7 @@ def render_evacuation_scenarios(result):
                     type="primary" if is_selected else "secondary",
                     on_click=toggle_scenario_details,
                     args=(scenario.scenario_id,),
+                    width="stretch",
                 )
             
             # Metrics
@@ -1812,7 +1566,7 @@ def render_risk_analysis(result):
             color='Screening Priority',
             size=[max(8, row['Route Bottlenecks'] * 8) for row in bottleneck_data],
             title="Detected Route Bottlenecks vs Estimated Travel Time",
-            color_discrete_map={'low': '#28a745', 'medium': '#ffc107', 'high': '#dc3545'}
+            color_discrete_map=RISK_COLORS,
         )
         st.plotly_chart(fig_bottleneck, key="risk_bottleneck")
     
@@ -2413,32 +2167,41 @@ def main():
     
     else:
         # Welcome screen
-        st.markdown("---")
         st.markdown("""
-        <div style="text-align: center; padding: 3rem;">
-            <h2>👋 Welcome to AI-Driven Generation of Evacuation Scenarios from Building Information Models</h2>
-            <p style="color: var(--app-muted); font-size: 1.1rem;">
-                This AI-assisted, deterministic decision-support system generates evacuation screening scenarios from BIM models,<br>
-                checks them against parsed/default safety constraints, and provides explainable recommendations<br>
-                for fire safety engineering review.
+        <div class="welcome-hero">
+            <span class="welcome-kicker">Traceable BIM evacuation screening</span>
+            <h2>From uploaded evidence to reviewable evacuation scenarios</h2>
+            <p>
+                Run a deterministic IFC and graph workflow, inspect every assumption and route,
+                attach regulation evidence, record human review, and export a reproducible evidence package.
             </p>
-            <br>
-            <div style="background-color: var(--app-panel); color: var(--app-text); border: 1px solid var(--app-border); border-radius: 8px; padding: 2rem; display: inline-block;">
-                <h4 style="margin-top: 0;">🚀 Getting Started</h4>
-                <ol style="text-align: left; color: var(--app-text);">
-                    <li>Upload your <strong>IFC building model</strong> in the sidebar</li>
-                    <li>Optionally upload <strong>safety regulations</strong> (e.g., Approved Document B)</li>
-                    <li>Configure analysis settings</li>
-                    <li>Click <strong>"Generate Screening Scenarios"</strong></li>
-                    <li>Review system-generated screening scenarios across all tabs</li>
-                    <li>Record a <strong>session-scoped research review</strong> in the HITL panel</li>
-                    <li>Export the complete screening evidence report</li>
-                </ol>
+        </div>
+        <div class="workflow-grid">
+            <div class="workflow-step">
+                <span class="workflow-step__number">01</span>
+                <h3>Provide evidence</h3>
+                <p>Upload an IFC or IFCZIP and, optionally, a TXT, MD, PDF, or DOCX regulation source.</p>
             </div>
-            <br><br>
-            <p style="color: var(--app-muted); font-size: 0.9rem;">
-                <strong>Documented IFC targets:</strong> IFC2X3, IFC4, IFC4X3, IFC4X3_ADD2 | <strong>NLP:</strong> spaCy | <strong>Evidence retrieval:</strong> TF-IDF + optional embeddings | <strong>Graph:</strong> NetworkX
-            </p>
+            <div class="workflow-step">
+                <span class="workflow-step__number">02</span>
+                <h3>Run screening</h3>
+                <p>Parse the actual model, build the route graph, apply checks, and preserve source provenance.</p>
+            </div>
+            <div class="workflow-step">
+                <span class="workflow-step__number">03</span>
+                <h3>Inspect decisions</h3>
+                <p>Review 2D/3D views, route reliability, decision traces, data limitations, and test findings.</p>
+            </div>
+            <div class="workflow-step">
+                <span class="workflow-step__number">04</span>
+                <h3>Review and export</h3>
+                <p>Record bounded human review and export the scenario, diagnostics, and supporting evidence.</p>
+            </div>
+        </div>
+        <div class="technology-strip">
+            <strong>Documented IFC targets:</strong> IFC2X3, IFC4, IFC4X3, IFC4X3_ADD2 ·
+            <strong>NLP:</strong> spaCy · <strong>Evidence retrieval:</strong> TF-IDF with optional embeddings ·
+            <strong>Graph analysis:</strong> NetworkX
         </div>
         """, unsafe_allow_html=True)
 
