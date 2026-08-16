@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import io
 import json
 import re
 from collections import Counter
@@ -35,6 +36,23 @@ LABEL_RULES = {
         "records", "staff room", "provider station", "nurse station",
     ),
 }
+
+INDEPENDENT_REVIEW_FIELDS = (
+    "record_id",
+    "source_file",
+    "source_sha256",
+    "source_model_family",
+    "ifc_schema",
+    "ifc_global_id",
+    "name",
+    "long_name",
+    "normalized_text",
+    "independent_label",
+    "reviewer_confidence",
+    "reviewer_notes",
+    "reviewer_confirmation_reference",
+    "review_status",
+)
 
 
 def normalise_text(value: str) -> str:
@@ -141,7 +159,109 @@ def load_records(path: Path) -> list[Dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
-def evaluate_classifier(dataset_path: Path, random_state: int = 42) -> Dict[str, Any]:
+def build_blinded_label_review_pack(rows: Iterable[Dict[str, str]]) -> list[Dict[str, str]]:
+    """Remove silver labels so a reviewer can label without anchoring on them."""
+    pack = []
+    for row in rows:
+        pack.append({
+            "record_id": row["record_id"],
+            "source_file": row["source_file"],
+            "source_sha256": row["source_sha256"],
+            "source_model_family": row["source_model_family"],
+            "ifc_schema": row["ifc_schema"],
+            "ifc_global_id": row["ifc_global_id"],
+            "name": row["name"],
+            "long_name": row["long_name"],
+            "normalized_text": row["normalized_text"],
+            "independent_label": "",
+            "reviewer_confidence": "",
+            "reviewer_notes": "",
+            "reviewer_confirmation_reference": "",
+            "review_status": "unreviewed",
+        })
+    return pack
+
+
+def write_label_review_pack(rows: Iterable[Dict[str, str]], output_path: Path) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=INDEPENDENT_REVIEW_FIELDS)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def serialise_label_review_pack(rows: Iterable[Dict[str, str]]) -> str:
+    """Return a portable CSV representation for browser download."""
+    handle = io.StringIO(newline="")
+    writer = csv.DictWriter(handle, fieldnames=INDEPENDENT_REVIEW_FIELDS)
+    writer.writeheader()
+    writer.writerows(rows)
+    return handle.getvalue()
+
+
+def parse_label_review_pack_csv(value: str) -> list[Dict[str, str]]:
+    """Parse an uploaded review pack with required-column validation."""
+    reader = csv.DictReader(io.StringIO(value))
+    rows = list(reader)
+    fieldnames = set(reader.fieldnames or [])
+    missing = set(INDEPENDENT_REVIEW_FIELDS) - fieldnames
+    if missing:
+        raise ValueError("Review pack is missing columns: " + ", ".join(sorted(missing)))
+    if not rows:
+        raise ValueError("Review pack contains no data rows")
+    return rows
+
+
+def validate_label_review_pack(
+    rows: Iterable[Dict[str, str]],
+    max_invalid_details: int = 10,
+) -> Dict[str, Any]:
+    """Validate reviewer-supplied labels without verifying reviewer identity."""
+    rows = list(rows)
+    allowed_labels = set(LABEL_RULES)
+    invalid_records = []
+    for row in rows:
+        problems = []
+        if row.get("independent_label") not in allowed_labels:
+            problems.append("missing_or_invalid_independent_label")
+        try:
+            confidence = int(row.get("reviewer_confidence", ""))
+            if confidence not in range(1, 6):
+                raise ValueError
+        except (TypeError, ValueError):
+            problems.append("reviewer_confidence_must_be_1_to_5")
+        if not row.get("reviewer_confirmation_reference", "").strip():
+            problems.append("missing_reviewer_confirmation_reference")
+        if row.get("review_status") != "reviewer_confirmed":
+            problems.append("review_status_must_be_reviewer_confirmed")
+        if problems:
+            invalid_records.append({"record_id": row.get("record_id", ""), "problems": problems})
+
+    family_count = len({row.get("source_model_family", "") for row in rows if row.get("source_model_family")})
+    label_count = len({row.get("independent_label", "") for row in rows if row.get("independent_label") in allowed_labels})
+    complete = bool(rows) and not invalid_records
+
+    return {
+        "record_count": len(rows),
+        "valid_record_count": len(rows) - len(invalid_records),
+        "invalid_record_count": len(invalid_records),
+        "invalid_records": invalid_records[:max_invalid_details],
+        "invalid_record_details_truncated": len(invalid_records) > max_invalid_details,
+        "source_model_family_count": family_count,
+        "label_count": label_count,
+        "status": "complete_reviewer_supplied_labels" if complete else "incomplete",
+        "eligible_for_grouped_model_evaluation": complete and family_count >= 2 and label_count >= 2,
+        "eligible_for_runtime_promotion_evaluation": complete and family_count >= 3 and label_count >= 2,
+        "reviewer_identity_verified_by_software": False,
+        "reviewer_qualification_verified_by_software": False,
+    }
+
+
+def evaluate_classifier(
+    dataset_path: Path,
+    random_state: int = 42,
+    label_field: str = "silver_label",
+) -> Dict[str, Any]:
     """Compare grouped ML predictions with the current deterministic baseline."""
     from sklearn.feature_extraction.text import TfidfVectorizer
     from sklearn.linear_model import LogisticRegression
@@ -151,7 +271,9 @@ def evaluate_classifier(dataset_path: Path, random_state: int = 42) -> Dict[str,
 
     rows = load_records(dataset_path)
     texts = [row["normalized_text"] for row in rows]
-    labels = [row["silver_label"] for row in rows]
+    if not rows or any(not row.get(label_field) for row in rows):
+        raise ValueError(f"Every dataset row must provide {label_field}")
+    labels = [row[label_field] for row in rows]
     groups = [row["source_model_family"] for row in rows]
     unique_labels = sorted(set(labels))
     unique_groups = sorted(set(groups))
@@ -215,8 +337,14 @@ def evaluate_classifier(dataset_path: Path, random_state: int = 42) -> Dict[str,
 
     ml_metrics = metrics(ml_predictions)
     baseline_metrics = metrics(baseline_predictions)
+    independent_label_evidence = (
+        label_field == "independent_label"
+        and validate_label_review_pack(rows)["eligible_for_grouped_model_evaluation"]
+    )
     ml_eligible = (
-        ml_metrics["macro_f1"] >= 0.70
+        independent_label_evidence
+        and validate_label_review_pack(rows)["eligible_for_runtime_promotion_evaluation"]
+        and ml_metrics["macro_f1"] >= 0.70
         and ml_metrics["macro_f1"] > baseline_metrics["macro_f1"]
         and all(not fold["unseen_test_classes"] for fold in fold_details)
     )
@@ -231,7 +359,12 @@ def evaluate_classifier(dataset_path: Path, random_state: int = 42) -> Dict[str,
         "labels": unique_labels,
         "validation": "leave-one-source-model-family-out",
         "random_state": random_state,
-        "ground_truth_status": "rule_seeded_silver_labels_not_independent_human_ground_truth",
+        "label_field": label_field,
+        "ground_truth_status": (
+            "reviewer_supplied_labels_identity_not_verified_by_software"
+            if independent_label_evidence
+            else "rule_seeded_silver_labels_not_independent_human_ground_truth"
+        ),
         "baseline": baseline_metrics,
         "ml_model": {
             "type": "TF-IDF word 1-2 grams plus class-balanced logistic regression",
@@ -245,8 +378,12 @@ def evaluate_classifier(dataset_path: Path, random_state: int = 42) -> Dict[str,
             else "Keep deterministic classification as runtime default; ML did not satisfy the promotion gate."
         ),
         "limitations": [
-            "Labels are transparent rule-seeded silver labels and are not independent ground truth.",
-            "Only two source model families are available; generalisation evidence is therefore limited.",
+            (
+                "Reviewer-supplied labels are present, but reviewer identity and competence are not verified by software."
+                if independent_label_evidence
+                else "Labels are transparent rule-seeded silver labels and are not independent ground truth."
+            ),
+            f"Only {len(unique_groups)} source model families are available; generalisation evidence is limited.",
             "Classes absent from a training family cannot be learned in that fold.",
             "The experiment classifies space metadata only and does not make fire-engineering decisions.",
         ],

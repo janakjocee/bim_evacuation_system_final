@@ -23,8 +23,14 @@ def main() -> int:
         type=Path,
         default=Path("evaluation/results/space_classification.json"),
     )
+    parser.add_argument(
+        "--label-field",
+        choices=("silver_label", "independent_label"),
+        default="silver_label",
+        help="Use independent_label only after the review-pack validator passes.",
+    )
     args = parser.parse_args()
-    report = evaluate_classifier(args.dataset)
+    report = evaluate_classifier(args.dataset, label_field=args.label_field)
     write_json(report, args.report)
     print(json.dumps(report, indent=2))
     return 0

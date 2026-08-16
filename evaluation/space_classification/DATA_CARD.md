@@ -25,6 +25,11 @@ in `docs/ifc_corpus_provenance_20260816.md`. Raw IFC payloads are not committed.
 `codex_assisted_rule_seeded_silver`; they are not independent human ground truth.
 Every row remains `requires_project_author_review`.
 
+The Research Review tab and `scripts/create_space_label_review_pack.py` create a
+blinded CSV that omits the silver-label and matching-rule columns. The completed
+pack must pass `scripts/validate_space_label_review_pack.py` before it can be
+used as reviewer-supplied evaluation data.
+
 ## Leakage control
 
 Both Duplex exports use the same `duplex` family. Evaluation holds out an entire
@@ -38,3 +43,7 @@ from appearing in both training and test folds.
 - Some room names are ambiguous; unmatched names are excluded.
 - A qualified reviewer must approve or correct labels before they can be described
   as independently validated ground truth.
+- Runtime promotion additionally requires validator-complete reviewer labels,
+  at least three source-model families, macro-F1 of at least 0.70, performance
+  above the deterministic baseline and no unseen test classes in any held-out
+  family. Silver-label results can never pass this gate.

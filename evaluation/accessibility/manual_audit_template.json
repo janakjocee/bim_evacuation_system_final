@@ -1,0 +1,26 @@
+{
+  "audit_version": 1,
+  "execution_status": "not_executed",
+  "tested_at": "",
+  "browser": "",
+  "operating_system": "",
+  "outcomes": {
+    "keyboard_traversal": "not_tested",
+    "focus_visibility": "not_tested",
+    "zoom_200_percent": "not_tested",
+    "screen_reader_names": "not_tested",
+    "chart_text_equivalents": "not_tested",
+    "message_semantics": "not_tested",
+    "mobile_width": "not_tested"
+  },
+  "failed_checks": [],
+  "missing_metadata": [
+    "browser",
+    "operating_system",
+    "evidence_reference"
+  ],
+  "notes": "",
+  "evidence_reference": "",
+  "wcag_conformance_claim_allowed": false,
+  "scope": "bounded_manual_project_author_check_not_wcag_certification"
+}

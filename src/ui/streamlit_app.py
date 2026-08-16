@@ -42,6 +42,15 @@ from src.ui.ui_components import (
 )
 from src.ui.visualization_3d import create_ifc_3d_figure, create_ifc_plan_figure
 from src.ui.export_helpers import build_scenarios_csv, build_scenarios_xml, safe_uploaded_filename
+from src.evaluation.expert_review import RATING_FIELDS, build_preliminary_domain_review
+from src.evaluation.space_classification import (
+    build_blinded_label_review_pack,
+    load_records as load_space_label_records,
+    parse_label_review_pack_csv,
+    serialise_label_review_pack,
+    validate_label_review_pack,
+)
+from src.ui.accessibility import MANUAL_ACCESSIBILITY_CHECKS, build_manual_accessibility_record
 from src.utils.model_transparency import (
     ACADEMIC_USE_NOTICE,
     screening_index_semantics,
@@ -329,6 +338,9 @@ def init_session_state():
         'selected_scenario_id': None,
         'graph_viz_enabled': True,
         'show_explanations': True,
+        'domain_review_records': [],
+        'accessibility_audit_records': [],
+        'space_label_review_validation': None,
     }
     
     for key, value in defaults.items():
@@ -523,6 +535,9 @@ def build_complete_export_payload(result):
             for review in st.session_state.get("expert_reviews", {}).values()
             if isinstance(review, dict)
         ],
+        "preliminary_domain_review_records": st.session_state.get("domain_review_records", []),
+        "manual_accessibility_audit_records": st.session_state.get("accessibility_audit_records", []),
+        "space_label_review_validation": st.session_state.get("space_label_review_validation"),
         "scenarios": [scenario.to_dict() for scenario in result.scenarios],
         "errors": result.errors,
         "processing_time_seconds": result.processing_time,
@@ -1741,6 +1756,228 @@ def render_risk_analysis(result):
 # ==============================================================================
 # TAB 7: EXPERT REVIEW PANEL (HITL)
 # ==============================================================================
+def render_structured_domain_review(result, scenarios):
+    """Collect a protocol-shaped record without asserting reviewer credentials."""
+    with st.expander("Structured Preliminary Domain Review", expanded=False):
+        st.warning(
+            "Governance gate: obtain written supervisor or ethics confirmation before collecting "
+            "participant data. The software does not verify reviewer identity or qualifications."
+        )
+        st.caption(
+            "Use competence scope and a sign-off reference rather than unnecessary personal details. "
+            "A completed form is preliminary evidence, not professional approval."
+        )
+
+        ethics_reference = st.text_input(
+            "Ethics or supervisor confirmation reference",
+            key="domain_ethics_reference",
+            placeholder="Email/date/reference confirming this review activity is permitted",
+        )
+        competence_scope = st.text_input(
+            "Reviewer competence scope",
+            key="domain_competence_scope",
+            placeholder="For example: chartered fire engineer reviewing early-stage route evidence",
+        )
+        review_date = st.text_input(
+            "Domain review date (YYYY-MM-DD)",
+            value=time.strftime("%Y-%m-%d"),
+            key="domain_review_date",
+        )
+
+        case_labels = {
+            scenario.scenario_id: f"{scenario.name} ({scenario.scenario_id})"
+            for scenario in scenarios
+        }
+        cases_reviewed = st.multiselect(
+            "Cases reviewed for preliminary domain review",
+            options=list(case_labels),
+            default=[scenarios[0].scenario_id] if scenarios else [],
+            format_func=lambda scenario_id: case_labels[scenario_id],
+            key="domain_cases_reviewed",
+        )
+
+        st.markdown("#### Reviewer ratings")
+        st.caption("1 = poor, 5 = strong. Select Not rated when the reviewer did not assess a criterion.")
+        ratings = {}
+        rating_options = ["Not rated", 1, 2, 3, 4, 5]
+        for field, label in RATING_FIELDS.items():
+            ratings[field] = st.selectbox(
+                label,
+                rating_options,
+                key=f"domain_rating_{field}",
+            )
+
+        safety_findings = st.text_area(
+            "Safety-critical findings (one per line)",
+            key="domain_safety_findings",
+        )
+        other_findings = st.text_area(
+            "Other domain-review findings (one per line)",
+            key="domain_other_findings",
+        )
+        required_corrections = st.text_area(
+            "Required corrections (one per line)",
+            key="domain_required_corrections",
+        )
+        author_disposition = st.text_area(
+            "Project-author correction disposition (one per line)",
+            key="domain_author_disposition",
+            help="Required when the reviewer records corrections.",
+        )
+        signoff_reference = st.text_input(
+            "Reviewer sign-off or consent reference",
+            key="domain_signoff_reference",
+            placeholder="Signed review filename, email reference, or approved consent record",
+        )
+
+        if st.button("Save preliminary domain-review record", key="save_domain_review"):
+            record = build_preliminary_domain_review(
+                source_file_sha256=result.source_file_sha256,
+                ifc_schema=result.ifc_schema,
+                ethics_confirmation_reference=ethics_reference,
+                reviewer_competence_scope=competence_scope,
+                cases_reviewed=cases_reviewed,
+                ratings=ratings,
+                safety_critical_findings=safety_findings,
+                other_findings=other_findings,
+                required_corrections=required_corrections,
+                reviewer_signoff_reference=signoff_reference,
+                project_author_disposition=author_disposition,
+                review_date=review_date,
+            )
+            st.session_state.domain_review_records.append(record)
+            if record["missing_fields"]:
+                st.warning(
+                    f"Record saved as {record['execution_status']}; missing: "
+                    + ", ".join(record["missing_fields"])
+                )
+            else:
+                st.success(f"Record saved as {record['execution_status']}.")
+
+        if st.session_state.domain_review_records:
+            latest = st.session_state.domain_review_records[-1]
+            st.markdown("#### Latest preliminary domain-review record")
+            st.json(latest)
+            st.download_button(
+                "Download preliminary domain-review records JSON",
+                json.dumps(st.session_state.domain_review_records, indent=2),
+                "preliminary_domain_review_records.json",
+                "application/json",
+                key="download_domain_reviews",
+            )
+
+
+def render_manual_accessibility_review():
+    """Collect the manual browser checks that automation cannot establish."""
+    with st.expander("Manual Accessibility Verification", expanded=False):
+        st.info(
+            "Perform these checks in the actual demo browser. A completed record documents bounded "
+            "manual testing; it is not a WCAG conformance certificate."
+        )
+        browser = st.text_input(
+            "Accessibility test browser and version",
+            key="accessibility_browser",
+            placeholder="For example: Chrome 140",
+        )
+        operating_system = st.text_input(
+            "Accessibility test operating system",
+            key="accessibility_operating_system",
+            placeholder="For example: macOS 15",
+        )
+        evidence_reference = st.text_input(
+            "Accessibility evidence reference",
+            key="accessibility_evidence_reference",
+            placeholder="Screenshot folder, screen recording, or dated test note",
+        )
+        outcomes = {}
+        for check, label in MANUAL_ACCESSIBILITY_CHECKS.items():
+            outcomes[check] = st.selectbox(
+                f"Accessibility check: {label}",
+                ["Not tested", "Pass", "Fail", "Not applicable"],
+                key=f"accessibility_outcome_{check}",
+            )
+        notes = st.text_area(
+            "Accessibility test notes",
+            key="accessibility_notes",
+            placeholder="Record defects, reproduction steps and corrective actions.",
+        )
+
+        if st.button("Save manual accessibility record", key="save_accessibility_record"):
+            record = build_manual_accessibility_record(
+                browser=browser,
+                operating_system=operating_system,
+                outcomes=outcomes,
+                notes=notes,
+                evidence_reference=evidence_reference,
+            )
+            st.session_state.accessibility_audit_records.append(record)
+            if record["execution_status"] == "completed_author_accessibility_check":
+                st.success("Bounded manual accessibility check recorded as complete.")
+            else:
+                st.warning(f"Accessibility record saved as {record['execution_status']}.")
+
+        if st.session_state.accessibility_audit_records:
+            latest = st.session_state.accessibility_audit_records[-1]
+            st.markdown("#### Latest manual accessibility record")
+            st.json(latest)
+            st.download_button(
+                "Download manual accessibility records JSON",
+                json.dumps(st.session_state.accessibility_audit_records, indent=2),
+                "manual_accessibility_records.json",
+                "application/json",
+                key="download_accessibility_records",
+            )
+
+
+def render_independent_label_review():
+    """Provide a blinded human-labelling handoff for the ML experiment."""
+    with st.expander("Independent ML Label Review", expanded=False):
+        st.info(
+            "The current ML metrics use rule-seeded silver labels. This pack removes those answers "
+            "so an authorised reviewer can label space use independently. Do not reveal the silver "
+            "labels before the reviewer completes the pack."
+        )
+        dataset_path = Path(__file__).resolve().parents[2] / "evaluation" / "space_classification" / "silver_labels.csv"
+        source_rows = load_space_label_records(dataset_path)
+        blinded_pack = build_blinded_label_review_pack(source_rows)
+        st.download_button(
+            "Download blinded independent-label review pack CSV",
+            serialise_label_review_pack(blinded_pack),
+            "independent_space_label_review.csv",
+            "text/csv",
+            key="download_independent_label_pack",
+        )
+        st.caption(
+            "Allowed labels: circulation, residential, sanitary, kitchen, service_storage, "
+            "clinical, assembly and workplace. Set review_status to reviewer_confirmed and "
+            "provide confidence 1-5 plus a confirmation reference for every row."
+        )
+        completed_pack = st.file_uploader(
+            "Upload completed independent-label review pack",
+            type=["csv"],
+            key="completed_independent_label_pack",
+        )
+        if completed_pack is not None:
+            try:
+                rows = parse_label_review_pack_csv(completed_pack.getvalue().decode("utf-8-sig"))
+                validation = validate_label_review_pack(rows)
+                st.session_state.space_label_review_validation = validation
+                if validation["eligible_for_grouped_model_evaluation"]:
+                    st.success("Review pack is structurally complete and eligible for grouped model evaluation.")
+                else:
+                    st.warning(
+                        f"Review pack is incomplete: {validation['invalid_record_count']} invalid record(s)."
+                    )
+                st.json(validation)
+            except (UnicodeDecodeError, ValueError) as exc:
+                st.session_state.space_label_review_validation = {
+                    "status": "invalid_upload",
+                    "error": str(exc),
+                    "eligible_for_grouped_model_evaluation": False,
+                }
+                st.error(f"Independent-label review pack could not be validated: {exc}")
+
+
 def render_expert_review(result):
     """Render a session-scoped research review record."""
     st.markdown('<div class="section-header">👤 Research Review Record</div>', unsafe_allow_html=True)
@@ -1761,6 +1998,12 @@ def render_expert_review(result):
         </small>
     </div>
     """, unsafe_allow_html=True)
+
+    st.markdown("---")
+    st.markdown("### Formal Evaluation Evidence")
+    render_structured_domain_review(result, scenarios)
+    render_manual_accessibility_review()
+    render_independent_label_review()
     
     st.markdown("---")
     

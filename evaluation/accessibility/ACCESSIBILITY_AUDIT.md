@@ -1,6 +1,13 @@
 # Accessibility Audit
 
-Status: automated checks complete; browser-only manual checks not yet signed off.
+Automated status: complete.
+
+Manual execution status: **NOT EXECUTED / NOT SIGNED OFF**.
+
+Workflow status: the Research Review tab provides a structured manual record
+for pass/fail/not-tested outcomes, browser/OS metadata, notes and evidence
+reference. The project author must still execute the checks in the real demo
+browser.
 
 ## Automated evidence
 
@@ -33,3 +40,5 @@ The project author should record date, browser, operating system and outcome for
 
 Manual outcome: **NOT EXECUTED / NOT SIGNED OFF**. Do not state WCAG compliance
 in the dissertation unless this checklist is completed with retained evidence.
+Even after every bounded check passes, describe the result as a completed manual
+project check rather than WCAG certification.
