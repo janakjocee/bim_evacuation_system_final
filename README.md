@@ -1,6 +1,6 @@
 # BIM Evacuation Scenario Generator
 
-**AI-Driven Generation of Evacuation Scenarios from Building Information Models**
+**AI-Assisted Generation of Evacuation Screening Scenarios from Building Information Models**
 
 Developed by **Janak Raj Joshi**<br>
 Email: [janakjocee@gmail.com](mailto:janakjocee@gmail.com)<br>
@@ -14,7 +14,7 @@ Repository: [janakjocee/bim_evacuation_system_final](https://github.com/janakjoc
 
 ## Overview
 
-This MSc research prototype turns IFC/BIM building data into evacuation scenario suggestions for expert review. It combines openBIM parsing, spatial graph analysis, NLP/RAG-assisted regulation interpretation, compliance-oriented screening, explainable scenario generation, human-in-the-loop review and export.
+This MSc research prototype turns IFC/BIM building data into evacuation screening suggestions for qualified review. It combines openBIM parsing, spatial graph analysis, NLP/RAG-assisted regulation interpretation, compliance-oriented checks, explainable scenario generation, session-scoped research review and export.
 
 ### What “AI” Means in This Prototype
 
@@ -22,7 +22,7 @@ This project does **not** use GPT, OpenAI, an autonomous agent, CFD, or a certif
 
 - **spaCy NLP** to split uploaded regulation text into clauses and detect simple constraints such as widths and travel distances.
 - **Deterministic keyword grounding** for uploaded regulation evidence, with opt-in SentenceTransformers + FAISS vector retrieval for local research runs.
-- **Deterministic graph/rule algorithms** for route search, compliance screening, risk scoring and explanation traces.
+- **Deterministic graph/rule algorithms** for route search, compliance screening, prioritisation and explanation traces.
 
 The system is fast because it performs lightweight BIM parsing, NetworkX shortest-path checks, simplified fire/smoke approximations and rule-based scoring. It is a screening and explanation prototype, not a final legal or professional fire-safety decision system.
 
@@ -45,13 +45,13 @@ This is an academic decision-support tool. It does **not** perform CFD, certifie
 - Working scenario inspection workspace with highlighted route diagram, practical
   readiness checklist, evidence display and per-scenario download.
 - Regulation-oriented NLP/RAG workflow using spaCy and stable keyword retrieval, with optional FAISS and SentenceTransformers.
-- Evacuation scenario generation with distance, time, confidence, compliance and risk.
+- Evacuation scenario generation with distance, time, evidence confidence, implemented-check outcomes and screening priority.
 - Alternative route summaries and route-reliability labels for each generated scenario.
 - Practical compliance screening for travel distance, final/route door width,
   corridor width, stair width/riser/tread data where available, missing data,
   inferred topology and route redundancy.
 - Explainability panel for traceable deterministic decision reasoning.
-- Human-in-the-loop expert review workflow.
+- Session-scoped human-in-the-loop research review workflow; this is not authenticated professional approval.
 - Fire-origin worst-case scenario testing.
 - ASET/RSET fire scenario testing.
 - Auto-ranking of worst fire origins.
@@ -71,11 +71,11 @@ generated evacuation scenario exports:
   route to an exit;
 - the compliance checks that passed or failed, including whether each threshold
   came from an uploaded structured rule, RAG evidence or built-in default;
-- the deterministic risk score and weighted factor breakdown, including IFC
+- the deterministic screening index and weighted factor breakdown, including IFC
   graph confidence, narrow-door penalties, route-redundancy penalties and
   data-quality caps;
-- confidence score and data-quality notes;
-- a human-readable explanation and expert-review recommendations.
+- evidence-confidence score and data-quality notes;
+- a human-readable explanation and qualified-review recommendations.
 
 The Explainability tab and each scenario's **View Details** workspace show this
 decision trace directly. Risk classification is rule/score based and
@@ -87,6 +87,11 @@ IFC measurements are assumed, or when no verified exit data is available.
 Routes are labelled as `verified`, `partially_inferred`, `heavily_inferred` or
 `insufficient` so the reviewer can see whether a path came from IFC semantic
 connectivity or from geometry-derived screening.
+
+The submission terminology, score directions, assumptions and validation
+boundary are consolidated in [`docs/submission_claim_boundary.md`](docs/submission_claim_boundary.md).
+The final executable evidence is summarized in
+[`docs/submission_readiness_20260816.md`](docs/submission_readiness_20260816.md).
 
 ---
 
@@ -104,7 +109,7 @@ It contains:
 |---|---|
 | `fire_growth.py` | Simplified t-squared HRR model: `HRR(t) = alpha * t^2` |
 | `smoke_spread.py` | Graph-based smoke spread approximation over BIM-derived nodes/edges |
-| `aset_rset.py` | RSET and ASET/safety-margin screening |
+| `aset_rset.py` | RSET and graph-derived ASET/model-margin screening |
 | `life_safety_impact.py` | Indicative life-safety impact summary, not casualty prediction |
 | `fire_scenario_engine.py` | Combined fire growth + smoke + ASET/RSET + impact engine |
 | `fds_exporter.py` | JSON/CSV rows and FDS skeleton for expert completion |
@@ -126,14 +131,14 @@ The prototype uses:
 
 ```text
 RSET = detection time + alarm time + pre-movement delay + travel time + congestion delay
-Safety margin = ASET - RSET
+Model margin = graph-derived ASET - assumption-based RSET
 ```
 
-The graph-based smoke model estimates time-to-untenable for nodes. The minimum time-to-untenable across a route is treated as the indicative ASET for that evacuation path.
+The graph-based smoke model assigns heuristic time-to-untenable values to nodes. The minimum across a route is treated as model-internal ASET; if a node is not reached, the simulation horizon is substituted and disclosed. These are not validated tenability predictions.
 
 Classifications:
 
-- safe margin
+- positive heuristic margin
 - reduced margin
 - unsafe
 - no route / trapped
@@ -237,7 +242,7 @@ being misrepresented as a verified room-and-door evacuation model.
 
 `pass` means verified semantic spaces, doors, exits and route connectivity were
 available. `partial` means the file was processed and scenarios were generated,
-but some route, exit, width, area or geometry assumptions require expert review.
+but some route, exit, width, area or geometry assumptions require qualified review.
 `fail` means no usable IFC payload/topology was available, for example a Git LFS
 pointer file instead of the real model.
 
@@ -317,7 +322,7 @@ Supports:
 - HRR chart
 - smoke spread timeline
 - ASET/RSET comparison table
-- safety margin table
+- model-internal heuristic margin table
 - indicative life-safety impact summary
 - graph visualisation
 - interactive 3D fire/smoke/exit schematic
@@ -415,7 +420,7 @@ Fire-Origin Worst-Case Engine
         ↓
 ASET/RSET Fire Scenario Engine
         ↓
-Explainability + Human-in-the-Loop Expert Review
+Explainability + Session-Scoped Research Review
         ↓
 JSON / CSV / HTML / FDS Skeleton Export
 ```
@@ -517,7 +522,7 @@ Test coverage includes:
 - t-squared HRR calculation
 - suppression HRR reduction/capping
 - graph-based smoke spread
-- ASET/RSET safety-margin calculation
+- ASET/RSET model-margin calculation
 - trapped occupant detection
 - forbidden casualty wording checks
 - auto-ranking of worst fire origins
@@ -534,9 +539,9 @@ Capture:
 2. BIM model insights / extracted spaces
 3. Regulation intelligence / active constraints
 4. Evacuation scenario list
-5. Explainable AI reasoning chain
-6. Risk heatmap / ASET-RSET concept
-7. Expert review panel
+5. Deterministic decision trace
+6. Screening-priority heatmap and assumption registry
+7. Research review panel
 8. Fire-Origin Worst-Case Testing page
 9. WC02 or WC05 critical scenario summary
 10. Room-by-room trapped/rerouted table

@@ -127,7 +127,7 @@ The engine can test each room/corridor as a possible fire origin and rank the re
 - affected occupants
 - unavailable exits
 - average delay increase
-- overall risk score
+- overall hazard-priority score (higher means higher screening priority)
 
 This helps identify the most severe fire-origin assumptions in the demo building.
 
@@ -148,9 +148,9 @@ The export includes:
 - affected exits
 - trapped rooms
 - room-by-room results
-- risk score and risk level
+- hazard-priority score, direction metadata and screening-priority level
 - auto-ranked worst fire origins, if generated
-- expert review notes, if available
+- session-scoped research review notes, if available
 - limitations and disclaimer
 
 ## Limitations
@@ -162,7 +162,7 @@ This model is intentionally simplified:
 - It does not simulate detailed crowd behaviour or panic dynamics.
 - It is not a replacement for FDS, CFAST, Pathfinder, MassMotion, STEPS or professional fire engineering judgement.
 - It uses graph penalties and blocked nodes/edges as an indicative screening method.
-- All outputs require human-in-the-loop expert review.
+- All outputs require qualified review; any saved UI disposition is a session-scoped research record, not approval.
 
 Preferred academic wording:
 

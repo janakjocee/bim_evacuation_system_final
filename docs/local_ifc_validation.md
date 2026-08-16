@@ -1,5 +1,9 @@
 # Local IFC Validation Matrix
 
+> Historical 28 June matrix. See
+> [`submission_readiness_20260816.md`](submission_readiness_20260816.md) for the
+> current 23-file rerun and 103-test submission evidence.
+
 Validation date: 28 June 2026
 
 Command:
