@@ -4,7 +4,11 @@ Verification date: 16 August 2026
 
 ## Decision
 
-The repository is operationally ready for submission as an academic evacuation-screening prototype. It is not a validated fire-engineering tool, a legal compliance checker, CFD, or a certified evacuation simulator.
+The repository is operationally ready for an academic prototype demonstration.
+It is not a validated fire-engineering tool, a legal compliance checker, CFD,
+or a certified evacuation simulator. The current report PDF is not ready to
+submit until its visible comments/markup, placeholders and overclaims are
+corrected; see `docs/proposal_report_alignment_20260816.md`.
 
 ## Automated Verification
 
@@ -15,7 +19,10 @@ BIM_TEST_IFC="/Users/janakjocee/Downloads/11134_V_Motebello_Heistopp_Rev.ifc" \
   python3 -m pytest -q -rs
 ```
 
-Result: **103 passed, 0 failed, 0 skipped**.
+Result: **104 passed, 0 failed, 0 skipped**.
+
+Measured line coverage: **79.1%** (3,831 of 4,841 statements). Coverage is a
+software-test measure; it is not evidence of fire-engineering correctness.
 
 Coverage includes:
 
@@ -59,17 +66,22 @@ outputs/submission_readiness_20260816/practical_montebello/exports/scenarios.jso
 outputs/submission_readiness_20260816/practical_montebello/exports/scenarios.csv
 ```
 
-## 23-IFC Compatibility Run
+## 23-Path IFC Compatibility Run
 
-The exact prior 23-file corpus was rerun with the same structural result and no regression:
+The exact prior 23-path corpus was rerun with the same structural result and no
+regression. SHA-256 comparison found 16 unique payloads and 7 renamed or
+repeated copies.
 
-| Result | Count | Interpretation |
-|---|---:|---|
-| Partial | 18 | Opens and generates scenarios, but topology or measurements require review. |
-| Fail | 5 | Input does not contain a usable evacuation model payload. |
-| Pass | 0 | Strict pass is reserved for verified semantic spaces, doors, exits and connected routes. |
+| Result | Input paths | Unique payloads | Interpretation |
+|---|---:|---:|---|
+| Partial | 18 | 12 | Opens and generates scenarios, but topology or measurements require review. |
+| Fail | 5 | 4 | Input does not contain a usable evacuation model payload. |
+| Pass | 0 | 0 | Strict pass is reserved for verified semantic spaces, doors, exits and connected routes. |
 
-The five explained failures are three 132-133 byte Git LFS pointer files and two intentionally minimal wall/opening reference files with no evacuation topology. They fail clearly and do not crash the batch.
+The five path-level failures are three distinct 132-133 byte Git LFS pointer
+files and two differently named copies of one minimal wall/opening reference
+payload with no evacuation topology. They fail clearly and do not crash the
+batch.
 
 The recovered full IFC2X3 models run successfully but remain partial:
 
@@ -85,6 +97,11 @@ outputs/submission_readiness_20260813/final_23_matrix/compatibility_matrix.csv
 outputs/submission_readiness_20260813/final_23_matrix/compatibility_matrix.json
 outputs/submission_readiness_20260813/final_23_matrix/per_file/
 ```
+
+Current duplicate-aware diagnostics additionally write
+`compatibility_summary.json`. Generated evidence under `outputs/` is local and
+gitignored; the repository contains the scripts and tests required to recreate
+it when the IFC corpus is available.
 
 ## Transparency Boundary
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import csv
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -18,6 +19,10 @@ MATRIX_FIELDS = [
     "file_name",
     "path",
     "file_size_bytes",
+    "source_file_sha256",
+    "is_duplicate_payload",
+    "duplicate_payload_of",
+    "payload_occurrence_count",
     "ifc_schema",
     "opens_with_ifcopenshell",
     "extraction_mode",
@@ -84,6 +89,10 @@ def normalise_row(row: dict) -> dict:
         "file_name": row.get("file"),
         "path": row.get("path"),
         "file_size_bytes": row.get("file_size_bytes", 0),
+        "source_file_sha256": row.get("source_file_sha256", ""),
+        "is_duplicate_payload": False,
+        "duplicate_payload_of": "",
+        "payload_occurrence_count": 1,
         "ifc_schema": row.get("schema") or row.get("raw_schema", "UNKNOWN"),
         "opens_with_ifcopenshell": bool(row.get("ifcopenshell_open", False)),
         "extraction_mode": row.get("mode", "unknown"),
@@ -130,6 +139,9 @@ def failed_row(path: Path, exc: Exception) -> dict:
         "file": path.name,
         "path": str(path),
         "file_size_bytes": path.stat().st_size if path.exists() else 0,
+        "source_file_sha256": (
+            hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else ""
+        ),
         "schema": "UNKNOWN",
         "ifcopenshell_open": False,
         "success": False,
@@ -138,6 +150,56 @@ def failed_row(path: Path, exc: Exception) -> dict:
         "failure_reason": f"{type(exc).__name__}: {exc}",
         "errors": [str(exc)],
     })
+
+
+def annotate_duplicate_payloads(rows: list[dict]) -> list[dict]:
+    """Label repeated file contents without removing tested input paths."""
+    groups: dict[str, list[dict]] = {}
+    for row in rows:
+        fingerprint = row.get("source_file_sha256") or f"path:{row.get('path', '')}"
+        groups.setdefault(fingerprint, []).append(row)
+
+    for group in groups.values():
+        canonical_name = group[0]["file_name"]
+        occurrence_count = len(group)
+        for index, row in enumerate(group):
+            row["payload_occurrence_count"] = occurrence_count
+            row["is_duplicate_payload"] = index > 0
+            row["duplicate_payload_of"] = canonical_name if index > 0 else ""
+    return rows
+
+
+def duplicate_summary(rows: list[dict]) -> dict:
+    """Summarise unique payloads and duplicate groups for honest corpus reporting."""
+    unique_rows = [row for row in rows if not row.get("is_duplicate_payload")]
+    unique_status_counts: dict[str, int] = {}
+    for row in unique_rows:
+        status = row["pass_partial_fail_status"]
+        unique_status_counts[status] = unique_status_counts.get(status, 0) + 1
+
+    duplicate_groups = []
+    for row in unique_rows:
+        count = int(row.get("payload_occurrence_count", 1))
+        if count <= 1:
+            continue
+        matching = [
+            item["file_name"]
+            for item in rows
+            if item.get("source_file_sha256") == row.get("source_file_sha256")
+        ]
+        duplicate_groups.append({
+            "source_file_sha256": row.get("source_file_sha256", ""),
+            "canonical_file": row["file_name"],
+            "files": matching,
+            "occurrence_count": count,
+        })
+
+    return {
+        "unique_payload_count": len(unique_rows),
+        "duplicate_input_count": len(rows) - len(unique_rows),
+        "unique_status_counts": unique_status_counts,
+        "duplicate_payload_groups": duplicate_groups,
+    }
 
 
 def write_matrix_csv(rows: list[dict], path: Path) -> None:
@@ -178,6 +240,7 @@ def main() -> int:
     per_file_dir.mkdir(parents=True, exist_ok=True)
     json_path = output_dir / "compatibility_matrix.json"
     csv_path = output_dir / "compatibility_matrix.csv"
+    summary_path = output_dir / "compatibility_summary.json"
 
     route_loguru_to_stderr_for_json()
     with contextlib.redirect_stdout(sys.stderr):
@@ -189,6 +252,9 @@ def main() -> int:
             except Exception as exc:
                 row = failed_row(path, exc)
             rows.append(row)
+
+        annotate_duplicate_payloads(rows)
+        for path, row in zip(files, rows):
             per_file_path = per_file_dir / _safe_per_file_name(path)
             per_file_path.write_text(json.dumps(row, indent=2, default=_json_safe), encoding="utf-8")
 
@@ -200,11 +266,13 @@ def main() -> int:
         status = row["pass_partial_fail_status"]
         status_counts[status] = status_counts.get(status, 0) + 1
 
-    print(json.dumps({
+    summary = {
         "input_count": len(rows),
         "status_counts": status_counts,
+        **duplicate_summary(rows),
         "json": str(json_path),
         "csv": str(csv_path),
+        "summary_json": str(summary_path),
         "per_file_json_dir": str(per_file_dir),
         "failed_or_partial": [
             {
@@ -215,7 +283,9 @@ def main() -> int:
             for row in rows
             if row["pass_partial_fail_status"] != "pass"
         ],
-    }, indent=2))
+    }
+    summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    print(json.dumps(summary, indent=2))
     return 0 if status_counts.get("fail", 0) == 0 else 1
 
 

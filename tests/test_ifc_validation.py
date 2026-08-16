@@ -209,11 +209,16 @@ def test_batch_ifc_diagnostics_writes_csv_and_json(tmp_path):
     assert result.returncode == 1
     summary = json.loads(result.stdout)
     assert summary["status_counts"]["fail"] == 1
+    assert (output_dir / "compatibility_summary.json").exists()
+    assert json.loads((output_dir / "compatibility_summary.json").read_text())["input_count"] == 1
     rows = json.loads((output_dir / "compatibility_matrix.json").read_text())
     assert rows[0]["pass_partial_fail_status"] == "fail"
     assert rows[0]["file_name"] == "pointer.ifc"
     assert rows[0]["opens_with_ifcopenshell"] is False
     assert rows[0]["scenarios_generated"] == 0
+    assert len(rows[0]["source_file_sha256"]) == 64
+    assert rows[0]["is_duplicate_payload"] is False
+    assert rows[0]["payload_occurrence_count"] == 1
     assert rows[0]["failure_reason"]
     csv_text = (output_dir / "compatibility_matrix.csv").read_text()
     assert "pass_partial_fail_status" in csv_text
@@ -254,6 +259,10 @@ def test_batch_ifc_diagnostics_supports_input_output_flags(tmp_path):
     rows = json.loads((output_dir / "compatibility_matrix.json").read_text())
     required_fields = {
         "file_name",
+        "source_file_sha256",
+        "is_duplicate_payload",
+        "duplicate_payload_of",
+        "payload_occurrence_count",
         "ifc_schema",
         "opens_with_ifcopenshell",
         "extraction_mode",
@@ -274,3 +283,42 @@ def test_batch_ifc_diagnostics_supports_input_output_flags(tmp_path):
         "reliability_notes",
     }
     assert required_fields.issubset(rows[0])
+
+
+def test_batch_ifc_diagnostics_reports_unique_and_duplicate_payloads(tmp_path):
+    pointer_text = (
+        "version https://git-lfs.github.com/spec/v1\n"
+        "oid sha256:0123456789abcdef\n"
+        "size 12345\n"
+    )
+    (tmp_path / "first.ifc").write_text(pointer_text)
+    (tmp_path / "second.ifc").write_text(pointer_text)
+    output_dir = tmp_path / "duplicates"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/batch_ifc_diagnostics.py",
+            str(tmp_path),
+            "--output",
+            str(output_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    summary = json.loads(result.stdout)
+    assert summary["input_count"] == 2
+    assert summary["unique_payload_count"] == 1
+    assert summary["duplicate_input_count"] == 1
+    assert summary["unique_status_counts"] == {"fail": 1}
+    assert len(summary["duplicate_payload_groups"]) == 1
+    assert summary["summary_json"].endswith("compatibility_summary.json")
+
+    rows = json.loads((output_dir / "compatibility_matrix.json").read_text())
+    assert rows[0]["payload_occurrence_count"] == 2
+    assert rows[0]["is_duplicate_payload"] is False
+    assert rows[1]["is_duplicate_payload"] is True
+    assert rows[1]["duplicate_payload_of"] == rows[0]["file_name"]

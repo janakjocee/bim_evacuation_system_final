@@ -196,6 +196,7 @@ def audit_file(path: Path, max_scenarios: int, regulation_text: str | None = Non
         "file": path.name,
         "path": str(path),
         "file_size_bytes": path.stat().st_size,
+        "source_file_sha256": result.source_file_sha256,
         "is_git_lfs_pointer": _looks_like_git_lfs_pointer(path),
         "schema": result.ifc_schema,
         "raw_schema": raw_counts.get("raw_schema", "UNKNOWN"),

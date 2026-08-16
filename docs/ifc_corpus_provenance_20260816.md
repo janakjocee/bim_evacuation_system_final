@@ -1,0 +1,63 @@
+# IFC Corpus Provenance Manifest
+
+Audit date: 16 August 2026
+
+This manifest records the 16 SHA-256-unique payloads in the 23-path
+compatibility run. IFC payloads remain excluded from git because of their size;
+this document does not redistribute them. An exact hash match verifies file
+identity, while a repository licence records the stated reuse terms. It does
+not establish professional suitability or model correctness.
+
+## Verified Sources
+
+The current buildingSMART Sample-Test-Files repository states CC BY 4.0 for its
+content. The community archive also states CC BY 4.0 but warns that its files
+are community examples, are not official buildingSMART examples and may fail
+formal IFC validation.
+
+| Canonical local payload | SHA-256 | Source and licence evidence | Verification |
+|---|---|---|---|
+| `04_IFC4_buildingSMART_Building_Architecture.ifc` | `3ff9b10bd00c7b96dded51e7ca5a6b69efbea38b049adcdd05fcd247de7e70d5` | [buildingSMART IFC4 PCERT sample](https://github.com/buildingSMART/Sample-Test-Files/tree/main/IFC%204.0.2.1%20%28IFC%204%29/PCERT-Sample-Scene), [CC BY 4.0](https://github.com/buildingSMART/Sample-Test-Files/blob/main/LICENSE) | Exact byte match |
+| `05_IFC4_buildingSMART_Building_HVAC.ifc` | `11a8552bc555fa44dfdc49374d1ab2da0a16104c10f086af509f500ce03fa2b3` | Same IFC4 PCERT source and licence | Exact byte match |
+| `06_IFC4X3_ADD2_buildingSMART_Building_Architecture.ifc` | `a42962f9e2068040ac96636b1e7f6117150b6c0e3371f81088721b22796e463f` | [buildingSMART IFC4X3 PCERT sample](https://github.com/buildingSMART/Sample-Test-Files/tree/main/IFC%204.3.2.0%20%28IFC4X3_ADD2%29/PCERT-Sample-Scene), [CC BY 4.0](https://github.com/buildingSMART/Sample-Test-Files/blob/main/LICENSE) | Exact byte match |
+| `IFC4X3_Building_Structural.ifc` | `0343d5222d38e6be8ac7c31045c692e62c6018c80ea60d2f6023e73b846247ab` | Same IFC4X3 PCERT source and licence | Exact byte match |
+| `IFC4_Wall_Opening_Window.ifc` | `73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832` | [buildingSMART Reference View example](https://github.com/buildingSMART/Sample-Test-Files/tree/main/IFC%204.0.2.1%20%28IFC%204%29/ISO%20Spec%20-%20ReferenceView_V1.2), [CC BY 4.0](https://github.com/buildingSMART/Sample-Test-Files/blob/main/LICENSE) | Exact byte match |
+| `11134_V_Motebello_Heistopp_Rev.ifc` | `d0dd573388317907e6aa59f86319b5408306f0dbe9feea99cb7b83ed1d62ba3a` | [bimfag/intro-python-bim model](https://github.com/bimfag/intro-python-bim/blob/master/Models/11134_V_Motebello_Heistopp_Rev.ifc), repository declares MIT | Exact byte match |
+| `Duplex_A_20110907.ifc` | `b347a2c8aa8fff6db896a4417a9c50c22ac0ccd7c5cfc22b99b8d29336c606ed` | [buildingSMART community Duplex sample](https://github.com/buildingsmart-community/Community-Sample-Test-Files/tree/main/IFC%202.3.0.1%20%28IFC%202x3%29/Duplex%20Apartment), [CC BY 4.0](https://github.com/buildingsmart-community/Community-Sample-Test-Files/blob/main/LICENSE) | Local hash equals the source Git LFS object OID |
+
+## Source Pointers, Not IFC Models
+
+These files are valid Git LFS pointer text but are not IFC model contents. They
+must remain classified as failed inputs. Their intended source and expected
+object hashes are nevertheless traceable to the CC BY 4.0 buildingSMART
+community archive.
+
+| Local pointer | Pointer SHA-256 | Expected IFC object SHA-256 | Intended source |
+|---|---|---|---|
+| `01_IFC2X3_Duplex_A_20110907.ifc` | `612251d72fd888e50b5b8aa83a5ba32d41cb8d35663ae92bbdc7ad3cfe8ca8a7` | `b347a2c8aa8fff6db896a4417a9c50c22ac0ccd7c5cfc22b99b8d29336c606ed` | Duplex source above |
+| `02_IFC2X3_Duplex_Rooms_And_Spaces.ifc` | `bec9d5c00ff061cb0da77cee2eef657c100d0a670904d3209531bf2c2c584fa7` | `3cd577ecff9daf91632789a408070251a431b198de7be47f64e01c7fda1be92b` | [Duplex rooms and spaces](https://github.com/buildingsmart-community/Community-Sample-Test-Files/blob/main/IFC%202.3.0.1%20%28IFC%202x3%29/Duplex%20Apartment/Duplex_M_20111024_ROOMS_AND_SPACES.ifc) |
+| `03_IFC2X3_Clinic_Architectural.ifc` | `e592f013aa0d8903c20bb48c8355f131f96411df3704b93e62a9423a40d21109` | `2ac970ce065ecac4e0c9e5f453a257169e90d0067f419b7e33533a64ef837880` | [buildingSMART community Clinic sample](https://github.com/buildingsmart-community/Community-Sample-Test-Files/tree/main/IFC%202.3.0.1%20%28IFC%202x3%29/Medical-Dental%20Clinic) |
+
+## Provenance Not Yet Verified
+
+These files can be used locally to test robustness, but they must not be
+described in the report as public or authorised evidence until their original
+source and reuse terms are recorded. Header metadata is not a licence.
+
+| Canonical local payload | SHA-256 | Known technical metadata | Required action |
+|---|---|---|---|
+| `07_IFC4X1_Revit_Dormitory_Spaces.ifc` | `a327f06e34214e43a7a557174ff0a7fdad4156d21f476b3c55ff559a50e5a110` | IFC4X1; IfcPlusPlus export | Record original URL/owner and licence or exclude from reported corpus. |
+| `STRUC_NordicLCA_Housing_Concrete_BuildingPermit.ifc` | `586f2d47751bcddb06286072736cdd138bb3de7eebd8513ddc648f5f8a48ab0f` | IFC4; Tekla 2023 structural export | Record original URL/owner and licence or exclude. |
+| `STRUC_NordicLCA_Housing_Timber_BuildingPermit.ifc` | `26aad2086dc1b7328f2dfde9f088f35d4db743aef5346a7d8e921e5e2d37904f` | IFC4; Tekla 2023 structural export | Record original URL/owner and licence or exclude. |
+| `STRUC_NordicLCA_Office_Concrete_BuildingPermit.ifc` | `c36f33de483c6c0aa9917d281dbbdff0727ca051c586922463277e59fd59801b` | IFC4; Tekla 2023 structural export | Record original URL/owner and licence or exclude. |
+| `STRUC_NordicLCA_Office_Timber_BuildingPermit.ifc` | `3beff5c872c55184e0747e5c5faf17bbb5cd6877d8a26a653c4be98a3bf7c25d` | IFC4; Tekla 2023 structural export | Record original URL/owner and licence or exclude. |
+| `Clinic_Architectural.ifc` | `4ef2a77d63aecabd7d8d0b77fca268e80a07b1e4bef1ab28f030f2f5b3095c16` | IFC2X3; same name/size class as community Clinic, but hash differs from source LFS OID | Recover the exact licensed object or document the actual source. |
+
+## Duplicate Accounting
+
+The remaining seven tested paths are renamed copies of five verified payloads:
+IFC4 Architecture occurs twice, IFC4 HVAC three times, IFC4X3 Architecture
+three times, IFC4X3 Structural twice, and the wall/opening payload twice. The
+batch diagnostic records `duplicate_payload_of` and
+`payload_occurrence_count`; duplicates must not be presented as independent
+validation models.
