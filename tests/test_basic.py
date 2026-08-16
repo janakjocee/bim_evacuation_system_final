@@ -33,6 +33,16 @@ from src.scenario.worst_case_engine import validate_scenario_dataset
 from src.pipeline.evacuation_pipeline import EvacuationPipeline, PipelineResult
 from src.pipeline.manual_corrections import apply_manual_corrections
 from src.ui.export_helpers import build_scenarios_csv, build_scenarios_xml, safe_uploaded_filename
+from src import PROJECT_SUBTITLE, PROJECT_TITLE
+
+
+def test_project_metadata_matches_approved_proposal_title():
+    assert PROJECT_TITLE == (
+        "AI-Driven Generation of Evacuation Scenarios from Building Information Models"
+    )
+    assert "AI-Assisted Research Prototype" in PROJECT_SUBTITLE
+    assert "Deterministic IFC/Graph Analysis" in PROJECT_SUBTITLE
+    assert ConfigLoader().get("app.name") == PROJECT_TITLE
 
 
 class TestConfigLoader:

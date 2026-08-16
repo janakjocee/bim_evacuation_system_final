@@ -7,22 +7,55 @@ Inputs reviewed:
 - approved project proposal `PgProposalTemplate.docx`;
 - final report draft `msc final report .pdf` (71 PDF pages);
 - `MScProject_Marking Scheme 2025_26.docx`;
-- repository `main` at merge commit `503aac4` (PR 18);
+- repository state starting from `main` commit `67aeaad` (PR 25);
 - executable tests, a practical Montebello run and the 23-path IFC corpus.
 
 ## Final Decision
 
 The project meets the approved aim at **academic research-prototype level**, but
-not at professional fire-engineering validation level. Objectives 1-4 are
-substantially met. Objective 5 remains **partially met**, but is materially
-stronger: controlled parser/route ground truth, grouped ML comparison, retrieval
-metrics and declared scenario repeatability are now implemented. Engineering
-relevance and professional usability remain unvalidated by a qualified reviewer.
+not at professional fire-engineering validation level. All five approved
+objectives have implemented deliverables. Objective 5 is achieved only within
+the declared researcher-led software and controlled-prototype evaluation scope:
+controlled parser/route ground truth, grouped ML comparison, retrieval metrics,
+scenario repeatability and UI tests are implemented. Engineering correctness,
+professional relevance and usability remain unvalidated by a qualified reviewer.
 
 The product is credible for a demonstration when presented as deterministic,
 AI/NLP-assisted evacuation **screening**. The current report PDF is not ready to
 submit: it contains visible supervisor comments and revision markup,
 placeholders, inconsistent numbering and claims that exceed the evidence.
+
+## Approved Title Alignment
+
+The immutable approved title is:
+
+> AI-Driven Generation of Evacuation Scenarios from Building Information Models
+
+The report cover, README, Streamlit browser title, visible application header and
+package metadata now use that exact title. The adjacent subtitle defines the
+implemented boundary as an AI-assisted research prototype using deterministic
+IFC/graph analysis and NLP evidence retrieval. This preserves proposal identity
+without implying an autonomous LLM, learned route planner or certified safety
+decision-maker.
+
+## Approved Aim And Objectives (Verbatim)
+
+**Aim:** To design, develop, and critically evaluate an AI-assisted system
+capable of suggesting evacuation scenarios from BIM data.
+
+1. To conduct a critical review of the relevant literature related to BIM-based
+   evacuation planning, AI-assisted decision-support systems, Machine Learning,
+   NLP, and relevant building safety regulations.
+2. To analyse the requirements of the proposed system, focusing on the
+   identification of evacuation-relevant elements and regulatory constraints.
+3. To design a system that meets the identified requirements, integrating BIM
+   data analysis with regulation-informed reasoning.
+4. To develop and implement the proposed system and a user-friendly interface
+   for expert users.
+5. To evaluate the system through testing.
+
+These statements must appear verbatim in the report before any refined research
+tasks or implementation-specific sub-objectives.
 
 ## Approved-Objective Traceability
 
@@ -32,7 +65,7 @@ placeholders, inconsistent numbering and claims that exceed the evidence.
 | O2: identify exits, doors, areas, spatial relations, functional/non-functional requirements and ML/NLP features | IfcOpenShell parser, readiness diagnostics, feature extractor, requirements/design chapters | Achieved with IFC-data limitations | Distinguish verified IFC semantics from inferred geometry. State that missing semantics cannot be reconstructed as fact. |
 | O3: design BIM plus regulation reasoning, select algorithms and define JSON/XML outputs | Layered architecture, NetworkX routing, deterministic rule checks, JSON/CSV/XML exports and evidence trace | Achieved for a prototype | Describe JSON/XML as output schemas and retrieval as evidence support, not autonomous regulatory reasoning. |
 | O4: implement backend, scenario logic and expert review/selection/export UI | Streamlit app, scenario details, corrections, exports, fire and worst-case pages | Achieved for a prototype | Demonstrate the complete workflow and keep fire/worst-case outputs labelled as screening models. |
-| O5: evaluate relevance, correctness, explainability and critically compare against objectives | 133 tests, 79.63% raw line coverage, controlled ground truth, grouped ML/retrieval/scenario evaluations, multi-IFC diagnostics, provenance and decision traces | Partially achieved | Say controlled software correctness, behaviour and explainability were evaluated. Say domain correctness/relevance remain unvalidated without qualified review or independent real-building ground truth. |
+| O5: evaluate relevance, correctness, explainability and critically compare against objectives | 136 tests, 85.44% `src/` line coverage, controlled ground truth, grouped ML/retrieval/scenario evaluations, multi-IFC diagnostics, provenance and decision traces | Achieved at controlled research-prototype scope | Say controlled software correctness, behaviour, bounded relevance and explainability were evaluated. Say engineering correctness/relevance remain unvalidated without qualified review or independent real-building ground truth. |
 
 ## What The System Actually Does
 
@@ -58,13 +91,13 @@ retrieval" is more precise than autonomous RAG.
 
 | Check | Reproduced result | Meaning |
 |---|---|---|
-| Full pytest suite with real Montebello IFC | 133 passed, 0 failed, 0 skipped | Final expanded automated behavior suite is green. |
+| Full pytest suite with real Montebello IFC | 136 passed, 0 failed, 0 skipped | Final expanded automated behavior suite is green. |
 | Controlled IFC ground truth | Exact recovery across entities, areas, widths, connections, exits and routes | Project-declared software ground truth passes; it is not independent engineering validation. |
 | Space-use classifier | ML macro-F1 0.0992; deterministic baseline 0.8968 | ML is implemented and honestly rejected as runtime default. |
 | Regulation retrieval | Practical TF-IDF Recall@1 0.8421, Recall@3 0.9474, MRR 0.9000 | Bounded source-aware benchmark supports TF-IDF; relevance labels require author review. |
 | Scenario benchmark | 6/6 cases pass twice with identical normalized outcomes | Deterministic expected behavior is repeatable, not physically calibrated. |
-| Coverage | 79.63% raw line coverage (4,622/5,804 statements; 80% displayed) | Good prototype coverage; external format variation and optional embedding error paths remain residual risk. |
-| GitHub Actions | `main` smoke test passed at `503aac4` | The checked-in deployment smoke workflow is green. |
+| Coverage | 85.44% line coverage for the production `src/` package (4,396/5,145 statements; 85% displayed) | Good prototype coverage; standalone scripts, external format variation and optional embedding error paths remain residual risk. |
+| GitHub Actions | `main` workflow passed through PR 25 (`67aeaad`) | The checked-in deployment smoke workflow is green. |
 | Hosted Streamlit access | `/` and `/_stcore/health` redirect unauthenticated clients to Streamlit login | Deployment is authentication-gated; this is not evidence of public availability or an app crash. |
 | Montebello IFC2X3 | 8/8 workflow gates; 16 geometry proxies, 17 inferred connectors, 2 inferred exits, 16 scenarios | Operationally processable, but exploratory because room/door topology is absent. |
 | Regulation text | 15 clauses, 10 candidate rules, 3 supported uploaded thresholds applied | Unsupported candidates are reported rather than silently treated as law. |
@@ -116,7 +149,8 @@ workflows close an implementation gap, not the external-evidence gap.
 2. Replace `XXXXXXXXXXXXX` and `XXXXXXXX` in Acknowledgements and proofread the
    surrounding grammar.
 3. Reproduce the five approved objectives verbatim before any refined tasks.
-   Mark O5 as partially achieved, not achieved-with-minor-limitations.
+   State that O5 is achieved for researcher-led software and controlled-prototype
+   evaluation, while professional and engineering validation remains incomplete.
 4. Replace broad "advanced ML" claims with the exact implementation boundary in
    this audit. Explain why deterministic and traceable methods were selected for
    a safety-critical prototype.
@@ -125,7 +159,7 @@ workflows close an implementation gap, not the external-evidence gap.
 6. Separate software verification from engineering validation. Tests and
    coverage do not demonstrate scenario correctness, regulatory compliance or
    real-world safety.
-7. Add the latest reproducibility facts: 133 tests, 79.63% raw coverage, current
+7. Add the latest reproducibility facts: 136 tests, 85.44% `src/` line coverage, current
    commit identifier and the duplicate-aware matrix output.
 8. Correct figure/table references and regenerate both lists. Examples in the
    draft mix `Figure 4.1` with `Figure 1`, `Figures 7.1-7.3` with Figures 14-17,
@@ -147,7 +181,7 @@ workflows close an implementation gap, not the external-evidence gap.
 |---|---|---|
 | Domain understanding | Relevant BIM/fire-safety sources, explicit scope and requirements | Literature is sometimes descriptive; research gap and comparison-derived criteria need stronger synthesis. |
 | Product and ideas | Substantial multi-module implementation and defensible transparent architecture | Alternatives and project-plan changes are thin; proposed ML terminology does not match the delivered default. |
-| Build and evaluation | Working UI, real IFC diagnostics, 133 tests, controlled strict-pass fixture, grouped ML/retrieval/scenario evaluations, coverage, CI and limitations | No qualified expert evaluation, independent real-building ground truth, completed browser accessibility sign-off or engineering validation. |
+| Build and evaluation | Working UI, real IFC diagnostics, 136 tests, controlled strict-pass fixture, grouped ML/retrieval/scenario evaluations, coverage, CI and limitations | No qualified expert evaluation, independent real-building ground truth, completed browser accessibility sign-off or engineering validation. |
 | Conclusions and critical review | Limitations and future work are acknowledged | Must be more explicit about mistakes, changed plans, failed approaches and how evidence changed the claims. |
 | Report presentation | Logical chapter structure and declared word count within the nominal band | Visible comments/markup, placeholders, numbering and residual language errors are submission blockers. |
 

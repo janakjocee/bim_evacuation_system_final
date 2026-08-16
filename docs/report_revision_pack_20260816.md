@@ -47,12 +47,13 @@ It does not replace the mandatory clean export and full proofreading pass.
 
 Use this wording unless qualified review is completed:
 
-> Objective 5 is partially achieved. Software behavior, controlled parser/route
-> correctness, deterministic repeatability, retrieval performance, robustness,
-> explainability and selected UI accessibility properties were evaluated.
-> Fire-engineering relevance, physical calibration, statutory interpretation and
-> professional usability remain unvalidated because no qualified domain review or
-> independent real-building ground truth was completed.
+> Objective 5 is achieved within the declared researcher-led software and
+> controlled-prototype evaluation scope. Software behavior, controlled
+> parser/route correctness, deterministic repeatability, bounded retrieval
+> relevance, robustness, explainability and selected UI accessibility properties
+> were evaluated. Fire-engineering correctness, physical calibration, statutory
+> interpretation and professional usability remain unvalidated because no
+> qualified domain review or independent real-building ground truth was completed.
 
 ## Mandatory removal or qualification
 
