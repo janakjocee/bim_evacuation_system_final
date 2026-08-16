@@ -17,6 +17,13 @@ import io
 import json
 import math
 
+from ..utils.model_transparency import (
+    ACADEMIC_USE_NOTICE,
+    assumption_record,
+    hazard_priority_score_semantics,
+    runtime_assumption_registry,
+)
+
 try:
     import networkx as nx
 except ImportError:  # pragma: no cover - handled gracefully for UI/runtime
@@ -71,9 +78,9 @@ class WorstCaseResult:
     overall_risk: str
     explanation: str
     limitations: str = (
-        "Indicative compliance-oriented screening only. This is not certified fire engineering, "
-        "not CFD, not physical fire simulation, and not a replacement for qualified fire-safety review."
+        ACADEMIC_USE_NOTICE + " This is not CFD or physical fire simulation."
     )
+    assumption_registry: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -93,9 +100,13 @@ class WorstCaseResult:
             "trapped_occupants": self.trapped_occupants,
             "average_delay_increase_s": round(self.average_delay_increase_s, 1),
             "risk_score": self.risk_score,
+            "hazard_priority_score": self.risk_score,
+            "legacy_risk_score_note": "risk_score is retained for compatibility; use hazard_priority_score and score_semantics.",
+            "score_semantics": hazard_priority_score_semantics(),
             "overall_risk": self.overall_risk,
             "explanation": self.explanation,
             "limitations": self.limitations,
+            "assumption_registry": self.assumption_registry,
         }
 
 
@@ -204,6 +215,25 @@ class WorstCaseScenarioEngine:
             risk_score=risk_score,
             overall_risk=overall_risk,
             explanation=explanation,
+            assumption_registry=runtime_assumption_registry(
+                "illustrative_worst_case_route_screening",
+                [("worst_case_route_scoring", self.config)],
+                additional=[
+                    assumption_record(
+                        "scenario_perturbations",
+                        {
+                            "blocked_nodes": blocked_nodes,
+                            "blocked_edges": blocked_edges,
+                            "smoke_affected_nodes": smoke_nodes,
+                            "affected_exits": affected_exits,
+                        },
+                        "scenario inputs",
+                        "Apply researcher-selected adverse conditions to the routing graph.",
+                        source="selected_demo_or_user_dataset",
+                        editable=True,
+                    )
+                ],
+            ),
         )
 
     def auto_rank_fire_origins(self) -> List[Dict[str, Any]]:
@@ -363,7 +393,7 @@ th {{ background: #f4f4f4; }}
 <h1>Fire-Origin Worst-Case Scenario Report</h1>
 <p><strong>Building:</strong> {self.dataset.get('building_name')}</p>
 <p><strong>Scenario:</strong> {result.selected_fire_scenario.get('scenario_id')} - {result.selected_fire_scenario.get('scenario_name')}</p>
-<p><span class=\"badge\">Overall Risk: {result.overall_risk} ({result.risk_score})</span></p>
+<p><span class=\"badge\">Screening Priority: {result.overall_risk}; Hazard-Priority Score: {result.risk_score} (higher means higher priority)</span></p>
 <h2>Hazard Summary</h2>
 <ul>
 <li><strong>Fire origin:</strong> {result.fire_origin_name} ({result.fire_origin})</li>
@@ -385,7 +415,7 @@ th {{ background: #f4f4f4; }}
 <table><tr><th>Rank</th><th>Fire Origin</th><th>Affected Occupants</th><th>Trapped Rooms</th><th>Risk</th><th>Main Reason</th></tr>{ranking_rows}</table>
 <h2>Explanation</h2>
 <p>{result.explanation}</p>
-<h2>Expert Review Notes</h2>
+<h2>Research Review Notes</h2>
 {review_html}
 <div class=\"notice\"><strong>Limitations:</strong> {result.limitations}</div>
 </body></html>"""

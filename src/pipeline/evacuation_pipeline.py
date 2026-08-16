@@ -9,6 +9,11 @@ from pathlib import Path
 
 from ..utils.logger import get_logger
 from ..utils.config_loader import get_config
+from ..utils.model_transparency import (
+    ACADEMIC_USE_NOTICE,
+    screening_index_semantics,
+    standard_assumption_registry,
+)
 from ..bim_processing.ifc_parser import IFCParser, BuildingData
 from ..bim_processing.ifc_validation import validate_ifc_model
 from ..bim_processing.feature_extractor import FeatureExtractor, ExtractedFeatures
@@ -304,6 +309,10 @@ class EvacuationPipeline:
         if 'json' in formats:
             json_path = output_path / 'scenarios.json'
             data = {
+                'export_version': 'submission-evidence-v2',
+                'academic_use_notice': ACADEMIC_USE_NOTICE,
+                'score_semantics': screening_index_semantics(),
+                'assumption_registry': standard_assumption_registry(),
                 'building_name': result.building.name if result.building else 'Unknown',
                 'source_file_name': result.source_file_name,
                 'source_file_sha256': result.source_file_sha256,

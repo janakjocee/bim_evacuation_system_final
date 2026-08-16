@@ -42,7 +42,7 @@ def test_ifc_validation_good_model_gets_high_score():
     assert result["model_readiness_score"] >= 90
     assert result["processing_readiness_score"] == 100
     assert result["engineering_evidence_score"] >= 90
-    assert result["readiness_label"] == "Ready for scenario generation"
+    assert result["readiness_label"] == "Ready for semantic prototype screening"
 
 
 def test_geometry_processing_can_pass_without_claiming_semantic_evidence():

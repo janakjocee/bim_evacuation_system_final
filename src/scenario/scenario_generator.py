@@ -12,6 +12,7 @@ from ..bim_processing.spatial_graph import SpatialGraphBuilder, Route
 from ..nlp.regulation_parser import RegulationClause, RegulationRule
 from .compliance_checker import ComplianceChecker, ComplianceCheck
 from .risk_classifier import RiskClassifier, RiskFactors
+from ..utils.model_transparency import screening_index_semantics, standard_assumption_registry
 
 logger = get_logger("scenario_generator")
 
@@ -49,6 +50,11 @@ class EvacuationScenario:
     decision_trace: List[Dict[str, Any]] = field(default_factory=list)
     data_quality_notes: List[str] = field(default_factory=list)
     alternative_routes: List[Dict[str, Any]] = field(default_factory=list)
+
+    @property
+    def screening_index(self) -> float:
+        """Return the standard score under its unambiguous submission name."""
+        return self.risk_score
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -57,6 +63,8 @@ class EvacuationScenario:
             'name': self.name,
             'origin_space_id': self.origin_space_id,
             'origin_space_name': self.origin_space_name,
+            'screening_priority': self.risk_level.value,
+            'screening_priority_note': "Priority category from an uncalibrated deterministic screening index.",
             'risk_level': self.risk_level.value,
             'evacuation_route': {
                 'origin': self.evacuation_route.origin,
@@ -71,16 +79,26 @@ class EvacuationScenario:
                 'edge_sources': self.evacuation_route.edge_sources or [],
             },
             'alternative_routes': self.alternative_routes,
+            'implemented_check_status': self.compliance_status.value,
+            'implemented_checks_passed': round(self.compliance_score, 2),
+            'prototype_check_findings': self.violated_regulations,
             'compliance_status': self.compliance_status.value,
             'compliance_score': round(self.compliance_score, 2),
+            'legacy_compliance_note': "Legacy keys describe implemented prototype checks, not statutory compliance.",
             'violated_regulations': self.violated_regulations,
             'recommendations': self.recommendations,
+            'evidence_confidence': round(self.confidence_score, 2),
             'confidence_score': round(self.confidence_score, 2),
             'explanation': self.explanation,
+            'screening_index': round(self.screening_index, 3),
+            'score_semantics': screening_index_semantics(),
+            # Retained for compatibility with earlier prototype exports.
             'risk_score': round(self.risk_score, 3),
+            'legacy_risk_score_note': "Deprecated alias of screening_index; higher means lower screening priority.",
             'risk_factors': self.risk_factors,
             'decision_trace': self.decision_trace,
             'data_quality_notes': self.data_quality_notes,
+            'assumption_registry': standard_assumption_registry(),
         }
 
 
@@ -238,13 +256,12 @@ class ScenarioGenerator:
         )
         
         risk_level = self.risk_classifier.classify(risk_factors)
-        risk_score = self.risk_classifier.calculate_score(risk_factors)
+        screening_index = self.risk_classifier.calculate_score(risk_factors)
         risk_factor_dict = self.risk_classifier.get_risk_factors_dict(risk_factors)
         risk_factor_dict["weighted_breakdown"] = self.risk_classifier.risk_contribution_breakdown(risk_factors)
         
         # Calculate confidence
-        confidence = self._calculate_confidence(compliance_score, best_route)
-        confidence = min(confidence, best_route.route_confidence)
+        confidence = self._calculate_confidence(best_route, data_quality_factors)
         data_quality_notes = []
         if self.building.extraction_mode == "geometry_derived":
             confidence = min(confidence, 0.5)
@@ -257,9 +274,13 @@ class ScenarioGenerator:
                 "IfcSpace-inferred topology caps confidence at 65% because route links and exits were inferred from room geometry."
             )
         if not violations:
-            data_quality_notes.append("No regulatory violations were detected by the active rule set.")
+            data_quality_notes.append(
+                "No conflict was detected by the active prototype checks; this does not establish statutory compliance."
+            )
         else:
-            data_quality_notes.append(f"{len(violations)} regulatory violation(s) affected compliance scoring.")
+            data_quality_notes.append(
+                f"{len(violations)} prototype check finding(s) affected the implemented-check pass rate."
+            )
         if graph_stats:
             data_quality_notes.append(
                 f"Graph confidence {graph_stats.get('graph_confidence_score', 0):.2f}; "
@@ -291,7 +312,7 @@ class ScenarioGenerator:
             recommendations=recommendations,
             confidence_score=confidence,
             explanation=explanation,
-            risk_score=risk_score,
+            risk_score=screening_index,
             risk_factors=risk_factor_dict,
             decision_trace=self._build_decision_trace(
                 space=space,
@@ -299,7 +320,7 @@ class ScenarioGenerator:
                 compliance_checks=compliance_checks,
                 violations=violations,
                 risk_level=risk_level,
-                risk_score=risk_score,
+                screening_index=screening_index,
                 confidence=confidence,
                 route_count=len(routes),
             ),
@@ -312,7 +333,7 @@ class ScenarioGenerator:
     def _build_decision_trace(self, space: SpaceData, route: Route,
                               compliance_checks: List[ComplianceCheck],
                               violations: List[ComplianceCheck],
-                              risk_level: RiskLevel, risk_score: float,
+                              risk_level: RiskLevel, screening_index: float,
                               confidence: float,
                               route_count: int = 1) -> List[Dict[str, Any]]:
         """Build a transparent audit trail for why the scenario was produced."""
@@ -347,13 +368,14 @@ class ScenarioGenerator:
                 },
             },
             {
-                "step": "Compliance checks",
+                "step": "Implemented constraint checks",
                 "input": len(compliance_checks),
                 "method": "Rule checks for route distance and selected exit/door width.",
                 "output": {
                     "passed": len(compliance_checks) - len(violations),
                     "failed": len(violations),
-                    "violations": [v.message for v in violations],
+                    "findings": [v.message for v in violations],
+                    "legacy_violations": [v.message for v in violations],
                     "checks": [
                         {
                             "element_id": check.element_id,
@@ -369,7 +391,7 @@ class ScenarioGenerator:
                 },
             },
             {
-                "step": "Risk classification",
+                "step": "Screening-priority classification",
                 "input": self.risk_classifier.get_risk_factors_dict(RiskFactors(
                     travel_distance=route.distance,
                     evacuation_time=route.estimated_time,
@@ -384,27 +406,22 @@ class ScenarioGenerator:
                 )),
                 "method": "Weighted deterministic score, not an opaque machine-learning prediction.",
                 "output": {
-                    "risk_score": round(risk_score, 3),
-                    "risk_level": risk_level.value,
-                    "confidence": round(confidence, 3),
+                    "screening_index": round(screening_index, 3),
+                    "score_direction": "higher_is_lower_screening_priority",
+                    "screening_priority": risk_level.value,
+                    "evidence_confidence": round(confidence, 3),
+                    "calibration_status": "unvalidated_research_assumption",
                 },
             },
         ]
     
-    def _calculate_confidence(self, compliance_score: float, route: Route) -> float:
-        """Calculate confidence score."""
-        # Base confidence on compliance
-        confidence = compliance_score
-        
-        # Penalize long routes
-        if route.distance > 100:
-            confidence *= 0.9
-        
-        # Penalize long evacuation times
-        if route.estimated_time > 300:
-            confidence *= 0.8
-        
-        return min(confidence, 1.0)
+    def _calculate_confidence(self, route: Route, data_quality_factors: Dict[str, Any]) -> float:
+        """Estimate evidence confidence independently from compliance outcomes."""
+        return max(0.0, min(
+            route.route_confidence,
+            float(data_quality_factors.get("data_quality_confidence", 1.0)),
+            1.0,
+        ))
 
     def _build_data_quality_risk_factors(
         self,
@@ -520,19 +537,18 @@ class ScenarioGenerator:
         parts.append(f"Route to exit: {route.distance:.1f} meters, "
                     f"estimated evacuation time: {route.estimated_time:.1f} seconds.")
         
-        # Compliance
+        # Implemented prototype checks
         compliant_count = sum(1 for c in checks if c.status == ComplianceStatus.COMPLIANT)
         total_checks = len(checks)
-        parts.append(f"Compliance: {compliant_count}/{total_checks} checks passed.")
+        parts.append(f"Implemented checks passed: {compliant_count}/{total_checks}.")
         
-        # Violations
+        # Prototype findings
         if violations:
-            parts.append("Violations identified:")
+            parts.append("Prototype check findings:")
             for v in violations:
                 parts.append(f"  - {v.message}")
         
-        # Risk level
-        parts.append(f"Risk level: {risk_level.value.upper()}.")
+        parts.append(f"Screening priority: {risk_level.value.upper()}.")
         
         return " ".join(parts)
     
@@ -556,7 +572,11 @@ class ScenarioGenerator:
         
         return {
             'total': len(self.scenarios),
+            'screening_priority_distribution': risk_counts,
+            'average_implemented_checks_passed': round(avg_compliance, 2),
+            'average_evidence_confidence': round(avg_confidence, 2),
             'risk_distribution': risk_counts,
             'avg_compliance_score': round(avg_compliance, 2),
-            'avg_confidence_score': round(avg_confidence, 2)
+            'avg_confidence_score': round(avg_confidence, 2),
+            'legacy_field_note': "risk/compliance/confidence keys are retained for backward compatibility only.",
         }

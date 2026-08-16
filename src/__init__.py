@@ -2,7 +2,7 @@
 BIM Evacuation Scenario Generator
 MSc Data Science Dissertation - University of Greenwich
 
-AI-Driven Generation of Evacuation Scenarios from Building Information Models
+AI-Assisted Generation of Evacuation Screening Scenarios from Building Information Models
 """
 
 __version__ = "1.0.0"

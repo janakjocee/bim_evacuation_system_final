@@ -149,7 +149,7 @@ def validate_ifc_model(ifc_model: Any = None, extracted_data: Optional[Dict[str,
         readiness = "Semantic spaces with inferred routing; expert verification required"
         analysis_scope = "room_screening_with_inferred_routes"
     elif score >= 90:
-        readiness = "Ready for scenario generation"
+        readiness = "Ready for semantic prototype screening"
         analysis_scope = "semantic_evacuation_screening"
     elif score >= 70:
         readiness = "Usable with warnings"
@@ -158,7 +158,7 @@ def validate_ifc_model(ifc_model: Any = None, extracted_data: Optional[Dict[str,
         readiness = "Limited reliability"
         analysis_scope = "limited_evacuation_screening"
     else:
-        readiness = "Not safe for automated scenario generation"
+        readiness = "Insufficient evidence for automated prototype screening"
         analysis_scope = "insufficient_for_automated_evacuation_analysis"
 
     return {

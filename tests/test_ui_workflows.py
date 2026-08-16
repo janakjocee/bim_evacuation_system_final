@@ -43,7 +43,14 @@ def test_explainability_ui_is_not_black_box_or_overclaiming_rag():
     assert "Anti-Black-Box Decision Trace" in source
     assert "deterministic weighted score" in source
     assert "Retrieved relevant building safety regulations via RAG" not in source
-    assert "not as final regulatory approval" in source
+    assert "not fire-strategy approval or statutory sign-off" in source
+    assert "Example Reasoning Format" not in source
+    assert "Approved Document B Section 2.2.1" not in source
+    assert "ASET (300s)" not in source
+    assert "Safety Margin" not in source
+    assert "Scenarios meet basic safety requirements" not in source
+    assert "Generate Fire Strategy Scenarios" not in source
+    assert "complete fire strategy report" not in source
 
 
 def test_bim_insights_has_exportable_diagnostics():
@@ -87,8 +94,11 @@ def test_main_export_uses_complete_evidence_payload():
     source = (Path(__file__).resolve().parents[1] / "src/ui/streamlit_app.py").read_text()
 
     assert "def build_complete_export_payload" in source
-    assert "\"export_version\": \"submission-evidence-v1\"" in source
+    assert "\"export_version\": \"submission-evidence-v2\"" in source
+    assert "\"score_semantics\": screening_index_semantics()" in source
+    assert "\"assumption_registry\": standard_assumption_registry()" in source
     assert "\"ifc_readiness\": result.readiness" in source
     assert "\"graph_stats\": result.graph_stats" in source
     assert "\"manual_corrections\": st.session_state.get(\"manual_corrections\")" in source
+    assert "\"research_review_records\":" in source
     assert "export_data = build_complete_export_payload(result)" in source

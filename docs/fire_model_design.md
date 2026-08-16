@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This note documents the design decision for the upgraded fire-safety layer in the MSc prototype **AI-Driven Generation of Evacuation Scenarios from Building Information Models**.
+This note documents the design decision for the upgraded fire-safety layer in the MSc prototype **AI-Assisted Generation of Evacuation Screening Scenarios from Building Information Models**.
 
 The project now uses a simplified, explainable fire-origin scenario layer based on:
 
@@ -79,20 +79,20 @@ The prototype calculates:
 RSET = detection time + alarm time + pre-movement delay + travel time + congestion delay
 ```
 
-The graph-based smoke spread module estimates the time-to-untenable condition for nodes. The minimum time-to-untenable across a room's evacuation route is treated as an indicative ASET value. The safety margin is then:
+The graph-based smoke spread module assigns heuristic time-to-untenable values to nodes. The minimum value across a room's evacuation route is treated as model-internal ASET. Nodes not reached during the selected simulation use the simulation horizon as an explicit substitute. The model margin is:
 
 ```text
-Safety margin = ASET - RSET
+Model margin = graph-derived ASET - assumption-based RSET
 ```
 
 The classification is:
 
-- safe margin
+- positive heuristic margin
 - reduced margin
 - unsafe
 - no route / trapped
 
-This supports fire-safety-style reasoning while remaining honest about limitations.
+This supports transparent sensitivity screening. A positive model margin does not prove tenable conditions or fire safety.
 
 ## Professional validation workflow
 

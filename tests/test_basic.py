@@ -233,13 +233,47 @@ def test_generated_scenario_exports_explainability_trace():
     assert scenarios
     payload = scenarios[0].to_dict()
 
-    assert payload["risk_score"] >= 0
-    assert payload["risk_factors"]["weighted_breakdown"]["total_score"] == payload["risk_score"]
+    assert payload["screening_index"] >= 0
+    assert payload["screening_priority"] == payload["risk_level"]
+    assert payload["risk_score"] == payload["screening_index"]
+    assert payload["implemented_checks_passed"] == payload["compliance_score"]
+    assert payload["evidence_confidence"] == payload["confidence_score"]
+    assert payload["score_semantics"]["direction"] == "higher_is_lower_screening_priority"
+    assert payload["risk_factors"]["weighted_breakdown"]["screening_index"] == payload["screening_index"]
+    assert payload["assumption_registry"]["calibration_status"] == "unvalidated_research_assumption"
     assert payload["decision_trace"]
     assert payload["decision_trace"][-1]["method"] == "Weighted deterministic score, not an opaque machine-learning prediction."
     assert payload["data_quality_notes"]
     assert payload["evacuation_route"]["inferred_edge_count"] == 1
     assert payload["compliance_status"] == ComplianceStatus.REQUIRES_REVIEW.value
+
+
+def test_evidence_confidence_is_independent_from_compliance_outcome():
+    building = BuildingData(id="B1", name="Evidence Confidence Test")
+    building.spaces["S1"] = SpaceData(id="S1", name="Room A", area=20)
+    exit_door = DoorData(
+        id="E1",
+        name="Verified Exit",
+        width=0.5,
+        height=2.1,
+        location=Point3D(),
+        is_exit=True,
+        connected_spaces=["S1"],
+        connection_source="IfcRelSpaceBoundary",
+    )
+    building.doors = {"E1": exit_door}
+    building.exits = {"E1": exit_door}
+    graph = SpatialGraphBuilder(building)
+    assert graph.build()
+
+    scenario = ScenarioGenerator(building, graph).generate(max_scenarios=1)[0]
+
+    assert scenario.compliance_score < 1.0
+    assert scenario.confidence_score == 1.0
+    assert scenario.compliance_status == ComplianceStatus.REQUIRES_REVIEW
+    checks = scenario.decision_trace[2]["output"]["checks"]
+    exit_width = next(check for check in checks if check["regulation_id"] == "min_exit_width")
+    assert exit_width["status"] == ComplianceStatus.NON_COMPLIANT.value
 
 
 def test_uploaded_regulation_values_drive_compliance_rules():
@@ -606,23 +640,46 @@ def test_missing_exit_forces_high_risk():
     assert classifier.classify(factors) == RiskLevel.HIGH
 
 
-def test_regulation_text_loader_supports_txt_docx_and_pdf(tmp_path):
+def test_regulation_text_loader_supports_txt(tmp_path):
     txt_path = tmp_path / "rules.txt"
     txt_path.write_text("Travel distance must not exceed 30 metres.", encoding="utf-8")
     assert "30 metres" in extract_regulation_text(txt_path)
 
-    docx = pytest.importorskip("docx")
+
+def test_regulation_text_loader_supports_docx(tmp_path):
+    import docx
+
     docx_path = tmp_path / "rules.docx"
     document = docx.Document()
     document.add_paragraph("Final exit doors shall be 1200mm wide.")
     document.save(docx_path)
     assert "1200mm" in extract_regulation_text(docx_path)
 
-    reportlab_canvas = pytest.importorskip("reportlab.pdfgen.canvas")
+
+def test_regulation_text_loader_supports_pdf(tmp_path):
+    from pypdf import PdfWriter
+    from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
+
     pdf_path = tmp_path / "rules.pdf"
-    canvas = reportlab_canvas.Canvas(str(pdf_path))
-    canvas.drawString(72, 720, "Corridor width shall be at least 1200mm.")
-    canvas.save()
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=612, height=792)
+    font = DictionaryObject({
+        NameObject("/Type"): NameObject("/Font"),
+        NameObject("/Subtype"): NameObject("/Type1"),
+        NameObject("/BaseFont"): NameObject("/Helvetica"),
+    })
+    font_ref = writer._add_object(font)
+    page[NameObject("/Resources")] = DictionaryObject({
+        NameObject("/Font"): DictionaryObject({NameObject("/F1"): font_ref})
+    })
+    content = DecodedStreamObject()
+    content.set_data(
+        b"BT /F1 12 Tf 72 720 Td (Corridor width shall be at least 1200mm.) Tj ET"
+    )
+    page[NameObject("/Contents")] = writer._add_object(content)
+    with pdf_path.open("wb") as handle:
+        writer.write(handle)
+
     assert "1200mm" in extract_regulation_text(pdf_path)
 
 
@@ -810,7 +867,14 @@ def test_ui_export_helpers_produce_safe_names_and_well_formed_outputs():
 
     assert xml_root.find("Building").attrib["name"] == building.name
     assert xml_root.find("./Scenarios/Scenario/Name").text == scenarios[0].name
+    assert xml_root.find("ScoreSemantics").attrib["direction"] == "higher_is_lower_screening_priority"
+    assert xml_root.find("./Scenarios/Scenario/ScreeningIndex") is not None
     assert scenarios[0].scenario_id in csv_text
+    assert "screening_index" in csv_text
+    assert "screening_priority" in csv_text
+    assert "implemented_checks_passed" in csv_text
+    assert "evidence_confidence" in csv_text
+    assert "score_direction" in csv_text
     assert safe_uploaded_filename("../../unsafe/model.ifc") == "model.ifc"
     assert safe_uploaded_filename(r"C:\\uploads\\model.ifc") == "model.ifc"
 

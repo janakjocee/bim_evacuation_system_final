@@ -293,8 +293,8 @@ st.info(
 if result:
     st.subheader("Worst-Case Scenario Summary")
     k1, k2, k3, k4, k5 = st.columns(5)
-    k1.metric("Overall Risk", result.overall_risk)
-    k2.metric("Risk Score", result.risk_score)
+    k1.metric("Screening Priority", result.overall_risk)
+    k2.metric("Hazard-Priority Score", result.risk_score, help="Higher means higher screening priority; this uncalibrated point score is not a risk probability.")
     k3.metric("Affected Occupants", result.affected_occupants)
     k4.metric("Trapped Occupants", result.trapped_occupants)
     k5.metric("Avg Delay Increase", f"{result.average_delay_increase_s:.1f}s")
@@ -379,6 +379,11 @@ if result:
 
     with tab5:
         st.subheader("Export Worst-Case Results")
+        with st.expander("Assumptions and score semantics", expanded=False):
+            st.json({
+                "score_semantics": result.to_dict()["score_semantics"],
+                "assumption_registry": result.assumption_registry,
+            })
         rankings = st.session_state.get("worst_case_rankings", [])
         json_data = engine.to_json(result, rankings, st.session_state.get("expert_reviews", []))
         csv_data = engine.to_csv(result)
@@ -407,5 +412,5 @@ if st.session_state.worst_case_rankings:
 st.markdown("---")
 st.caption(
     "Academic wording: fire-origin-based worst-case scenario, smoke-affected route, blocked evacuation route, trapped room, "
-    "alternative route availability, human-in-the-loop expert review, compliance-oriented screening, indicative decision-support result."
+    "alternative route availability, session-scoped research review, compliance-oriented screening, indicative decision-support result."
 )

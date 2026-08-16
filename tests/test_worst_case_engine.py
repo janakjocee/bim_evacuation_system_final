@@ -106,3 +106,7 @@ def test_export_includes_worst_case_scenario_fields():
     assert "smoke_affected_nodes" in payload
     assert "room_results" in payload
     assert "limitations" in payload
+    assert payload["hazard_priority_score"] == payload["risk_score"]
+    assert "retained for compatibility" in payload["legacy_risk_score_note"]
+    assert payload["score_semantics"]["direction"] == "higher_is_higher_screening_priority"
+    assert payload["assumption_registry"]["calibration_status"] == "unvalidated_research_assumption"
