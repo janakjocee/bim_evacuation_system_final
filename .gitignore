@@ -154,7 +154,11 @@ logs/
 *.log
 
 # Outputs
-outputs/
+outputs/*
+!outputs/ifc_diagnostics/
+outputs/ifc_diagnostics/*
+!outputs/ifc_diagnostics/compatibility_matrix.csv
+!outputs/ifc_diagnostics/compatibility_matrix.json
 results/
 data/outputs/
 

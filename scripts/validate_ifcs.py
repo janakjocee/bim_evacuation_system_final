@@ -133,7 +133,9 @@ def _failure_reason(result, building, graph: dict) -> str:
         reasons.append(f"{len(graph['disconnected_spaces'])} disconnected space(s).")
     if not reasons and _status(result, graph) == "pass":
         return ""
-    return "; ".join(reasons) or "Usable with review warnings."
+    if reasons:
+        return "; ".join(reason.rstrip(".") for reason in reasons) + "."
+    return "Usable with review warnings."
 
 
 def _scenario_summary(result) -> dict:

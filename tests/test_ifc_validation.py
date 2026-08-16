@@ -3,6 +3,7 @@
 import json
 import subprocess
 import sys
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -10,6 +11,27 @@ import src.bim_processing.ifc_parser as ifc_parser_module
 from src.bim_processing.ifc_parser import BuildingData, DoorData, IFCParser, Point3D, SpaceData
 from src.bim_processing.ifc_validation import validate_ifc_model
 from src.bim_processing.spatial_graph import SpatialGraphBuilder
+from scripts.validate_ifcs import _failure_reason
+
+
+def test_ifc_failure_reason_uses_clean_sentence_separators():
+    result = SimpleNamespace(success=True, source_mode="semantic_ifc")
+    building = SimpleNamespace(exits={}, doors={}, spaces={})
+
+    reason = _failure_reason(
+        result,
+        building,
+        {
+            "spaces_without_exit_route": ["S1"],
+            "disconnected_spaces": ["S1"],
+        },
+    )
+
+    assert reason == (
+        "No exits detected; 1 space(s) lack an exit route; "
+        "1 disconnected space(s)."
+    )
+    assert ".;" not in reason
 
 
 def test_ifc_validation_handles_missing_information():
