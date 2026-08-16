@@ -10,6 +10,12 @@ or a certified evacuation simulator. The current report PDF is not ready to
 submit until its visible comments/markup, placeholders and overclaims are
 corrected; see `docs/proposal_report_alignment_20260816.md`.
 
+The merged GitHub workflow is green. The hosted Streamlit URL is
+authentication-gated: unauthenticated requests to both `/` and
+`/_stcore/health` redirect to Streamlit login. Treat this as a demo-access
+condition, not evidence of public availability; sign in before the review and
+keep the local run command available as a fallback.
+
 ## Automated Verification
 
 The complete local suite was run with the real Montebello IFC enabled:
