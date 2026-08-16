@@ -14,10 +14,10 @@ Inputs reviewed:
 
 The project meets the approved aim at **academic research-prototype level**, but
 not at professional fire-engineering validation level. Objectives 1-4 are
-substantially met. Objective 5 is **partially met** because the software has
-been tested for behaviour, robustness and traceability, but scenario relevance
-and engineering correctness have not been validated against ground truth or by
-a qualified fire engineer.
+substantially met. Objective 5 remains **partially met**, but is materially
+stronger: controlled parser/route ground truth, grouped ML comparison, retrieval
+metrics and declared scenario repeatability are now implemented. Engineering
+relevance and professional usability remain unvalidated by a qualified reviewer.
 
 The product is credible for a demonstration when presented as deterministic,
 AI/NLP-assisted evacuation **screening**. The current report PDF is not ready to
@@ -32,7 +32,7 @@ placeholders, inconsistent numbering and claims that exceed the evidence.
 | O2: identify exits, doors, areas, spatial relations, functional/non-functional requirements and ML/NLP features | IfcOpenShell parser, readiness diagnostics, feature extractor, requirements/design chapters | Achieved with IFC-data limitations | Distinguish verified IFC semantics from inferred geometry. State that missing semantics cannot be reconstructed as fact. |
 | O3: design BIM plus regulation reasoning, select algorithms and define JSON/XML outputs | Layered architecture, NetworkX routing, deterministic rule checks, JSON/CSV/XML exports and evidence trace | Achieved for a prototype | Describe JSON/XML as output schemas and retrieval as evidence support, not autonomous regulatory reasoning. |
 | O4: implement backend, scenario logic and expert review/selection/export UI | Streamlit app, scenario details, corrections, exports, fire and worst-case pages | Achieved for a prototype | Demonstrate the complete workflow and keep fire/worst-case outputs labelled as screening models. |
-| O5: evaluate relevance, correctness, explainability and critically compare against objectives | 104 tests, 79.1% line coverage, CI, multi-IFC diagnostics, provenance and decision traces | Partially achieved | Say software behaviour and explainability were evaluated. Say domain correctness/relevance remain unvalidated without expert or ground-truth comparison. |
+| O5: evaluate relevance, correctness, explainability and critically compare against objectives | 120 tests, 79.51% raw line coverage, controlled ground truth, grouped ML/retrieval/scenario evaluations, multi-IFC diagnostics, provenance and decision traces | Partially achieved | Say controlled software correctness, behaviour and explainability were evaluated. Say domain correctness/relevance remain unvalidated without qualified review or independent real-building ground truth. |
 
 ## What The System Actually Does
 
@@ -43,24 +43,27 @@ The default deployed workflow is deterministic:
 3. Regex-based parsing extracts supported numeric regulation candidates; spaCy
    provides sentence segmentation when its model is available.
 4. Explicit formulas and checks create screening scenarios and evidence scores.
-5. Keyword retrieval attaches source clauses in the deployed configuration.
+5. Evaluated TF-IDF retrieval attaches source clauses in the deployed configuration.
 6. The UI exposes source mode, assumptions, rule provenance, score direction,
    decision traces and manual-review records.
 
-There is no trained project-specific machine-learning model, no learned route
-prediction, no LLM generating compliance decisions and no measured predictive
-accuracy. Optional SentenceTransformers/FAISS retrieval is disabled in the
-deployed configuration and is not part of the evaluated default result. Calling
-the default retriever "RAG" is acceptable only if immediately defined as
-retrieval without generative answer production; "evidence retrieval" is more
-precise.
+There is now a genuine project-specific space-use ML experiment, but it is not
+deployed: grouped macro-F1 was 0.0992 versus 0.8968 for the deterministic
+baseline. There is no learned route prediction or LLM generating compliance
+decisions. SentenceTransformers retrieval was compared with TF-IDF and remains
+disabled because it did not improve the practical benchmark. "Evidence
+retrieval" is more precise than autonomous RAG.
 
 ## Reproduced Evidence
 
 | Check | Reproduced result | Meaning |
 |---|---|---|
-| Full pytest suite with real Montebello IFC | 104 passed, 0 failed, 0 skipped | Current automated behaviour is regression-tested. |
-| Coverage | 79.1% line coverage (3,831/4,841 statements) | Good prototype coverage; optional retrieval and parser error/variation branches need more tests. |
+| Full pytest suite with real Montebello IFC | 120 passed, 0 failed, 0 skipped | Final expanded automated behavior suite is green. |
+| Controlled IFC ground truth | Exact recovery across entities, areas, widths, connections, exits and routes | Project-declared software ground truth passes; it is not independent engineering validation. |
+| Space-use classifier | ML macro-F1 0.0992; deterministic baseline 0.8968 | ML is implemented and honestly rejected as runtime default. |
+| Regulation retrieval | Practical TF-IDF Recall@1 0.8421, Recall@3 0.9474, MRR 0.9000 | Bounded source-aware benchmark supports TF-IDF; relevance labels require author review. |
+| Scenario benchmark | 6/6 cases pass twice with identical normalized outcomes | Deterministic expected behavior is repeatable, not physically calibrated. |
+| Coverage | 79.51% raw line coverage (4,339/5,457 statements; 80% displayed) | Good prototype coverage; external format variation and optional embedding error paths remain residual risk. |
 | GitHub Actions | `main` smoke test passed at `503aac4` | The checked-in deployment smoke workflow is green. |
 | Hosted Streamlit access | `/` and `/_stcore/health` redirect unauthenticated clients to Streamlit login | Deployment is authentication-gated; this is not evidence of public availability or an app crash. |
 | Montebello IFC2X3 | 8/8 workflow gates; 16 geometry proxies, 17 inferred connectors, 2 inferred exits, 16 scenarios | Operationally processable, but exploratory because room/door topology is absent. |
@@ -69,7 +72,8 @@ precise.
 | Corpus by SHA-256-unique payload | 12 partial, 4 fail, 0 strict pass across 16 unique payloads | The 23 paths are not 23 independent models. |
 
 The full Duplex and Clinic payloads are useful semantic tests but remain
-partial: Duplex has 3 spaces without an exit route; Clinic has 59. The three
+partial: bounded inferred recovery reduced Duplex to 1 space without an exit
+route and Clinic to 55. The three
 tiny IFC2X3 files are Git LFS pointers, not real IFC model contents. Two failed
 wall/opening filenames contain the same minimal topology-free payload.
 
@@ -103,7 +107,7 @@ wall/opening filenames contain the same minimal topology-free payload.
 6. Separate software verification from engineering validation. Tests and
    coverage do not demonstrate scenario correctness, regulatory compliance or
    real-world safety.
-7. Add the latest reproducibility facts: 104 tests, 79.1% coverage, current
+7. Add the latest reproducibility facts: 120 tests, 79.51% raw coverage, current
    commit identifier and the duplicate-aware matrix output.
 8. Correct figure/table references and regenerate both lists. Examples in the
    draft mix `Figure 4.1` with `Figure 1`, `Figures 7.1-7.3` with Figures 14-17,
@@ -125,7 +129,7 @@ wall/opening filenames contain the same minimal topology-free payload.
 |---|---|---|
 | Domain understanding | Relevant BIM/fire-safety sources, explicit scope and requirements | Literature is sometimes descriptive; research gap and comparison-derived criteria need stronger synthesis. |
 | Product and ideas | Substantial multi-module implementation and defensible transparent architecture | Alternatives and project-plan changes are thin; proposed ML terminology does not match the delivered default. |
-| Build and evaluation | Working UI, real IFC diagnostics, 104 tests, coverage, CI and limitations | No strict-pass model, qualified expert evaluation, ground truth, SUS/accessibility study or engineering validation. |
+| Build and evaluation | Working UI, real IFC diagnostics, 120 tests, controlled strict-pass fixture, grouped ML/retrieval/scenario evaluations, coverage, CI and limitations | No qualified expert evaluation, independent real-building ground truth, completed browser accessibility sign-off or engineering validation. |
 | Conclusions and critical review | Limitations and future work are acknowledged | Must be more explicit about mistakes, changed plans, failed approaches and how evidence changed the claims. |
 | Report presentation | Logical chapter structure and declared word count within the nominal band | Visible comments/markup, placeholders, numbering and residual language errors are submission blockers. |
 
@@ -158,9 +162,10 @@ cannot honestly replace missing external engineering validation.
 
 **What is the AI?**  The delivered default is an AI/NLP-assisted but
 deterministic pipeline. spaCy helps segment regulatory text, explicit parsers
-extract supported rules, retrieval supplies evidence, and graph/rule algorithms
-generate traceable screening results. It does not use a generative LLM or a
-trained route-prediction model.
+extract supported rules, evaluated TF-IDF supplies evidence, and graph/rule
+algorithms generate traceable screening results. A space-use ML experiment was
+implemented but rejected after grouped validation; no generative LLM or trained
+route-prediction model makes decisions.
 
 **Why is it fast?**  It parses structured IFC entities and runs graph algorithms
 and formulas locally. It is not training a model or running CFD/agent-based

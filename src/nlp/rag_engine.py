@@ -1,6 +1,4 @@
-"""
-Retrieval-Augmented Generation engine using FAISS and SentenceTransformers.
-"""
+"""Regulation evidence retrieval with TF-IDF and optional embeddings."""
 from typing import Dict, List, Optional, Any, Tuple
 import numpy as np
 
@@ -23,6 +21,8 @@ class RAGEngine:
         self.clauses: List[RegulationClause] = []
         self.chunk_texts: List[str] = []
         self.faiss = None
+        self.lexical_vectorizer = None
+        self.lexical_matrix = None
         
         # Heavy ML libraries are loaded lazily in build_index(). This keeps the
         # Streamlit app shell responsive on Community Cloud before users upload
@@ -33,14 +33,14 @@ class RAGEngine:
         if self.embedding_model is not None and self.faiss is not None:
             return
         if not self.config.get("rag.vector_enabled", False):
-            logger.info("Vector RAG disabled; using stable keyword evidence retrieval.")
+            logger.info("Vector embeddings disabled; using evaluated TF-IDF evidence retrieval.")
             return
 
         try:
             from sentence_transformers import SentenceTransformer
             import faiss
         except ImportError:
-            logger.warning("RAG dependencies not available. Using keyword search.")
+            logger.warning("Embedding dependencies unavailable; using TF-IDF evidence retrieval.")
             return
 
         self.faiss = faiss
@@ -62,10 +62,11 @@ class RAGEngine:
             True if successful
         """
         self.clauses = clauses
+        self._build_lexical_index()
         self._initialize()
         
         if self.embedding_model is None or self.faiss is None:
-            logger.info("Using keyword search for regulation evidence retrieval.")
+            logger.info("Using TF-IDF lexical regulation evidence retrieval.")
             return False
         
         try:
@@ -101,6 +102,37 @@ class RAGEngine:
         except Exception as e:
             logger.error(f"Error building index: {e}")
             return False
+
+    def retrieval_mode(self) -> str:
+        """Return the active evidence-retrieval mechanism."""
+        if self.index is not None and self.embedding_model is not None:
+            return "sentence_embeddings"
+        if self.lexical_matrix is not None and self.lexical_vectorizer is not None:
+            return "tfidf_lexical"
+        return "unavailable"
+
+    def _build_lexical_index(self) -> bool:
+        """Build the evaluated TF-IDF fallback without loading embedding models."""
+        self.chunk_texts = [f"{clause.clause_id}: {clause.text}" for clause in self.clauses]
+        if not self.chunk_texts:
+            self.lexical_vectorizer = None
+            self.lexical_matrix = None
+            return False
+        try:
+            from sklearn.feature_extraction.text import TfidfVectorizer
+
+            self.lexical_vectorizer = TfidfVectorizer(
+                ngram_range=(1, 2),
+                stop_words="english",
+                sublinear_tf=True,
+            )
+            self.lexical_matrix = self.lexical_vectorizer.fit_transform(self.chunk_texts)
+            return True
+        except Exception as exc:
+            logger.warning(f"Could not build TF-IDF evidence index: {exc}")
+            self.lexical_vectorizer = None
+            self.lexical_matrix = None
+            return False
     
     def retrieve(self, query: str, top_k: int = None) -> List[Tuple[RegulationClause, float]]:
         """
@@ -120,7 +152,7 @@ class RAGEngine:
         if self.index is not None and self.embedding_model is not None:
             return self._retrieve_faiss(query, top_k)
         
-        # Fallback to keyword search
+        # Fall back to evaluated lexical retrieval.
         return self._retrieve_keyword(query, top_k)
     
     def _retrieve_faiss(self, query: str, top_k: int) -> List[Tuple[RegulationClause, float]]:
@@ -147,26 +179,20 @@ class RAGEngine:
             return []
     
     def _retrieve_keyword(self, query: str, top_k: int) -> List[Tuple[RegulationClause, float]]:
-        """Fallback keyword-based retrieval."""
-        query_lower = query.lower()
-        query_words = set(query_lower.split())
-        
-        scored_clauses = []
-        for clause in self.clauses:
-            clause_text = clause.text.lower()
-            clause_words = set(clause_text.split())
-            
-            # Calculate overlap
-            overlap = len(query_words & clause_words)
-            score = overlap / max(len(query_words), 1)
-            
-            if score > 0:
-                scored_clauses.append((clause, score))
-        
-        # Sort by score
-        scored_clauses.sort(key=lambda x: x[1], reverse=True)
-        
-        return scored_clauses[:top_k]
+        """Retrieve with the evaluated TF-IDF fallback."""
+        if self.lexical_matrix is None or self.lexical_vectorizer is None:
+            self._build_lexical_index()
+        if self.lexical_matrix is None or self.lexical_vectorizer is None:
+            return []
+
+        query_vector = self.lexical_vectorizer.transform([query])
+        scores = (query_vector @ self.lexical_matrix.T).toarray().ravel()
+        ranked_indices = scores.argsort()[::-1]
+        return [
+            (self.clauses[index], float(scores[index]))
+            for index in ranked_indices
+            if scores[index] > 0
+        ][:top_k]
     
     def validate_claim(self, claim: str, context_clauses: List[RegulationClause]) -> Dict[str, Any]:
         """

@@ -29,6 +29,9 @@ jobs:
       - name: Run tests
         run: python -m pytest -q
 
+      - name: Run reproducible research evaluation
+        run: python scripts/run_research_evaluation.py --output-dir outputs/research_evaluation
+
       - name: Compile Python sources
         run: python -m py_compile $(find src pages scripts tests -name '*.py' -print)
 
@@ -51,3 +54,11 @@ jobs:
                   raise RuntimeError(f"{path} failed: {[exc.value for exc in app.exception]}")
               print(f"{path}: OK")
           PY
+
+      - name: Upload research evaluation evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: research-evaluation-evidence
+          path: outputs/research_evaluation/
+          if-no-files-found: error

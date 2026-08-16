@@ -1,0 +1,37 @@
+{
+  "fixture_id": "controlled_semantic_evacuation_v1",
+  "source": "project_generated_controlled_fixture",
+  "independent_ground_truth": false,
+  "purpose": "Deterministic parser, measurement, connectivity, exit and route regression testing",
+  "limitations": [
+    "This fixture validates known software behavior, not real-building engineering validity.",
+    "The model intentionally omits geometry because the target evidence is semantic IFC topology."
+  ],
+  "expected": {
+    "schema": "IFC4",
+    "building_name": "Controlled Semantic Building",
+    "extraction_mode": "semantic_ifc",
+    "spaces": [
+      {"name": "S-OFFICE", "long_name": "Office 101", "area_m2": 20.0, "space_type": "office"},
+      {"name": "S-CORRIDOR", "long_name": "Main Corridor", "area_m2": 30.0, "space_type": "corridor"},
+      {"name": "S-KITCHEN", "long_name": "Kitchen", "area_m2": 15.0, "space_type": "kitchen"}
+    ],
+    "doors": [
+      {"name": "Office Door", "width_m": 0.9, "is_exit": false},
+      {"name": "Kitchen Door", "width_m": 0.9, "is_exit": false},
+      {"name": "Final Exit", "width_m": 1.2, "is_exit": true}
+    ],
+    "connections": [
+      ["S-OFFICE", "Office Door"],
+      ["S-CORRIDOR", "Office Door"],
+      ["S-KITCHEN", "Kitchen Door"],
+      ["S-CORRIDOR", "Kitchen Door"],
+      ["S-CORRIDOR", "Final Exit"]
+    ],
+    "reachable_spaces": ["S-OFFICE", "S-CORRIDOR", "S-KITCHEN"],
+    "verified_edge_count": 5,
+    "inferred_edge_count": 0,
+    "scenario_count": 3,
+    "compatibility_status": "pass"
+  }
+}

@@ -131,6 +131,8 @@ def _failure_reason(result, building, graph: dict) -> str:
         reasons.append(f"{len(graph['spaces_without_exit_route'])} space(s) lack an exit route.")
     if graph.get("disconnected_spaces"):
         reasons.append(f"{len(graph['disconnected_spaces'])} disconnected space(s).")
+    if not reasons and _status(result, graph) == "pass":
+        return ""
     return "; ".join(reasons) or "Usable with review warnings."
 
 
@@ -181,7 +183,12 @@ def audit_file(path: Path, max_scenarios: int, regulation_text: str | None = Non
         door_widths_assumed = sum(1 for door in building.doors.values() if door.assumptions.get("width"))
         space_areas_found = sum(1 for space in building.spaces.values() if not space.assumptions.get("area"))
         space_areas_assumed = sum(1 for space in building.spaces.values() if space.assumptions.get("area"))
-        inferred_connections = sum(1 for door in building.doors.values() if str(door.connection_source).startswith("inferred"))
+        inferred_connections = sum(
+            1
+            for door in building.doors.values()
+            for space_id in door.connected_spaces
+            if str(door.connection_sources.get(space_id, door.connection_source)).startswith("inferred")
+        )
         inferred_exits = sum(
             1
             for door in building.exits.values()

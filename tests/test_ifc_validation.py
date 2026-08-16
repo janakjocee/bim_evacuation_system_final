@@ -7,8 +7,9 @@ import sys
 import numpy as np
 
 import src.bim_processing.ifc_parser as ifc_parser_module
-from src.bim_processing.ifc_parser import BuildingData, IFCParser, Point3D, SpaceData
+from src.bim_processing.ifc_parser import BuildingData, DoorData, IFCParser, Point3D, SpaceData
 from src.bim_processing.ifc_validation import validate_ifc_model
+from src.bim_processing.spatial_graph import SpatialGraphBuilder
 
 
 def test_ifc_validation_handles_missing_information():
@@ -126,6 +127,90 @@ def test_parser_uses_long_name_for_space_type():
         PredefinedType = "INTERNAL"
 
     assert parser._get_space_type(Space()) == "residential"
+
+
+def test_parser_classifies_realistic_space_names():
+    parser = IFCParser()
+
+    class Space:
+        Name = "A103"
+        Description = ""
+        PredefinedType = "INTERNAL"
+
+    expected = {
+        "Kitchen": "kitchen",
+        "Bathroom 1": "toilet",
+        "Foyer": "lobby",
+        "Physical Exam": "clinical",
+        "Central Waiting": "assembly",
+        "Mechanical Room": "industrial",
+    }
+    for long_name, space_type in expected.items():
+        Space.LongName = long_name
+        assert parser._get_space_type(Space()) == space_type
+
+
+def test_graph_preserves_per_space_connection_provenance():
+    building = BuildingData(id="B1", name="Mixed provenance")
+    building.spaces = {
+        "S1": SpaceData(id="S1", name="Verified", area=10),
+        "S2": SpaceData(id="S2", name="Inferred", area=10),
+    }
+    building.doors = {
+        "D1": DoorData(
+            id="D1",
+            name="Final Exit",
+            width=1.1,
+            height=2.1,
+            location=Point3D(),
+            is_exit=True,
+            connected_spaces=["S1", "S2"],
+            connection_source="IfcRelSpaceBoundary",
+            connection_sources={
+                "S1": "IfcRelSpaceBoundary",
+                "S2": "inferred_proximity_supplement",
+            },
+        )
+    }
+    building.exits = dict(building.doors)
+
+    graph = SpatialGraphBuilder(building)
+    assert graph.build()
+    assert graph.graph["S1"]["D1"]["inferred"] is False
+    assert graph.graph["S2"]["D1"]["inferred"] is True
+
+
+def test_parser_adds_bounded_supplement_for_disconnected_space():
+    parser = IFCParser()
+    building = BuildingData(id="B1", name="Boundary omission")
+    building.spaces = {
+        "S1": SpaceData(id="S1", name="Known room", area=10, connected_doors=["D1"]),
+        "S2": SpaceData(
+            id="S2",
+            name="Omitted boundary room",
+            area=10,
+            bounding_box=(Point3D(0, 0, 0), Point3D(4, 4, 3)),
+        ),
+    }
+    building.doors = {
+        "D1": DoorData(
+            id="D1",
+            name="Nearby Door",
+            width=0.9,
+            height=2.1,
+            location=Point3D(4.2, 2, 1),
+            connected_spaces=["S1"],
+            connection_source="IfcRelSpaceBoundary",
+            connection_sources={"S1": "IfcRelSpaceBoundary"},
+        )
+    }
+
+    parser._connect_doors_to_spaces_by_proximity(building)
+
+    assert building.doors["D1"].connected_spaces == ["S1", "S2"]
+    assert building.doors["D1"].connection_sources["S1"] == "IfcRelSpaceBoundary"
+    assert building.doors["D1"].connection_sources["S2"] == "inferred_proximity_supplement"
+    assert "connectivity" in building.spaces["S2"].assumptions
 
 
 def test_parser_resolves_nested_object_placement_to_world_coordinates(monkeypatch):

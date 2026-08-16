@@ -14,14 +14,15 @@ Repository: [janakjocee/bim_evacuation_system_final](https://github.com/janakjoc
 
 ## Overview
 
-This MSc research prototype turns IFC/BIM building data into evacuation screening suggestions for qualified review. It combines openBIM parsing, spatial graph analysis, NLP/RAG-assisted regulation interpretation, compliance-oriented checks, explainable scenario generation, session-scoped research review and export.
+This MSc research prototype turns IFC/BIM building data into evacuation screening suggestions for qualified review. It combines openBIM parsing, spatial graph analysis, NLP-assisted rule extraction and evidence retrieval, compliance-oriented checks, explainable scenario generation, session-scoped research review and export.
 
 ### What “AI” Means in This Prototype
 
 This project does **not** use GPT, OpenAI, an autonomous agent, CFD, or a certified evacuation simulator to make fire-engineering decisions. The AI-assisted parts are:
 
 - **spaCy NLP** to split uploaded regulation text into clauses and detect simple constraints such as widths and travel distances.
-- **Deterministic keyword grounding** for uploaded regulation evidence, with opt-in SentenceTransformers + FAISS vector retrieval for local research runs.
+- **Evaluated TF-IDF lexical retrieval** for uploaded regulation evidence, with opt-in SentenceTransformers + FAISS vector retrieval for local research comparisons.
+- **A genuine but non-deployed ML experiment** comparing TF-IDF/logistic-regression space-use classification against the deterministic parser using source-family holdouts. The learned model underperformed and remains disabled.
 - **Deterministic graph/rule algorithms** for route search, compliance screening, prioritisation and explanation traces.
 
 The system is fast because it performs lightweight BIM parsing, NetworkX shortest-path checks, simplified fire/smoke approximations and rule-based scoring. It is a screening and explanation prototype, not a final legal or professional fire-safety decision system.
@@ -44,7 +45,7 @@ This is an academic decision-support tool. It does **not** perform CFD, certifie
 - Clearly labelled 3D scenario schematics for demo fire and worst-case workflows.
 - Working scenario inspection workspace with highlighted route diagram, practical
   readiness checklist, evidence display and per-scenario download.
-- Regulation-oriented NLP/RAG workflow using spaCy and stable keyword retrieval, with optional FAISS and SentenceTransformers.
+- Regulation-oriented NLP workflow using spaCy, pattern extraction and evaluated TF-IDF evidence retrieval, with optional FAISS and SentenceTransformers.
 - Evacuation scenario generation with distance, time, evidence confidence, implemented-check outcomes and screening priority.
 - Alternative route summaries and route-reliability labels for each generated scenario.
 - Practical compliance screening for travel distance, final/route door width,
@@ -70,7 +71,7 @@ generated evacuation scenario exports:
 - alternative escape routes where the IFC-derived graph contains more than one
   route to an exit;
 - the compliance checks that passed or failed, including whether each threshold
-  came from an uploaded structured rule, RAG evidence or built-in default;
+  came from an uploaded structured rule, retrieved evidence or built-in default;
 - the deterministic screening index and weighted factor breakdown, including IFC
   graph confidence, narrow-door penalties, route-redundancy penalties and
   data-quality caps;
@@ -79,9 +80,9 @@ generated evacuation scenario exports:
 
 The Explainability tab and each scenario's **View Details** workspace show this
 decision trace directly. Risk classification is rule/score based and
-deterministic, not a hidden neural-network prediction. RAG is used only when a
-regulation document is uploaded and grounding is enabled; otherwise the app
-clearly states that built-in default screening constraints were used.
+deterministic, not a hidden neural-network prediction. Evidence retrieval is used
+only when a regulation document is uploaded and retrieval is enabled; otherwise
+the app clearly states that built-in default screening constraints were used.
 Low-risk labels are capped when route topology is mostly inferred, when critical
 IFC measurements are assumed, or when no verified exit data is available.
 Routes are labelled as `verified`, `partially_inferred`, `heavily_inferred` or
@@ -92,6 +93,8 @@ The submission terminology, score directions, assumptions and validation
 boundary are consolidated in [`docs/submission_claim_boundary.md`](docs/submission_claim_boundary.md).
 The final executable evidence is summarized in
 [`docs/submission_readiness_20260816.md`](docs/submission_readiness_20260816.md).
+The new controlled, ML, retrieval and scenario results are summarized in
+[`docs/research_evaluation_results_20260816.md`](docs/research_evaluation_results_20260816.md).
 
 ---
 
@@ -500,7 +503,7 @@ pip install -r requirements.txt
 streamlit run src/ui/streamlit_app.py
 ```
 
-The public app uses deterministic keyword evidence retrieval. For an explicit
+The public app uses deterministic TF-IDF lexical evidence retrieval. For an explicit
 local vector-RAG experiment, install the optional native ML stack and enable
 `rag.vector_enabled` in `config/settings.yaml`:
 
@@ -526,6 +529,17 @@ pytest
 pytest --cov=src --cov=scripts --cov-report=term
 ```
 
+Run the proposal-aligned research evidence suite:
+
+```bash
+python scripts/run_research_evaluation.py --output-dir outputs/research_evaluation
+```
+
+The suite generates a deterministic IFC4 fixture, checks exact parser/route
+ground truth, evaluates the grouped space-use classifier, benchmarks regulation
+retrieval and repeats declared evacuation/fire/worst-case outcomes. CI uploads
+these reports as the `research-evaluation-evidence` artifact.
+
 The geometry-only regression tests run when
 `tests/fixtures/11134_V_Motebello_Heistopp_Rev.ifc` is present. Fresh GitHub
 checkouts without that optional IFC fixture skip three real-model tests; use
@@ -546,6 +560,11 @@ Test coverage includes:
 - auto-ranking of worst fire origins
 - IFC readiness validation
 - export payload fields
+- controlled IFC entity, measurement, topology and route ground truth
+- grouped deterministic-versus-ML space-use classification
+- regulation Recall@1, Recall@3 and MRR
+- scenario expected-case repeatability
+- custom light/dark palette contrast
 
 ---
 

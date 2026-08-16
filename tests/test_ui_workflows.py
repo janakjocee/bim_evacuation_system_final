@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from src.ui.accessibility import palette_contrast_report
+
 
 def test_scenario_details_use_stable_inspection_workspace():
     source = (Path(__file__).resolve().parents[1] / "src/ui/streamlit_app.py").read_text()
@@ -29,6 +31,20 @@ def test_dark_mode_uses_adaptive_theme_variables():
     assert "--app-heading" in source
     assert 'background-color: white; border: 1px solid #e0e0e0' not in source
     assert 'background-color: #f8f9fa; padding: 12px' not in source
+
+
+def test_custom_theme_palette_meets_normal_text_contrast_target():
+    report = palette_contrast_report()
+
+    assert report
+    assert min(report.values()) >= 4.5, report
+
+
+def test_custom_motion_respects_reduced_motion_preference():
+    source = (Path(__file__).resolve().parents[1] / "src/ui/streamlit_app.py").read_text()
+
+    assert "@media (prefers-reduced-motion: reduce)" in source
+    assert "transition: none !important" in source
 
 
 def test_badges_do_not_use_fragile_multiline_html():
@@ -99,6 +115,7 @@ def test_main_export_uses_complete_evidence_payload():
     assert "\"assumption_registry\": standard_assumption_registry()" in source
     assert "\"ifc_readiness\": result.readiness" in source
     assert "\"graph_stats\": result.graph_stats" in source
+    assert "\"retrieval_mode\": result.retrieval_mode" in source
     assert "\"manual_corrections\": st.session_state.get(\"manual_corrections\")" in source
     assert "\"research_review_records\":" in source
     assert "export_data = build_complete_export_payload(result)" in source
