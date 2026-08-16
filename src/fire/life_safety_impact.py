@@ -50,7 +50,7 @@ def estimate_life_safety_impact(aset_rset_results: List[Dict[str, Any]], smoke_r
             status = "smoke-route exposure"
             smoke_exposure += occ
         else:
-            status = "viable evacuation route"
+            status = "route available in heuristic model"
             viable += occ
 
         rows.append({
@@ -61,14 +61,15 @@ def estimate_life_safety_impact(aset_rset_results: List[Dict[str, Any]], smoke_r
             "rset_s": row.get("rset_s"),
             "safety_margin_s": margin,
             "route_status": status,
-            "requires_expert_validation": status != "viable evacuation route",
+            "requires_qualified_review": True,
+            "requires_expert_validation": True,
         })
 
     potentially_affected = smoke_exposure + rset_exceeded + trapped + high_risk
     level = _impact_level(trapped, rset_exceeded + high_risk, total)
     explanation = (
         f"Indicative life-safety impact is {level}. The screening identified {trapped} trapped occupants, "
-        f"{rset_exceeded} occupants where RSET exceeds ASET, {high_risk} occupants with reduced safety margin, "
+        f"{rset_exceeded} occupants where model RSET exceeds model ASET, {high_risk} occupants with reduced heuristic margin, "
         f"and {smoke_exposure} occupants using smoke-affected routes. These are potentially affected occupants "
         "for expert validation, not real casualty prediction."
     )

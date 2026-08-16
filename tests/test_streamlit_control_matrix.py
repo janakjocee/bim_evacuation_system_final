@@ -42,7 +42,7 @@ def test_main_app_control_matrix_and_icon_labels():
 
     expected_tabs = {
         "📊 Dashboard", "🏢 BIM Insights", "📜 Regulations", "🚨 Scenarios",
-        "🧠 Explainability", "⚠️ Risk Analysis", "👤 Expert Review", "📤 Export",
+        "🧠 Explainability", "⚠️ Screening Analysis", "👤 Research Review", "📤 Export",
         "🔍 Extracted Spaces", "🚪 Doors & Exits", "🕸️ Connectivity Graph",
         "🗺️ Floor Plan Diagram", "🏙️ 3D Model & Egress", "🧾 Diagnostics Export",
         "Route Diagram", "Operational Actions", "Evidence & Export",
@@ -62,7 +62,7 @@ def test_main_app_control_matrix_and_icon_labels():
         _assert_clean(app)
 
     for values in ([], ["low"], ["medium"], ["high"], ["low", "medium", "high"]):
-        _control(app.multiselect, "Risk Level").set_value(values).run(timeout=30)
+        _control(app.multiselect, "Screening Priority").set_value(values).run(timeout=30)
         _assert_clean(app)
 
     if "Close Details" not in {button.label for button in app.button}:
@@ -80,16 +80,21 @@ def test_main_app_control_matrix_and_icon_labels():
     _assert_clean(app)
     assert app.session_state["manual_corrections"] is None
 
-    review = _control(app.radio, "Engineering Decision")
+    acknowledgement = _control(
+        app.checkbox,
+        "I understand this review status is not professional approval or statutory sign-off.",
+    )
+    acknowledgement.check().run(timeout=30)
+    review = _control(app.radio, "Research Review Status")
     for option in review.options:
-        _control(app.radio, "Engineering Decision").set_value(option).run(timeout=30)
-        _control(app.text_area, "Engineering Comments").set_value(
+        _control(app.radio, "Research Review Status").set_value(option).run(timeout=30)
+        _control(app.text_area, "Review Comments").set_value(
             f"Automated QA: {option}"
         ).run(timeout=30)
-        _button(app, "💾 Save Engineering Review").click().run(timeout=30)
+        _button(app, "💾 Save Research Review").click().run(timeout=30)
         _assert_clean(app)
 
-    _button(app, "📑 Generate Full Report (All Formats)").click().run(timeout=30)
+    _button(app, "📑 Generate Complete Evidence Report").click().run(timeout=30)
     _assert_clean(app)
     download_labels = {download.label for download in app.get("download_button")}
     assert "⬇️ Download Complete Report (JSON)" in download_labels

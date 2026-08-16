@@ -1,7 +1,7 @@
 """
 Professional Streamlit UI for BIM Evacuation System.
 
-A Fire Strategy decision-support system with:
+An evacuation-screening decision-support system with:
 - Human-in-the-Loop (HITL)
 - Explainability and decision trace
 - Multi-tab engineering workflow
@@ -42,12 +42,17 @@ from src.ui.ui_components import (
 )
 from src.ui.visualization_3d import create_ifc_3d_figure, create_ifc_plan_figure
 from src.ui.export_helpers import build_scenarios_csv, build_scenarios_xml, safe_uploaded_filename
+from src.utils.model_transparency import (
+    ACADEMIC_USE_NOTICE,
+    screening_index_semantics,
+    standard_assumption_registry,
+)
 
 # ==============================================================================
 # PAGE CONFIGURATION
 # ==============================================================================
 st.set_page_config(
-    page_title="BIM Evacuation Fire Strategy Platform",
+    page_title="BIM Evacuation Screening Platform",
     page_icon="🚨",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -403,9 +408,9 @@ def render_selected_scenario_details(result, scenario):
             <strong>Origin:</strong> {origin_name}<br>
             <strong>Destination:</strong> {destination}<br>
             <strong>Route nodes:</strong> {route_nodes}<br>
-            <strong>Risk:</strong> {scenario.risk_level.value.upper()} ·
-            <strong>Compliance:</strong> {scenario.compliance_score * 100:.0f}% ·
-            <strong>Confidence:</strong> {scenario.confidence_score * 100:.0f}%<br>
+            <strong>Screening priority:</strong> {scenario.risk_level.value.upper()} |
+            <strong>Implemented checks passed:</strong> {scenario.compliance_score * 100:.0f}% |
+            <strong>Evidence confidence:</strong> {scenario.confidence_score * 100:.0f}%<br>
             <strong>Route reliability:</strong> {route_reliability_text}<br>
             <strong>Edge evidence:</strong> verified={verified_edges}, inferred={inferred_edges}<br>
             <strong>Edge sources:</strong> {edge_source_text or 'No route-edge source metadata'}<br>
@@ -418,8 +423,8 @@ def render_selected_scenario_details(result, scenario):
     metrics[0].metric("Travel Distance", f"{scenario.evacuation_route.distance:.1f} m")
     metrics[1].metric("Estimated Time", f"{scenario.evacuation_route.estimated_time:.1f} s")
     metrics[2].metric("Alternative Exits", alternative_exits)
-    metrics[3].metric("Compliance", f"{scenario.compliance_score * 100:.0f}%")
-    metrics[4].metric("Confidence", f"{scenario.confidence_score * 100:.0f}%")
+    metrics[3].metric("Checks Passed", f"{scenario.compliance_score * 100:.0f}%")
+    metrics[4].metric("Evidence Confidence", f"{scenario.confidence_score * 100:.0f}%")
 
     detail_route, detail_actions, detail_evidence = st.tabs([
         "Route Diagram", "Operational Actions", "Evidence & Export"
@@ -432,8 +437,8 @@ def render_selected_scenario_details(result, scenario):
         checks = [
             ("Alternative escape direction available", alternative_exits > 0),
             ("Route within default 45 m screening threshold", scenario.evacuation_route.distance <= 45),
-            ("No regulation violations detected", not scenario.violated_regulations),
-            ("Confidence above 70%", scenario.confidence_score >= 0.7),
+            ("No conflicts detected by active prototype checks", not scenario.violated_regulations),
+            ("Evidence confidence above 70%", scenario.confidence_score >= 0.7),
             ("Accessibility/refuge arrangements confirmed", False),
             ("Exit signage, emergency lighting and door operation confirmed", False),
         ]
@@ -467,12 +472,11 @@ def build_complete_export_payload(result):
     """Create a complete, traceable export payload for reviewer handoff."""
     building = result.building
     return {
-        "export_version": "submission-evidence-v1",
+        "export_version": "submission-evidence-v2",
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
-        "academic_use_notice": (
-            "Rule-based decision-support screening only; not certified fire engineering "
-            "approval or legal compliance sign-off."
-        ),
+        "academic_use_notice": ACADEMIC_USE_NOTICE,
+        "score_semantics": screening_index_semantics(),
+        "assumption_registry": standard_assumption_registry(),
         "source_file": {
             "name": result.source_file_name,
             "sha256": result.source_file_sha256,
@@ -501,6 +505,11 @@ def build_complete_export_payload(result):
             "rag_enabled": result.rag_enabled,
         },
         "manual_corrections": st.session_state.get("manual_corrections"),
+        "research_review_records": [
+            review
+            for review in st.session_state.get("expert_reviews", {}).values()
+            if isinstance(review, dict)
+        ],
         "scenarios": [scenario.to_dict() for scenario in result.scenarios],
         "errors": result.errors,
         "processing_time_seconds": result.processing_time,
@@ -514,7 +523,7 @@ def render_header():
     col1, col2 = st.columns([3, 1])
     
     with col1:
-        st.markdown('<p class="main-title">🏗️ BIM Evacuation Fire Strategy Platform</p>', unsafe_allow_html=True)
+        st.markdown('<p class="main-title">🏗️ BIM Evacuation Screening Platform</p>', unsafe_allow_html=True)
         st.markdown('<p class="sub-title">Rule-Based BIM + NLP/RAG Decision-Support for Fire Safety Review</p>', unsafe_allow_html=True)
     
     with col2:
@@ -597,7 +606,7 @@ def render_sidebar():
         
         process_disabled = ifc_file is None
         process_button = st.button(
-            "🚀 Generate Fire Strategy Scenarios",
+            "🚀 Generate Screening Scenarios",
             type="primary",
             width='stretch',
             disabled=process_disabled
@@ -786,7 +795,7 @@ def render_dashboard(result):
     
     with col2:
         render_metric_card(
-            "HIGH RISK",
+            "HIGH PRIORITY",
             str(risk_counts.get('high', 0)),
             "Require immediate attention",
             "#dc3545"
@@ -794,7 +803,7 @@ def render_dashboard(result):
     
     with col3:
         render_metric_card(
-            "MEDIUM RISK",
+            "MEDIUM PRIORITY",
             str(risk_counts.get('medium', 0)),
             "Recommend improvements",
             "#ffc107"
@@ -802,9 +811,9 @@ def render_dashboard(result):
     
     with col4:
         render_metric_card(
-            "LOW RISK",
+            "LOW PRIORITY",
             str(risk_counts.get('low', 0)),
-            "Meet requirements",
+            "Fewer issues in implemented checks",
             "#28a745"
         )
     
@@ -812,9 +821,9 @@ def render_dashboard(result):
         compliance_pct = avg_compliance * 100
         color = "#28a745" if compliance_pct >= 80 else "#ffc107" if compliance_pct >= 50 else "#dc3545"
         render_metric_card(
-            "AVG COMPLIANCE",
+            "AVG CHECKS PASSED",
             f"{compliance_pct:.0f}%",
-            f"{total_violations} total violations",
+            f"{total_violations} prototype check findings",
             color
         )
     
@@ -824,7 +833,7 @@ def render_dashboard(result):
     col_left, col_right = st.columns(2)
     
     with col_left:
-        st.markdown("### Risk Distribution")
+        st.markdown("### Screening Priority Distribution")
         fig_risk = create_risk_pie_chart(scenarios)
         st.plotly_chart(fig_risk, key="dashboard_risk_pie")
     
@@ -842,12 +851,12 @@ def render_dashboard(result):
         summary_data.append({
             'Rank': i + 1,
             'Scenario': s.name,
-            'Risk': s.risk_level.value.upper(),
+            'Screening Priority': s.risk_level.value.upper(),
             'Distance (m)': round(s.evacuation_route.distance, 1),
             'Time (s)': round(s.evacuation_route.estimated_time, 1),
-            'Compliance': f"{s.compliance_score * 100:.0f}%",
-            'Confidence': f"{s.confidence_score * 100:.0f}%",
-            'Violations': len(s.violated_regulations)
+            'Checks Passed': f"{s.compliance_score * 100:.0f}%",
+            'Evidence Confidence': f"{s.confidence_score * 100:.0f}%",
+            'Check Findings': len(s.violated_regulations),
         })
     
     df_summary = pd.DataFrame(summary_data)
@@ -1342,7 +1351,7 @@ def render_evacuation_scenarios(result):
     
     with col_f1:
         risk_filter = st.multiselect(
-            "Risk Level",
+            "Screening Priority",
             options=['low', 'medium', 'high'],
             default=['low', 'medium', 'high'],
             format_func=lambda x: x.upper()
@@ -1352,7 +1361,12 @@ def render_evacuation_scenarios(result):
         sort_by = st.selectbox(
             "Sort By",
             options=['confidence', 'compliance', 'distance', 'time'],
-            format_func=lambda x: x.capitalize()
+            format_func=lambda x: {
+                "confidence": "Evidence confidence",
+                "compliance": "Checks passed",
+                "distance": "Route distance",
+                "time": "Estimated time",
+            }.get(x, str(x)),
         )
     
     with col_f3:
@@ -1387,7 +1401,7 @@ def render_evacuation_scenarios(result):
         with st.container():
             st.markdown(
                 f'<div class="scenario-card" style="border-left:6px solid {risk_color};">'
-                f'<strong>Scenario #{i + 1}</strong> · {scenario.risk_level.value.upper()} risk'
+                f'<strong>Scenario #{i + 1}</strong> · {scenario.risk_level.value.upper()} screening priority'
                 f'</div>',
                 unsafe_allow_html=True,
             )
@@ -1427,20 +1441,20 @@ def render_evacuation_scenarios(result):
             with col_m2:
                 st.metric("Evac. Time", f"{scenario.evacuation_route.estimated_time:.1f}s")
             with col_m3:
-                st.metric("Compliance", f"{scenario.compliance_score*100:.0f}%")
+                st.metric("Checks Passed", f"{scenario.compliance_score*100:.0f}%")
             with col_m4:
-                st.metric("Confidence", f"{scenario.confidence_score*100:.0f}%")
+                st.metric("Evidence Confidence", f"{scenario.confidence_score*100:.0f}%")
             with col_m5:
-                st.metric("Violations", len(scenario.violated_regulations))
+                st.metric("Check Findings", len(scenario.violated_regulations))
             
             # Violations and recommendations
             if scenario.violated_regulations:
-                with st.expander("⚠️ Violations & Recommendations"):
-                    st.markdown("**Regulatory Violations:**")
+                with st.expander("⚠️ Check Findings & Recommendations"):
+                    st.markdown("**Prototype Check Findings:**")
                     for v in scenario.violated_regulations:
                         st.error(f"❌ {v}")
                     
-                    st.markdown("**Engineering Recommendations:**")
+                    st.markdown("**Engineering Review Recommendations:**")
                     for r in scenario.recommendations:
                         st.info(f"💡 {r}")
 
@@ -1512,8 +1526,8 @@ def render_explainability(result):
             ("2. Spatial Graph Construction", f"Built a NetworkX graph representing building topology and each {route_phrase}."),
             ("3. Route Calculation", f"Applied Dijkstra's shortest path algorithm from **{scenario.origin_space_name}** to the nearest {'inferred egress point' if geometry_mode else 'exit'}. Route length: **{scenario.evacuation_route.distance:.1f}m**."),
             ("4. Regulation Evidence", f"{regulation_phrase}. {rag_phrase}"),
-            ("5. Compliance Validation", f"Checked {len(scenario.violated_regulations) + 2} regulatory constraints. **{len(scenario.violated_regulations)} violations** identified."),
-            ("6. Risk Classification", f"Classified as **{scenario.risk_level.value.upper()} RISK** using deterministic weighted factors. Score: **{scenario.risk_score:.3f}**."),
+            ("5. Implemented Constraint Checks", f"Evaluated {len(scenario.violated_regulations) + 2} prototype constraints. **{len(scenario.violated_regulations)} findings** identified."),
+            ("6. Screening Priority", f"Classified as **{scenario.risk_level.value.upper()} PRIORITY** using deterministic, uncalibrated factors. Screening index: **{scenario.screening_index:.3f}** (higher means lower priority, not proven safety)."),
             ("7. Explanation Generation", f"Generated natural language explanation with traceable regulation references and improvement recommendations."),
         ]
         
@@ -1568,14 +1582,14 @@ def render_explainability(result):
         <div class="success-box">
             <strong>🎯 Confidence & Transparency</strong><br>
             <small>
-            • Score: {:.1f}%<br>
-            • Based on: route feasibility, regulation coverage, data completeness<br>
+            • Evidence confidence: {:.1f}%<br>
+            • Based on: route-source quality and IFC measurement completeness<br>
             • Method: deterministic weighted score, not a hidden black-box model
             </small>
         </div>
         """.format(scenario.confidence_score * 100), unsafe_allow_html=True)
 
-        st.markdown("### Risk Factors")
+        st.markdown("### Screening Factors")
         st.json(scenario.risk_factors)
     
     # Natural Language Explanation
@@ -1600,41 +1614,19 @@ def render_explainability(result):
         for note in scenario.data_quality_notes:
             st.warning(note)
     
-    # Example reasoning format
-    st.markdown("---")
-    st.markdown("### Example Reasoning Format")
-    
-    example = """
-    **Why this scenario was generated:**
-    
-    > The rule-based system analyzed the building topology and identified that Office 101 has a direct
-    > connection to the Main Corridor. The shortest path to the nearest exit (Main Exit) was
-    > calculated at 32.5 meters, which is within the maximum allowed travel distance of 45 meters
-    > per Approved Document B Section 2.2.1.
-    
-    **Which regulation triggered the risk assessment:**
-    
-    > The door width of 0.70m at the corridor connection is below the minimum requirement of 
-    > 0.75m specified in Approved Document B Section 2.3.1. This triggered a MEDIUM risk 
-    > classification because it could impede evacuation flow during an emergency.
-    
-    **What IFC data was used:**
-    
-    > • Space ID: SPACE_001 (Office 101, 50.0 m²)
-    > • Door ID: DOOR_002 (width: 0.70m)
-    > • Exit ID: EXIT_001 (Main Exit, width: 1.20m)
-    > • Travel distance: 32.5 meters (calculated from spatial graph)
-    """
-    
-    with st.expander("View Example Reasoning Template"):
-        st.markdown(example)
+    with st.expander("Model assumptions and score semantics", expanded=False):
+        st.warning(ACADEMIC_USE_NOTICE)
+        st.json({
+            "score_semantics": screening_index_semantics(),
+            "assumption_registry": standard_assumption_registry(),
+        })
 
 # ==============================================================================
 # TAB 6: RISK & SAFETY ANALYSIS
 # ==============================================================================
 def render_risk_analysis(result):
-    """Render Risk & Safety Analysis panel."""
-    st.markdown('<div class="section-header">⚠️ Risk & Safety Analysis</div>', unsafe_allow_html=True)
+    """Render deterministic screening-indicator analysis."""
+    st.markdown('<div class="section-header">⚠️ Screening Indicator Analysis</div>', unsafe_allow_html=True)
     
     if not result or not result.scenarios:
         st.info("📋 No scenarios available. Run analysis first.")
@@ -1642,18 +1634,11 @@ def render_risk_analysis(result):
     
     scenarios = result.scenarios
     
-    # ASET vs RSET concept
-    st.markdown("### ASET vs RSET Concept")
-    st.markdown("""
-    <div class="info-box">
-        <strong>Available Safe Egress Time (ASET)</strong> vs <strong>Required Safe Egress Time (RSET)</strong><br>
-        <small>
-        • <strong>ASET</strong>: Time until conditions become untenable (fire/smoke)<br>
-        • <strong>RSET</strong>: Time required for occupants to evacuate<br>
-        • <strong>Safety Margin</strong>: ASET - RSET (must be positive for safety)
-        </small>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("### Standard Screening Scope")
+    st.info(
+        "This tab compares deterministic route-screening indicators. It does not calculate physical ASET. "
+        "Use Fire Scenario Testing for the separate graph-based ASET/RSET-inspired model, which is also uncalibrated."
+    )
     
     st.markdown("---")
     
@@ -1661,12 +1646,12 @@ def render_risk_analysis(result):
     col_hm, col_stats = st.columns([2, 1])
     
     with col_hm:
-        st.markdown("### Risk Factor Heatmap")
+        st.markdown("### Screening Indicator Heatmap")
         fig_heatmap = create_risk_heatmap(scenarios)
         st.plotly_chart(fig_heatmap, key="risk_heatmap")
     
     with col_stats:
-        st.markdown("### Risk Statistics")
+        st.markdown("### Screening Statistics")
         
         # Calculate risk metrics
         risk_counts = {'low': 0, 'medium': 0, 'high': 0}
@@ -1686,35 +1671,26 @@ def render_risk_analysis(result):
         
         st.metric("Avg Evacuation Distance", f"{avg_distance:.1f}m")
         st.metric("Avg Evacuation Time", f"{avg_time:.1f}s")
-        st.metric("Total Violations", total_violations)
-        st.metric("Critical Scenarios", risk_counts.get('high', 0))
-        
-        # Safety margin indicator
-        safety_margin = 300 - avg_time  # Assuming 5 min ASET
-        margin_color = "#28a745" if safety_margin > 60 else "#ffc107" if safety_margin > 0 else "#dc3545"
-        
-        st.markdown(f"""
-        <div style="background-color: {margin_color}20; border: 2px solid {margin_color}; border-radius: 8px; padding: 12px; margin-top: 10px;">
-            <strong style="color: {margin_color};">Safety Margin</strong><br>
-            <span style="font-size: 1.5rem; font-weight: bold; color: {margin_color};">{safety_margin:.0f}s</span><br>
-            <small>ASET (300s) - RSET ({avg_time:.0f}s)</small>
-        </div>
-        """, unsafe_allow_html=True)
+        st.metric("Prototype Check Findings", total_violations)
+        st.metric("High-Priority Scenarios", risk_counts.get('high', 0))
+        avg_index = sum(s.screening_index for s in scenarios) / len(scenarios)
+        avg_evidence = sum(s.confidence_score for s in scenarios) / len(scenarios)
+        st.metric("Avg Screening Index", f"{avg_index:.3f}", help="Higher means lower screening priority, not proven safety.")
+        st.metric("Avg Evidence Confidence", f"{avg_evidence * 100:.0f}%")
     
     st.markdown("---")
     
     # Bottleneck analysis
-    st.markdown("### Bottleneck & Congestion Analysis")
+    st.markdown("### Route Bottleneck Indicators")
     
     bottleneck_data = []
     for i, s in enumerate(scenarios):
-        # Estimate congestion based on compliance score and time
-        congestion = min(100, max(0, (1 - s.compliance_score) * 100 + (s.evacuation_route.estimated_time / 300) * 50))
+        bottleneck_count = int(s.risk_factors.get("bottleneck_count", 0))
         bottleneck_data.append({
             'Scenario': f"#{i+1}: " + s.name[:15],
-            'Congestion Risk (%)': round(congestion, 1),
+            'Route Bottlenecks': bottleneck_count,
             'Evacuation Time (s)': round(s.evacuation_route.estimated_time, 1),
-            'Risk Level': s.risk_level.value
+            'Screening Priority': s.risk_level.value,
         })
     
     if bottleneck_data:
@@ -1723,10 +1699,10 @@ def render_risk_analysis(result):
         fig_bottleneck = px.scatter(
             df_bottleneck,
             x='Evacuation Time (s)',
-            y='Congestion Risk (%)',
-            color='Risk Level',
-            size='Congestion Risk (%)',
-            title="Congestion Risk vs Evacuation Time",
+            y='Route Bottlenecks',
+            color='Screening Priority',
+            size=[max(8, row['Route Bottlenecks'] * 8) for row in bottleneck_data],
+            title="Detected Route Bottlenecks vs Estimated Travel Time",
             color_discrete_map={'low': '#28a745', 'medium': '#ffc107', 'high': '#dc3545'}
         )
         st.plotly_chart(fig_bottleneck, key="risk_bottleneck")
@@ -1741,9 +1717,9 @@ def render_risk_analysis(result):
             'Scenario': f"#{i+1}: " + s.name[:12],
             'Distance (m)': round(s.evacuation_route.distance, 1),
             'Time (s)': round(s.evacuation_route.estimated_time, 1),
-            'Compliance (%)': round(s.compliance_score * 100, 0),
-            'Confidence (%)': round(s.confidence_score * 100, 0),
-            'Risk': s.risk_level.value.upper()
+            'Checks Passed (%)': round(s.compliance_score * 100, 0),
+            'Evidence Confidence (%)': round(s.confidence_score * 100, 0),
+            'Screening Priority': s.risk_level.value.upper(),
         })
     
     df_comp = pd.DataFrame(comparison_data)
@@ -1753,8 +1729,8 @@ def render_risk_analysis(result):
 # TAB 7: EXPERT REVIEW PANEL (HITL)
 # ==============================================================================
 def render_expert_review(result):
-    """Render Expert Review panel with HITL functionality."""
-    st.markdown('<div class="section-header">👤 Expert Review Panel</div>', unsafe_allow_html=True)
+    """Render a session-scoped research review record."""
+    st.markdown('<div class="section-header">👤 Research Review Record</div>', unsafe_allow_html=True)
     
     if not result or not result.scenarios:
         st.info("📋 No scenarios available for review. Run analysis first.")
@@ -1765,10 +1741,10 @@ def render_expert_review(result):
     # Introduction
     st.markdown("""
     <div class="warning-box">
-        <strong>Human-in-the-Loop (HITL) Protocol</strong><br>
+        <strong>Human-in-the-Loop Research Protocol</strong><br>
         <small>
-        As a fire safety engineer, your review is critical. Please assess each system-generated screening scenario
-        and provide your professional judgement. Your decisions will be recorded for audit and validation.
+        Record a researcher/reviewer disposition for each screening scenario. This session record is not
+        authenticated professional approval, a durable regulatory audit log or validation of fire safety.
         </small>
     </div>
     """, unsafe_allow_html=True)
@@ -1808,7 +1784,7 @@ def render_expert_review(result):
         with col_m2:
             st.metric("Time", f"{scenario.evacuation_route.estimated_time:.1f}s")
         with col_m3:
-            st.metric("Confidence", f"{scenario.confidence_score*100:.0f}%")
+            st.metric("Evidence Confidence", f"{scenario.confidence_score*100:.0f}%")
         
         # Route path
         st.markdown("**Evacuation Path:**")
@@ -1817,7 +1793,7 @@ def render_expert_review(result):
         
         # Violations
         if scenario.violated_regulations:
-            st.markdown("**Regulatory Violations:**")
+            st.markdown("**Prototype Check Findings:**")
             for v in scenario.violated_regulations:
                 st.error(f"❌ {v}")
         
@@ -1828,7 +1804,7 @@ def render_expert_review(result):
                 st.info(f"💡 {r}")
     
     with col_review:
-        st.markdown("### Your Assessment")
+        st.markdown("### Research Assessment")
         
         # Review form
         review_key = f"expert_review_{scenario_id}"
@@ -1837,30 +1813,39 @@ def render_expert_review(result):
         if review_key not in st.session_state.expert_reviews:
             st.session_state.expert_reviews[review_key] = "Not Reviewed"
         
-        # Decision buttons
+        acknowledgement = st.checkbox(
+            "I understand this review status is not professional approval or statutory sign-off.",
+            key=f"review_ack_{scenario_id}",
+        )
         decision = st.radio(
-            "Engineering Decision",
-            options=["Not Reviewed", "✅ Approved", "⚠️ Needs Revision", "❌ Rejected"],
+            "Research Review Status",
+            options=["Not Reviewed", "✅ Accepted for research follow-up", "⚠️ Needs Revision", "❌ Rejected"],
             key=f"decision_radio_{scenario_id}",
             index=0,
         )
         
         # Comments
         comments = st.text_area(
-            "Engineering Comments",
-            placeholder="Enter your professional assessment, concerns, required modifications, or approval rationale...",
+            "Review Comments",
+            placeholder="Record evidence concerns, required corrections, or research follow-up rationale...",
             key=f"comments_area_{scenario_id}",
             height=150
         )
         
         # Save button
-        if st.button("💾 Save Engineering Review", key=f"save_review_btn_{scenario_id}"):
+        if st.button(
+            "💾 Save Research Review",
+            key=f"save_review_btn_{scenario_id}",
+            disabled=not acknowledgement,
+        ):
             st.session_state.expert_reviews[review_key] = {
                 'decision': decision,
                 'comments': comments,
                 'scenario_id': scenario_id,
                 'scenario_name': scenario.name,
-                'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
+                'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
+                'record_scope': 'session_scoped_research_review_not_professional_approval',
+                'limitations_acknowledged': True,
             }
             st.success(f"✅ Review saved: {decision}")
     
@@ -1891,9 +1876,9 @@ def render_expert_review(result):
     <div class="info-box">
         <strong>Review Tracking:</strong><br>
         <small>
-        • All engineering decisions are timestamped and logged<br>
-        • Decisions can be exported as part of the fire strategy report<br>
-        • Audit trail supports regulatory compliance verification
+        • Saved research dispositions are timestamped in the current Streamlit session<br>
+        • Records can be included in the evidence export<br>
+        • This supports research traceability, not regulatory compliance verification
         </small>
     </div>
     """, unsafe_allow_html=True)
@@ -1910,15 +1895,15 @@ def render_export(result):
         return
     
     # Report preview
-    st.markdown("### Fire Strategy Report Preview")
+    st.markdown("### Screening Evidence Report Preview")
     
     st.markdown("""
     <div class="success-box">
         <strong>Report Ready for Export</strong><br>
         <small>
-        This report contains all system-generated screening scenarios, risk assessments, compliance checks,
-        explainability traces and expert review decisions. It is suitable as an expert-review
-        package for fire strategy documentation, not as final regulatory approval.
+        The complete JSON evidence report contains scenarios, implemented checks, decision traces,
+        assumptions, provenance and session review records. It is a research-review package,
+        not fire-strategy approval or statutory sign-off.
         </small>
     </div>
     """, unsafe_allow_html=True)
@@ -1940,9 +1925,9 @@ def render_export(result):
         <div style="background-color: var(--app-panel-strong); color: var(--app-text); border: 1px solid var(--app-border); border-radius: 8px; padding: 1.5rem;">
             <h4>Building: {html.escape(str(result.building.name)) if result.building else 'N/A'}</h4>
             <p><strong>Total Scenarios Analyzed:</strong> {len(scenarios)}</p>
-            <p><strong>Risk Distribution:</strong> {risk_counts.get('low', 0)} Low, {risk_counts.get('medium', 0)} Medium, {risk_counts.get('high', 0)} High</p>
-            <p><strong>Average Compliance Score:</strong> {avg_compliance * 100:.1f}%</p>
-            <p><strong>Total Regulatory Violations:</strong> {total_violations}</p>
+            <p><strong>Screening-Priority Distribution:</strong> {risk_counts.get('low', 0)} Low, {risk_counts.get('medium', 0)} Medium, {risk_counts.get('high', 0)} High</p>
+            <p><strong>Average Implemented Checks Passed:</strong> {avg_compliance * 100:.1f}%</p>
+            <p><strong>Total Prototype Check Findings:</strong> {total_violations}</p>
             <p><strong>Analysis Date:</strong> {time.strftime('%Y-%m-%d %H:%M:%S')}</p>
         </div>
         """, unsafe_allow_html=True)
@@ -1962,20 +1947,20 @@ def render_export(result):
         st.download_button(
             label="⬇️ Download JSON",
             data=json_str,
-            file_name=f"fire_strategy_{safe_uploaded_filename(result.building.name if result.building else 'report')}_{time.strftime('%Y%m%d')}.json",
+            file_name=f"screening_evidence_{safe_uploaded_filename(result.building.name if result.building else 'report')}_{time.strftime('%Y%m%d')}.json",
             mime="application/json",
             width='stretch',
         )
     
     with col_csv:
         st.markdown("**CSV Export**")
-        st.markdown("<small>Spreadsheet format for data analysis</small>", unsafe_allow_html=True)
+        st.markdown("<small>Summary-only spreadsheet with score direction metadata</small>", unsafe_allow_html=True)
         
         csv_data = build_scenarios_csv(result.scenarios)
         st.download_button(
             label="⬇️ Download CSV",
             data=csv_data,
-            file_name=f"fire_strategy_{safe_uploaded_filename(result.building.name if result.building else 'report')}_{time.strftime('%Y%m%d')}.csv",
+            file_name=f"screening_summary_{safe_uploaded_filename(result.building.name if result.building else 'report')}_{time.strftime('%Y%m%d')}.csv",
             mime="text/csv",
             width='stretch',
             disabled=not bool(result.scenarios),
@@ -1983,36 +1968,29 @@ def render_export(result):
     
     with col_xml:
         st.markdown("**XML Export**")
-        st.markdown("<small>BIM interoperability format</small>", unsafe_allow_html=True)
+        st.markdown("<small>Summary-only XML; not an IFC/BIM exchange file</small>", unsafe_allow_html=True)
         
         xml_content = build_scenarios_xml(result, time.strftime('%Y-%m-%dT%H:%M:%S'))
         st.download_button(
             label="⬇️ Download XML",
             data=xml_content,
-            file_name=f"fire_strategy_{safe_uploaded_filename(result.building.name if result.building else 'report')}_{time.strftime('%Y%m%d')}.xml",
+            file_name=f"screening_summary_{safe_uploaded_filename(result.building.name if result.building else 'report')}_{time.strftime('%Y%m%d')}.xml",
             mime="application/xml",
             width='stretch',
         )
     
     # Full report generation
     st.markdown("---")
-    st.markdown("### Complete Fire Strategy Report")
+    st.markdown("### Complete Screening Evidence Report")
     
-    if st.button("📑 Generate Full Report (All Formats)", key="generate_full_report", type="primary"):
-        with st.spinner("Generating comprehensive fire strategy report..."):
+    if st.button("📑 Generate Complete Evidence Report", key="generate_full_report", type="primary"):
+        with st.spinner("Generating the screening evidence report..."):
             try:
-                # Create comprehensive report
-                report = create_export_summary(result.scenarios, result.building.name if result.building else 'Unknown')
-                report['data_provenance'] = {
-                    'source_file_name': result.source_file_name,
-                    'source_file_sha256': result.source_file_sha256,
-                    'ifc_schema': result.ifc_schema,
-                    'source_mode': result.source_mode,
-                }
-                
-                # Add expert reviews
-                reviews = [v for k, v in st.session_state.expert_reviews.items() if isinstance(v, dict)]
-                report['expert_reviews'] = reviews
+                report = build_complete_export_payload(result)
+                report['executive_summary'] = create_export_summary(
+                    result.scenarios,
+                    result.building.name if result.building else 'Unknown',
+                )
                 
                 json_str = json.dumps(report, indent=2)
                 
@@ -2021,7 +1999,7 @@ def render_export(result):
                 st.download_button(
                     label="⬇️ Download Complete Report (JSON)",
                     data=json_str,
-                    file_name=f"fire_strategy_complete_{time.strftime('%Y%m%d_%H%M%S')}.json",
+                    file_name=f"screening_evidence_complete_{time.strftime('%Y%m%d_%H%M%S')}.json",
                     mime="application/json",
                     width='stretch'
                 )
@@ -2054,8 +2032,8 @@ def main():
             "📜 Regulations",
             "🚨 Scenarios",
             "🧠 Explainability",
-            "⚠️ Risk Analysis",
-            "👤 Expert Review",
+            "⚠️ Screening Analysis",
+            "👤 Research Review",
             "📤 Export"
         ])
         
@@ -2088,7 +2066,7 @@ def main():
         st.markdown("---")
         st.markdown("""
         <div style="text-align: center; padding: 3rem;">
-            <h2>👋 Welcome to the BIM Evacuation Fire Strategy Platform</h2>
+            <h2>👋 Welcome to the BIM Evacuation Screening Platform</h2>
             <p style="color: var(--app-muted); font-size: 1.1rem;">
                 This rule-based decision-support system generates evacuation screening scenarios from BIM models,<br>
                 checks them against parsed/default safety constraints, and provides explainable recommendations<br>
@@ -2101,10 +2079,10 @@ def main():
                     <li>Upload your <strong>IFC building model</strong> in the sidebar</li>
                     <li>Optionally upload <strong>safety regulations</strong> (e.g., Approved Document B)</li>
                     <li>Configure analysis settings</li>
-                    <li>Click <strong>"Generate Fire Strategy Scenarios"</strong></li>
+                    <li>Click <strong>"Generate Screening Scenarios"</strong></li>
                     <li>Review system-generated screening scenarios across all tabs</li>
-                    <li>Provide <strong>expert engineering review</strong> in the HITL panel</li>
-                    <li>Export the complete fire strategy report</li>
+                    <li>Record a <strong>session-scoped research review</strong> in the HITL panel</li>
+                    <li>Export the complete screening evidence report</li>
                 </ol>
             </div>
             <br><br>

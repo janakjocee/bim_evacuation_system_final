@@ -30,12 +30,15 @@ class RiskFactors:
 
 
 class RiskClassifier:
-    """Classify risk level of evacuation scenarios."""
+    """Classify prototype screening priority using a deterministic index."""
     
     def __init__(self):
         """Initialize risk classifier."""
         self.config = get_config()
         self.thresholds = self.config.get('scenario.risk_thresholds', {})
+        self.index_config = self.config.get('scenario.screening_index', {})
+        self.weights = self.index_config.get('weights', {})
+        self.penalties = self.index_config.get('penalties', {})
     
     def classify(self, factors: RiskFactors) -> RiskLevel:
         """
@@ -74,37 +77,46 @@ class RiskClassifier:
     
     def calculate_score(self, factors: RiskFactors) -> float:
         """
-        Calculate composite risk score.
+        Calculate the composite screening index.
         
         Args:
             factors: Risk factors
             
         Returns:
-            Risk score (0.0 to 1.0, higher is better/lower risk)
+            Screening index (0.0 to 1.0, higher is lower screening priority)
         """
         scores = []
         
-        # Compliance score (weight: 0.35)
-        scores.append(factors.compliance_score * 0.35)
+        compliance_weight = self.weights.get('compliance', 0.35)
+        exit_capacity_weight = self.weights.get('exit_capacity', 0.25)
+        evacuation_time_weight = self.weights.get('evacuation_time', 0.15)
+        bottleneck_weight = self.weights.get('bottleneck', 0.10)
+        topology_weight = self.weights.get('topology', 0.10)
+        data_quality_weight = self.weights.get('data_quality', 0.05)
+        time_reference = max(1.0, float(self.index_config.get('time_reference_s', 300)))
+
+        scores.append(factors.compliance_score * compliance_weight)
         
         # Exit capacity ratio (weight: 0.25)
-        capacity_score = min(factors.exit_capacity_ratio, 1.0) * 0.25
+        capacity_score = min(factors.exit_capacity_ratio, 1.0) * exit_capacity_weight
         scores.append(capacity_score)
         
-        # Evacuation time score (weight: 0.15)
-        # Assume 300 seconds (5 minutes) is maximum acceptable
-        time_score = max(0, 1 - (factors.evacuation_time / 300)) * 0.15
+        # This reference normalises a prototype score; it is not an ASET limit.
+        time_score = max(0, 1 - (factors.evacuation_time / time_reference)) * evacuation_time_weight
         scores.append(time_score)
         
         # Bottleneck penalty (weight: 0.1)
-        bottleneck_score = max(0, 1 - (factors.bottleneck_count * 0.1)) * 0.1
+        bottleneck_score = max(0, 1 - (factors.bottleneck_count * 0.1)) * bottleneck_weight
         scores.append(bottleneck_score)
 
         # IFC topology/data quality (weight: 0.15)
-        topology_score = max(0.0, min(factors.graph_confidence, 1.0)) * 0.1
-        data_quality_score = max(0.0, min(factors.data_quality_confidence, 1.0)) * 0.05
-        inferred_penalty = min(max(factors.inferred_edge_ratio, 0.0), 1.0) * 0.05
-        assumption_penalty = min(factors.assumed_measurement_count * 0.02, 0.08)
+        topology_score = max(0.0, min(factors.graph_confidence, 1.0)) * topology_weight
+        data_quality_score = max(0.0, min(factors.data_quality_confidence, 1.0)) * data_quality_weight
+        inferred_penalty = min(max(factors.inferred_edge_ratio, 0.0), 1.0) * self.penalties.get('inferred_route_max', 0.05)
+        assumption_penalty = min(
+            factors.assumed_measurement_count * self.penalties.get('assumption_each', 0.02),
+            self.penalties.get('assumption_max', 0.08),
+        )
         practical_penalty = self._practical_data_penalty(factors)
         scores.append(max(0.0, topology_score + data_quality_score - inferred_penalty - assumption_penalty - practical_penalty))
         
@@ -112,35 +124,47 @@ class RiskClassifier:
 
     def risk_contribution_breakdown(self, factors: RiskFactors) -> Dict[str, Any]:
         """Return the weighted score components used for traceable risk decisions."""
-        time_score = max(0, 1 - (factors.evacuation_time / 300)) * 0.15
-        topology_score = max(0.0, min(factors.graph_confidence, 1.0)) * 0.1
-        data_quality_score = max(0.0, min(factors.data_quality_confidence, 1.0)) * 0.05
-        inferred_penalty = min(max(factors.inferred_edge_ratio, 0.0), 1.0) * 0.05
-        assumption_penalty = min(factors.assumed_measurement_count * 0.02, 0.08)
+        compliance_weight = self.weights.get('compliance', 0.35)
+        exit_capacity_weight = self.weights.get('exit_capacity', 0.25)
+        evacuation_time_weight = self.weights.get('evacuation_time', 0.15)
+        bottleneck_weight = self.weights.get('bottleneck', 0.10)
+        topology_weight = self.weights.get('topology', 0.10)
+        data_quality_weight = self.weights.get('data_quality', 0.05)
+        time_reference = max(1.0, float(self.index_config.get('time_reference_s', 300)))
+        time_score = max(0, 1 - (factors.evacuation_time / time_reference)) * evacuation_time_weight
+        topology_score = max(0.0, min(factors.graph_confidence, 1.0)) * topology_weight
+        data_quality_score = max(0.0, min(factors.data_quality_confidence, 1.0)) * data_quality_weight
+        inferred_penalty = min(max(factors.inferred_edge_ratio, 0.0), 1.0) * self.penalties.get('inferred_route_max', 0.05)
+        assumption_penalty = min(
+            factors.assumed_measurement_count * self.penalties.get('assumption_each', 0.02),
+            self.penalties.get('assumption_max', 0.08),
+        )
         practical_penalty = self._practical_data_penalty(factors)
         topology_component = max(0.0, topology_score + data_quality_score - inferred_penalty - assumption_penalty - practical_penalty)
         return {
-            "compliance_component": round(factors.compliance_score * 0.35, 3),
-            "exit_capacity_component": round(min(factors.exit_capacity_ratio, 1.0) * 0.25, 3),
+            "compliance_component": round(factors.compliance_score * compliance_weight, 3),
+            "exit_capacity_component": round(min(factors.exit_capacity_ratio, 1.0) * exit_capacity_weight, 3),
             "evacuation_time_component": round(time_score, 3),
-            "bottleneck_component": round(max(0, 1 - (factors.bottleneck_count * 0.1)) * 0.1, 3),
+            "bottleneck_component": round(max(0, 1 - (factors.bottleneck_count * 0.1)) * bottleneck_weight, 3),
             "topology_data_quality_component": round(topology_component, 3),
             "inferred_route_penalty": round(inferred_penalty, 3),
             "assumed_measurement_penalty": round(assumption_penalty, 3),
             "practical_data_penalty": round(practical_penalty, 3),
+            "screening_index": round(self.calculate_score(factors), 3),
             "total_score": round(self.calculate_score(factors), 3),
+            "calibration_status": "unvalidated_research_assumption",
             "interpretation": (
-                "Higher score means lower risk; thresholds are low>=0.8, medium>=0.5, otherwise high. "
-                "Low-confidence or heavily inferred IFC topology can cap the displayed level at medium/high."
+                "Higher index means lower screening priority within implemented prototype checks; it does not mean proven safety. "
+                "Low-confidence or heavily inferred IFC topology can cap the displayed priority at medium/high."
             ),
         }
     
     def get_risk_description(self, level: RiskLevel) -> str:
         """Get human-readable risk description."""
         descriptions = {
-            RiskLevel.LOW: "Low risk - evacuation routes meet safety requirements",
-            RiskLevel.MEDIUM: "Medium risk - some improvements recommended",
-            RiskLevel.HIGH: "High risk - significant safety concerns identified"
+            RiskLevel.LOW: "Lower screening priority within implemented checks; professional review still required",
+            RiskLevel.MEDIUM: "Medium screening priority; assumptions or findings require review",
+            RiskLevel.HIGH: "High screening priority; significant findings or insufficient evidence require review"
         }
         return descriptions.get(level, "Unknown risk level")
     
@@ -165,8 +189,8 @@ class RiskClassifier:
     def _practical_data_penalty(self, factors: RiskFactors) -> float:
         """Penalty for practical evacuation weaknesses visible in the extracted IFC."""
         return min(
-            factors.narrow_door_count * 0.03
-            + factors.no_alternative_route_count * 0.04
-            + factors.missing_area_count * 0.02,
-            0.1,
+            factors.narrow_door_count * self.penalties.get('narrow_door_each', 0.03)
+            + factors.no_alternative_route_count * self.penalties.get('no_alternative_route_each', 0.04)
+            + factors.missing_area_count * self.penalties.get('missing_area_each', 0.02),
+            self.penalties.get('practical_max', 0.10),
         )

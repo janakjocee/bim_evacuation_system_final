@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from ..utils.logger import get_logger
 from ..utils.config_loader import get_config
 from .ifc_parser import BuildingData, SpaceData, DoorData
+from ..utils.model_transparency import standard_assumption_registry
 
 logger = get_logger("feature_extractor")
 
@@ -34,6 +35,7 @@ class ExtractedFeatures:
     
     # Features per space
     space_features: List[Dict[str, Any]] = field(default_factory=list)
+    assumption_registry: Dict[str, Any] = field(default_factory=standard_assumption_registry)
 
 
 class FeatureExtractor:
@@ -137,5 +139,6 @@ class FeatureExtractor:
             'exit_capacity_per_min': round(features.total_exit_capacity, 0),
             'avg_space_area_m2': round(features.avg_space_area, 2),
             'avg_door_width_m': round(features.avg_door_width, 2),
-            'space_type_distribution': features.space_types
+            'space_type_distribution': features.space_types,
+            'assumption_registry': features.assumption_registry,
         }

@@ -23,6 +23,12 @@ from .smoke_spread import SmokeSpreadConfig, simulate_smoke_spread
 from .aset_rset import AsetRsetConfig, calculate_aset_rset
 from .life_safety_impact import estimate_life_safety_impact
 from .fds_exporter import create_fds_skeleton
+from ..utils.model_transparency import (
+    ACADEMIC_USE_NOTICE,
+    assumption_record,
+    hazard_priority_score_semantics,
+    runtime_assumption_registry,
+)
 
 
 ROOM_TYPE_GROWTH = {
@@ -151,12 +157,58 @@ class FireScenarioEngine:
             "trapped_rooms": [row["room_id"] for row in aset_rset_results if row.get("classification") == "no route / trapped"],
             "potentially_affected_occupants": impact.get("potentially_affected_occupants", 0),
             "overall_risk_score": risk_score,
+            "hazard_priority_score": risk_score,
+            "legacy_overall_risk_score_note": "overall_risk_score is retained for compatibility; use hazard_priority_score and score_semantics.",
+            "score_semantics": hazard_priority_score_semantics(),
             "overall_risk_level": overall_risk,
             "compliance_oriented_checks": compliance_checks,
-            "expert_review_recommendation": "Expert review required: verify fire origin assumptions, smoke control, compartmentation, exit availability, RSET/ASET margins and BIM data completeness.",
+            "qualified_review_recommendation": "Qualified review required: verify fire origin assumptions, smoke control, compartmentation, exit availability, model-internal RSET/ASET margins and BIM data completeness.",
+            "expert_review_recommendation": "Qualified review required: verify fire origin assumptions, smoke control, compartmentation, exit availability, model-internal RSET/ASET margins and BIM data completeness.",
             "explanation": explanation,
             "fds_skeleton": "Use export_fds_skeleton(result) to generate an expert-completion FDS template.",
-            "limitations": "Academic decision-support only. No CFD, no certified evacuation modelling, no toxic gas/FED model and no final fire-safety certification.",
+            "limitations": ACADEMIC_USE_NOTICE + " No CFD, toxic gas/FED or certified tenability model is implemented.",
+            "assumption_registry": runtime_assumption_registry(
+                "graph_based_fire_scenario_screening",
+                [
+                    ("fire_growth", FireGrowthConfig(
+                        fire_origin=fire_origin,
+                        room_type=scenario.get("room_type", self.space_by_id.get(fire_origin, {}).get("type", "unknown")),
+                        fire_growth_class=growth_class,
+                        simulation_duration_seconds=duration,
+                        time_step_seconds=step,
+                        suppression_enabled=suppression_enabled,
+                        sprinkler_activation_time_seconds=sprinkler_time,
+                        ventilation_factor=ventilation,
+                        max_hrr_kw=max_hrr,
+                    )),
+                    ("smoke_spread", SmokeSpreadConfig(
+                        fire_origin=fire_origin,
+                        door_state_assumption=settings.get("door_state_assumption", self.defaults.get("door_state_assumption", "mixed")),
+                        ventilation_factor=ventilation,
+                        smoke_spread_speed_factor=float(settings.get("smoke_spread_speed", scenario.get("smoke_spread_speed", 1.0))),
+                        fire_rated_separation=bool(settings.get("fire_rated_separation", False)),
+                        blocked_nodes=list(set(scenario.get("blocked_nodes", []) + [fire_origin])),
+                        blocked_edges=scenario.get("blocked_edges", []),
+                        exits=self.exit_ids,
+                    )),
+                    ("aset_rset", aset_cfg),
+                ],
+                additional=[
+                    assumption_record(
+                        "hazard_priority_points",
+                        {
+                            "trapped_occupants_present": 100,
+                            "model_rset_exceeds_model_aset": 35,
+                            "affected_exit_present": 25,
+                            "reduced_model_margin_present": 20,
+                            "rerouting_present": 20,
+                            "smoke_route_exposure": "min(30, occupants / 5)",
+                        },
+                        "points",
+                        "Rank illustrative fire scenarios for research review.",
+                    )
+                ],
+            ),
         }
         return result
 
@@ -280,6 +332,6 @@ class FireScenarioEngine:
             text += f"Rooms where RSET exceeds ASET: {', '.join(unsafe_rooms)}. "
         text += (
             f"Indicative life-safety impact reports {impact.get('potentially_affected_occupants', 0)} potentially affected occupants. "
-            "This result requires expert validation and should be treated as compliance-oriented decision support, not CFD, not certified evacuation modelling and not final approval."
+            "This result requires qualified review and is an uncalibrated graph-based screening indicator, not CFD, certified evacuation modelling or approval."
         )
         return text

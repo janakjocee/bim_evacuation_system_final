@@ -94,6 +94,24 @@ scenario:
     low: 0.8
     medium: 0.5
     high: 0.0
+  # Research prioritisation heuristic, not a calibrated engineering risk model.
+  screening_index:
+    time_reference_s: 300
+    weights:
+      compliance: 0.35
+      exit_capacity: 0.25
+      evacuation_time: 0.15
+      bottleneck: 0.10
+      topology: 0.10
+      data_quality: 0.05
+    penalties:
+      inferred_route_max: 0.05
+      assumption_each: 0.02
+      assumption_max: 0.08
+      narrow_door_each: 0.03
+      no_alternative_route_each: 0.04
+      missing_area_each: 0.02
+      practical_max: 0.10
 
 # Fire Scenario Settings
 fire:

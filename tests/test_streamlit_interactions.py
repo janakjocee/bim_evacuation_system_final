@@ -93,15 +93,22 @@ def test_main_scenario_details_close_reopen_review_and_exports():
     assert app.session_state["selected_scenario_id"] == scenario.scenario_id
     assert _button(app, "Close Details")
 
-    decision = next(radio for radio in app.radio if radio.label == "Engineering Decision")
-    decision.set_value("✅ Approved")
-    comments = next(area for area in app.text_area if area.label == "Engineering Comments")
+    acknowledgement = next(
+        checkbox for checkbox in app.checkbox
+        if checkbox.label == "I understand this review status is not professional approval or statutory sign-off."
+    )
+    acknowledgement.check().run(timeout=30)
+    decision = next(radio for radio in app.radio if radio.label == "Research Review Status")
+    decision.set_value("✅ Accepted for research follow-up")
+    comments = next(area for area in app.text_area if area.label == "Review Comments")
     comments.set_value("Reviewed in automated interaction test.")
-    _button(app, "💾 Save Engineering Review").click().run(timeout=30)
+    _button(app, "💾 Save Research Review").click().run(timeout=30)
     assert not app.exception
     saved = app.session_state["expert_reviews"][f"expert_review_{scenario.scenario_id}"]
-    assert saved["decision"] == "✅ Approved"
+    assert saved["decision"] == "✅ Accepted for research follow-up"
     assert saved["comments"] == "Reviewed in automated interaction test."
+    assert saved["limitations_acknowledged"] is True
+    assert saved["record_scope"] == "session_scoped_research_review_not_professional_approval"
 
     download_labels = {element.label for element in app.get("download_button")}
     assert {

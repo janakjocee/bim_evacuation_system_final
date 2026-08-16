@@ -81,7 +81,7 @@ def classify_safety_margin(route: Optional[Dict[str, Any]], rset_s: Optional[flo
         return "unsafe"
     if margin <= cfg.reduced_margin_threshold_s:
         return "reduced margin"
-    return "safe margin"
+    return "positive heuristic margin"
 
 
 def calculate_aset_rset(
@@ -116,6 +116,11 @@ def calculate_aset_rset(
         rset = None if travel_time is None else round(config.detection_time_s + config.alarm_time_s + config.pre_movement_delay_s + travel_time, 1)
         aset = _minimum_aset_for_route(fire_route, time_to_untenable, default_aset)
         margin = None if aset is None or rset is None else round(aset - rset, 1)
+        route_untenable_values = [
+            time_to_untenable.get(node)
+            for node in (fire_route.get("path", []) if fire_route else [])
+        ]
+        horizon_substituted = bool(fire_route) and any(value is None for value in route_untenable_values)
         classification = classify_safety_margin(fire_route, rset, aset, config)
         results.append({
             "room_id": room_id,
@@ -131,7 +136,15 @@ def calculate_aset_rset(
             "pre_movement_delay_s": config.pre_movement_delay_s,
             "rset_s": rset,
             "aset_s": aset,
+            "aset_basis": (
+                "simulation_horizon_substitute_used_for_unreached_route_nodes"
+                if horizon_substituted
+                else "minimum_graph_node_untenable_time"
+            ) if fire_route else "not_available_no_route",
             "safety_margin_s": margin,
+            "model_margin_s": margin,
+            "legacy_safety_margin_note": "safety_margin_s is retained for compatibility; use model_margin_s and margin_interpretation.",
+            "margin_interpretation": "Positive values are model-internal heuristic margins, not validated tenability predictions.",
             "classification": classification,
             "available_exit": fire_route.get("exit") if fire_route else None,
             "bottleneck_edges": fire_route.get("bottleneck_edges") if fire_route else [],

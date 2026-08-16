@@ -173,8 +173,8 @@ if not result:
 
 impact = result["life_safety_impact"]
 k1, k2, k3, k4 = st.columns(4)
-k1.metric("Overall Risk", result["overall_risk_level"])
-k2.metric("Risk Score", result["overall_risk_score"])
+k1.metric("Screening Priority", result["overall_risk_level"])
+k2.metric("Hazard-Priority Score", result["hazard_priority_score"], help="Higher means higher screening priority; this uncalibrated point score is not a risk probability.")
 k3.metric("Potentially Affected", impact.get("potentially_affected_occupants", 0))
 k4.metric("Trapped Occupants", impact.get("trapped_occupants", 0))
 
@@ -192,6 +192,9 @@ with growth_tab:
     st.dataframe(growth_df)
 
 with aset_tab:
+    st.warning(
+        "ASET/RSET values are graph-based, model-internal heuristic indicators. Positive margins do not prove tenable conditions or safety."
+    )
     aset_df = pd.DataFrame(result["aset_rset_results"])
     st.dataframe(aset_df, height=460)
 
@@ -215,6 +218,11 @@ with visual_tab:
     )
 
 with export_tab:
+    with st.expander("Assumptions and score semantics", expanded=False):
+        st.json({
+            "score_semantics": result["score_semantics"],
+            "assumption_registry": result["assumption_registry"],
+        })
     st.download_button(
         "Download Scenario JSON",
         json.dumps(result, indent=2),

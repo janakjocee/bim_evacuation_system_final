@@ -109,5 +109,23 @@ def test_export_includes_fire_scenario_outputs():
     assert "smoke_spread" in result
     assert "aset_rset_results" in result
     assert "fds_skeleton" in result
+    assert result["hazard_priority_score"] == result["overall_risk_score"]
+    assert "retained for compatibility" in result["legacy_overall_risk_score_note"]
+    assert result["expert_review_recommendation"] == result["qualified_review_recommendation"]
+    assert result["score_semantics"]["direction"] == "higher_is_higher_screening_priority"
+    assert result["assumption_registry"]["calibration_status"] == "unvalidated_research_assumption"
+    assert all("calibration_status" in record for record in result["assumption_registry"]["records"])
     fds = engine.export_fds_skeleton(result)
     assert "FDS skeleton for expert completion" in fds
+
+
+def test_positive_fire_margin_is_not_labelled_safe():
+    engine = FireScenarioEngine()
+    scenario = next(s for s in engine.get_scenarios() if s["scenario_id"] == "WC01")
+    result = engine.run_fire_scenario(scenario)
+    classifications = {row["classification"] for row in result["aset_rset_results"]}
+
+    assert "safe margin" not in classifications
+    assert all("margin_interpretation" in row for row in result["aset_rset_results"])
+    assert all("aset_basis" in row for row in result["aset_rset_results"])
+    assert all("legacy_safety_margin_note" in row for row in result["aset_rset_results"])

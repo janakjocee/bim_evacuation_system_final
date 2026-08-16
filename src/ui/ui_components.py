@@ -13,6 +13,7 @@ from typing import List, Dict, Any, Optional
 
 from src.utils.helpers import RiskLevel, ComplianceStatus
 from src.scenario.scenario_generator import EvacuationScenario
+from src.utils.model_transparency import ACADEMIC_USE_NOTICE, screening_index_semantics
 
 
 def render_metric_card(title: str, value: str, subtitle: str = "", color: str = "#1f77b4"):
@@ -46,23 +47,23 @@ def get_risk_color(risk_level: RiskLevel) -> str:
 
 
 def get_risk_badge(risk_level: RiskLevel) -> str:
-    """Get styled risk badge HTML."""
+    """Get a styled screening-priority badge."""
     color = get_risk_color(risk_level)
     return (
         f'<span style="background:{color};color:white;padding:5px 12px;'
         f'border-radius:999px;font-size:.75rem;font-weight:700;text-transform:uppercase;">'
-        f'{risk_level.value}</span>'
+        f'{risk_level.value} priority</span>'
     )
 
 
 def get_compliance_badge(status: ComplianceStatus) -> str:
-    """Get styled compliance badge HTML."""
+    """Describe the outcome of implemented prototype checks without legal claims."""
     colors = {
-        ComplianceStatus.COMPLIANT: ("#28a745", "✓ Compliant"),
-        ComplianceStatus.NON_COMPLIANT: ("#dc3545", "✗ Non-Compliant"),
-        ComplianceStatus.PARTIAL: ("#ffc107", "◐ Partial"),
-        ComplianceStatus.REQUIRES_REVIEW: ("#17a2b8", "⚠ Requires Review"),
-        ComplianceStatus.INSUFFICIENT_DATA: ("#6f42c1", "◌ Insufficient Data"),
+        ComplianceStatus.COMPLIANT: ("#28a745", "✓ Checks Passed"),
+        ComplianceStatus.NON_COMPLIANT: ("#dc3545", "✗ Check Findings"),
+        ComplianceStatus.PARTIAL: ("#ffc107", "◐ Partial Checks"),
+        ComplianceStatus.REQUIRES_REVIEW: ("#17a2b8", "⚠ Review Required"),
+        ComplianceStatus.INSUFFICIENT_DATA: ("#6f42c1", "◌ Insufficient Evidence"),
         ComplianceStatus.UNKNOWN: ("#6c757d", "? Unknown"),
     }
     color, label = colors.get(status, ("#6c757d", "? Unknown"))
@@ -72,8 +73,20 @@ def get_compliance_badge(status: ComplianceStatus) -> str:
     )
 
 
+def get_check_outcome_label(status: ComplianceStatus) -> str:
+    """Return plain text for the implemented-check outcome."""
+    return {
+        ComplianceStatus.COMPLIANT: "Checks Passed",
+        ComplianceStatus.NON_COMPLIANT: "Check Findings",
+        ComplianceStatus.PARTIAL: "Partial Checks",
+        ComplianceStatus.REQUIRES_REVIEW: "Review Required",
+        ComplianceStatus.INSUFFICIENT_DATA: "Insufficient Evidence",
+        ComplianceStatus.UNKNOWN: "Unknown",
+    }.get(status, "Unknown")
+
+
 def create_risk_pie_chart(scenarios: List[EvacuationScenario]) -> go.Figure:
-    """Create risk distribution pie chart."""
+    """Create the backward-compatible screening-priority distribution chart."""
     risk_counts = {'low': 0, 'medium': 0, 'high': 0}
     for s in scenarios:
         risk_counts[s.risk_level.value] = risk_counts.get(s.risk_level.value, 0) + 1
@@ -85,7 +98,7 @@ def create_risk_pie_chart(scenarios: List[EvacuationScenario]) -> go.Figure:
     fig = px.pie(
         values=values,
         names=labels,
-        title="Risk Level Distribution",
+        title="Screening Priority Distribution",
         color=labels,
         color_discrete_map={
             'LOW': '#28a745',
@@ -104,13 +117,13 @@ def create_risk_pie_chart(scenarios: List[EvacuationScenario]) -> go.Figure:
 
 
 def create_scenario_bar_chart(scenarios: List[EvacuationScenario]) -> go.Figure:
-    """Create scenario confidence bar chart."""
+    """Compare evidence confidence with the implemented-check pass rate."""
     df = pd.DataFrame([
         {
             'Scenario': f"#{i+1}: " + (s.name[:25] + '...' if len(s.name) > 25 else s.name),
-            'Confidence': s.confidence_score * 100,
-            'Compliance': s.compliance_score * 100,
-            'Risk': s.risk_level.value
+            'Evidence Confidence': s.confidence_score * 100,
+            'Implemented Checks Passed': s.compliance_score * 100,
+            'Screening Priority': s.risk_level.value,
         }
         for i, s in enumerate(scenarios)
     ])
@@ -118,10 +131,13 @@ def create_scenario_bar_chart(scenarios: List[EvacuationScenario]) -> go.Figure:
     fig = px.bar(
         df,
         x='Scenario',
-        y=['Confidence', 'Compliance'],
+        y=['Evidence Confidence', 'Implemented Checks Passed'],
         barmode='group',
-        title="Scenario Confidence vs Compliance Scores",
-        color_discrete_map={'Confidence': '#1f77b4', 'Compliance': '#ff7f0e'}
+        title="Evidence Confidence vs Implemented Checks Passed",
+        color_discrete_map={
+            'Evidence Confidence': '#1f77b4',
+            'Implemented Checks Passed': '#ff7f0e',
+        },
     )
     fig.update_layout(
         xaxis_tickangle=-45,
@@ -316,23 +332,23 @@ def create_network_graph_viz(building_data) -> go.Figure:
 
 
 def create_risk_heatmap(scenarios: List[EvacuationScenario]) -> go.Figure:
-    """Create risk heatmap for scenarios."""
+    """Create a 0-3 screening-indicator heatmap for scenarios."""
     data = []
     for i, s in enumerate(scenarios):
         risk_value = {'low': 1, 'medium': 2, 'high': 3}.get(s.risk_level.value, 0)
         data.append({
             'Scenario': f"#{i+1}: " + (s.name[:15] + '...' if len(s.name) > 15 else s.name),
-            'Distance Risk': min(s.evacuation_route.distance / 45, 3),
-            'Time Risk': min(s.evacuation_route.estimated_time / 150, 3),
-            'Compliance Risk': (1 - s.compliance_score) * 3,
-            'Overall Risk': risk_value
+            'Distance Indicator': min(s.evacuation_route.distance / 45, 1) * 3,
+            'Time Indicator': min(s.evacuation_route.estimated_time / 150, 1) * 3,
+            'Check-Finding Indicator': (1 - s.compliance_score) * 3,
+            'Overall Priority': risk_value,
         })
     
     df = pd.DataFrame(data)
     
     fig = px.imshow(
         df.set_index('Scenario').T,
-        title="Risk Factor Heatmap",
+        title="Screening Indicator Heatmap",
         color_continuous_scale=['#28a745', '#ffc107', '#dc3545'],
         aspect='auto'
     )
@@ -370,10 +386,10 @@ def render_scenario_card(scenario: EvacuationScenario, index: int):
                 <h4 style="margin: 0; color: var(--app-heading, #333);">#{index + 1} {html.escape(str(scenario.name))}</h4>
                 <div>
                     <span style="background-color: {risk_color}; color: white; padding: 4px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; margin-right: 8px;">
-                        {scenario.risk_level.value.upper()}
+                        {scenario.risk_level.value.upper()} PRIORITY
                     </span>
                     <span style="background-color: {compliance_color}; color: white; padding: 4px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">
-                        {scenario.compliance_status.value}
+                        {get_check_outcome_label(scenario.compliance_status)}
                     </span>
                 </div>
             </div>
@@ -387,9 +403,9 @@ def render_scenario_card(scenario: EvacuationScenario, index: int):
         with col2:
             st.metric("Time", f"{scenario.evacuation_route.estimated_time:.1f}s")
         with col3:
-            st.metric("Compliance", f"{scenario.compliance_score * 100:.0f}%")
+            st.metric("Checks Passed", f"{scenario.compliance_score * 100:.0f}%")
         with col4:
-            st.metric("Confidence", f"{scenario.confidence_score * 100:.0f}%")
+            st.metric("Evidence Confidence", f"{scenario.confidence_score * 100:.0f}%")
 
 
 def render_explanation_panel(scenario: EvacuationScenario):
@@ -400,9 +416,9 @@ def render_explanation_panel(scenario: EvacuationScenario):
     steps = [
         f"1. **Origin Analysis**: Selected '{scenario.origin_space_name}' as origin point",
         f"2. **Route Calculation**: Computed shortest path to nearest exit ({scenario.evacuation_route.distance:.1f}m)",
-        f"3. **Compliance Check**: Validated against {len(scenario.violated_regulations) + 2} regulatory constraints",
-        f"4. **Risk Assessment**: Classified as **{scenario.risk_level.value.upper()}** risk based on travel distance and compliance",
-        f"5. **Confidence Score**: {scenario.confidence_score * 100:.1f}% based on route feasibility and regulation coverage"
+        f"3. **Implemented Checks**: Evaluated {len(scenario.violated_regulations) + 2} prototype constraints",
+        f"4. **Screening Priority**: Classified as **{scenario.risk_level.value.upper()}** using the full deterministic factor set",
+        f"5. **Evidence Confidence**: {scenario.confidence_score * 100:.1f}% based on IFC measurement and route-source quality"
     ]
     
     for step in steps:
@@ -420,11 +436,11 @@ def render_explanation_panel(scenario: EvacuationScenario):
     
     # Regulation Triggers
     if scenario.violated_regulations:
-        st.markdown("### ⚠️ Triggered Regulations")
+        st.markdown("### ⚠️ Prototype Check Findings")
         for reg in scenario.violated_regulations:
-            st.error(f"**{reg}**: This constraint was violated, contributing to risk classification")
+            st.error(f"**{reg}**: This finding contributed to the screening-priority classification")
     else:
-        st.success("✓ All regulatory constraints satisfied")
+        st.info("No conflict was detected by the active prototype checks. This does not establish statutory compliance or fire safety.")
     
     # Natural Language Explanation
     st.markdown("### 📝 Natural Language Explanation")
@@ -433,7 +449,7 @@ def render_explanation_panel(scenario: EvacuationScenario):
 
 def render_expert_review_controls(scenario: EvacuationScenario, scenario_id: str):
     """Render expert review controls for a scenario."""
-    st.markdown("### 👤 Expert Review")
+    st.markdown("### 👤 Research Review Record")
     
     # Review status
     review_key = f"review_status_{scenario_id}"
@@ -449,16 +465,16 @@ def render_expert_review_controls(scenario: EvacuationScenario, scenario_id: str
     with col1:
         status = st.radio(
             "Decision",
-            options=["Not Reviewed", "✓ Approved", "⚠ Needs Revision", "✗ Rejected"],
+            options=["Not Reviewed", "✓ Accepted for research follow-up", "⚠ Needs Revision", "✗ Rejected"],
             key=review_key,
             index=0 if st.session_state[review_key] == "Not Reviewed" else 
-                  ["Not Reviewed", "✓ Approved", "⚠ Needs Revision", "✗ Rejected"].index(st.session_state[review_key])
+                  ["Not Reviewed", "✓ Accepted for research follow-up", "⚠ Needs Revision", "✗ Rejected"].index(st.session_state[review_key])
         )
     
     with col2:
         comments = st.text_area(
             "Review Comments",
-            placeholder="Enter engineering assessment, concerns, or recommendations...",
+            placeholder="Record research assessment, evidence concerns, or recommended follow-up...",
             key=comments_key,
             value=st.session_state[comments_key]
         )
@@ -491,18 +507,20 @@ def create_export_summary(scenarios: List[EvacuationScenario], building_name: st
     avg_confidence = sum(s.confidence_score for s in scenarios) / len(scenarios) if scenarios else 0
     
     return {
-        "report_title": "BIM Evacuation Fire Strategy Report",
+        "report_title": "BIM Evacuation Screening Evidence Report",
+        "report_type": "research_screening_evidence_not_approval",
+        "academic_use_notice": ACADEMIC_USE_NOTICE,
+        "score_semantics": screening_index_semantics(),
         "generated_for": building_name,
         "total_scenarios": len(scenarios),
-        "risk_distribution": risk_counts,
-        "total_regulatory_violations": total_violations,
-        "average_compliance_score": round(avg_compliance, 3),
-        "average_confidence_score": round(avg_confidence, 3),
+        "screening_priority_distribution": risk_counts,
+        "total_prototype_check_findings": total_violations,
+        "average_implemented_checks_passed": round(avg_compliance, 3),
+        "average_evidence_confidence": round(avg_confidence, 3),
         "executive_summary": f"""
             This report presents {len(scenarios)} evacuation scenarios generated from BIM analysis.
-            Risk Distribution: {risk_counts.get('low', 0)} Low, {risk_counts.get('medium', 0)} Medium, {risk_counts.get('high', 0)} High.
-            Average Compliance: {avg_compliance * 100:.1f}%. Average Confidence: {avg_confidence * 100:.1f}%.
-            {"All scenarios require engineering review." if risk_counts.get('high', 0) > 0 else "Scenarios meet basic safety requirements."}
+            Screening-Priority Distribution: {risk_counts.get('low', 0)} Low, {risk_counts.get('medium', 0)} Medium, {risk_counts.get('high', 0)} High.
+            Average Implemented Checks Passed: {avg_compliance * 100:.1f}%. Average Evidence Confidence: {avg_confidence * 100:.1f}%.
+            All scenarios require qualified review. A lower screening priority or the absence of detected conflicts does not establish safety or statutory compliance.
         """,
-        "scenarios": [s.to_dict() for s in scenarios]
     }
