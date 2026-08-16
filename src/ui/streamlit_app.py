@@ -33,7 +33,7 @@ from src.bim_processing.ifc_validation import SUPPORTED_SCHEMA_LABEL
 from src.nlp.document_loader import RegulationDocumentError, extract_regulation_text
 from src.scenario.ifc_dataset_exporter import building_to_worst_case_dataset
 from src.utils.logger import get_logger
-from src.utils.helpers import RiskLevel, ComplianceStatus, sha256_file
+from src.utils.helpers import RiskLevel, ComplianceStatus
 from src.ui.ui_components import (
     render_metric_card, get_risk_color, get_risk_badge, get_compliance_badge,
     create_risk_pie_chart, create_scenario_bar_chart, create_route_comparison_chart,
@@ -735,7 +735,7 @@ def process_files(ifc_file, regulation_file, regulation_metadata, max_scenarios,
                 st.session_state['regulation_text'] = regulation_text
                 regulation_document = {
                     "name": safe_uploaded_filename(regulation_file.name, "regulation_document"),
-                    "sha256": sha256_file(regulation_path),
+                    "sha256": hashlib.sha256(regulation_file.getbuffer()).hexdigest(),
                     "file_type": Path(regulation_file.name).suffix.lower().lstrip("."),
                     **(regulation_metadata or {}),
                 }
