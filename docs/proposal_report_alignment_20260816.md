@@ -7,7 +7,7 @@ Inputs reviewed:
 - approved project proposal `PgProposalTemplate.docx`;
 - final report draft `msc final report .pdf` (71 PDF pages);
 - `MScProject_Marking Scheme 2025_26.docx`;
-- repository `main` at `5975962` plus the audit changes described here;
+- repository `main` at merge commit `503aac4` (PR 18);
 - executable tests, a practical Montebello run and the 23-path IFC corpus.
 
 ## Final Decision
@@ -61,7 +61,8 @@ precise.
 |---|---|---|
 | Full pytest suite with real Montebello IFC | 104 passed, 0 failed, 0 skipped | Current automated behaviour is regression-tested. |
 | Coverage | 79.1% line coverage (3,831/4,841 statements) | Good prototype coverage; optional retrieval and parser error/variation branches need more tests. |
-| GitHub Actions | Latest `main` smoke test passed at `5975962` | The checked-in deployment smoke workflow is green. |
+| GitHub Actions | `main` smoke test passed at `503aac4` | The checked-in deployment smoke workflow is green. |
+| Hosted Streamlit access | `/` and `/_stcore/health` redirect unauthenticated clients to Streamlit login | Deployment is authentication-gated; this is not evidence of public availability or an app crash. |
 | Montebello IFC2X3 | 8/8 workflow gates; 16 geometry proxies, 17 inferred connectors, 2 inferred exits, 16 scenarios | Operationally processable, but exploratory because room/door topology is absent. |
 | Regulation text | 15 clauses, 10 candidate rules, 3 supported uploaded thresholds applied | Unsupported candidates are reported rather than silently treated as law. |
 | Corpus by input path | 18 partial, 5 fail, 0 strict pass | Same path-level result as the report. |
@@ -135,21 +136,23 @@ cannot honestly replace missing external engineering validation.
 ## Recommended Demo Sequence
 
 1. State the boundary: decision-support screening, not certification.
-2. Upload the full Duplex or Clinic IFC to show semantic spaces/doors and honest
+2. Sign in to Streamlit before the review and keep the tested local command as
+   a fallback because the hosted app is authentication-gated.
+3. Upload the full Duplex or Clinic IFC to show semantic spaces/doors and honest
    disconnected-route diagnostics.
-3. Upload Montebello to demonstrate safe degradation; point out that geometry
+4. Upload Montebello to demonstrate safe degradation; point out that geometry
    proxies and exits are visibly labelled inferred.
-4. Upload the selected regulation file; show extracted, supported, applied and
+5. Upload the selected regulation file; show extracted, supported, applied and
    unsupported rule counts and one rule's source text.
-5. Open Scenario View Details; explain route evidence, assumptions, score
+6. Open Scenario View Details; explain route evidence, assumptions, score
    direction and confidence ceiling.
-6. Apply a manual correction, regenerate and show the recorded before/after
+7. Apply a manual correction, regenerate and show the recorded before/after
    review information.
-7. Download JSON, CSV, XML and the IFC-derived fire dataset, then reconcile one
+8. Download JSON, CSV, XML and the IFC-derived fire dataset, then reconcile one
    scenario ID and source hash across exports.
-8. Open Fire Scenario Testing and Worst Case Testing; explain ASET/RSET and
+9. Open Fire Scenario Testing and Worst Case Testing; explain ASET/RSET and
    comparative ranking assumptions without calling either a certified model.
-9. Finish with the 23-path/16-payload matrix and the remaining validation plan.
+10. Finish with the 23-path/16-payload matrix and the remaining validation plan.
 
 ## Concise Viva Answers
 
