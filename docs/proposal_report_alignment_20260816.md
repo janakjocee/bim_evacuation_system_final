@@ -7,7 +7,7 @@ Inputs reviewed:
 - approved project proposal `PgProposalTemplate.docx`;
 - final report draft `msc final report .pdf` (71 PDF pages);
 - `MScProject_Marking Scheme 2025_26.docx`;
-- repository state starting from `main` commit `67aeaad` (PR 25);
+- repository `main` through PR 26 (`486c487`);
 - executable tests, a practical Montebello run and the 23-path IFC corpus.
 
 ## Final Decision
@@ -97,7 +97,7 @@ retrieval" is more precise than autonomous RAG.
 | Regulation retrieval | Practical TF-IDF Recall@1 0.8421, Recall@3 0.9474, MRR 0.9000 | Bounded source-aware benchmark supports TF-IDF; relevance labels require author review. |
 | Scenario benchmark | 6/6 cases pass twice with identical normalized outcomes | Deterministic expected behavior is repeatable, not physically calibrated. |
 | Coverage | 85.44% line coverage for the production `src/` package (4,396/5,145 statements; 85% displayed) | Good prototype coverage; standalone scripts, external format variation and optional embedding error paths remain residual risk. |
-| GitHub Actions | `main` workflow passed through PR 25 (`67aeaad`) | The checked-in deployment smoke workflow is green. |
+| GitHub Actions | PR 26 and post-merge `main` workflow passed at `486c487` | The checked-in deployment smoke workflow is green. |
 | Hosted Streamlit access | `/` and `/_stcore/health` redirect unauthenticated clients to Streamlit login | Deployment is authentication-gated; this is not evidence of public availability or an app crash. |
 | Montebello IFC2X3 | 8/8 workflow gates; 16 geometry proxies, 17 inferred connectors, 2 inferred exits, 16 scenarios | Operationally processable, but exploratory because room/door topology is absent. |
 | Regulation text | 15 clauses, 10 candidate rules, 3 supported uploaded thresholds applied | Unsupported candidates are reported rather than silently treated as law. |
