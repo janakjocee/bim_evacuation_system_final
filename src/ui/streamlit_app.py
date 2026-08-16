@@ -27,7 +27,7 @@ import tempfile
 import time
 from typing import List, Dict, Any, Optional
 
-from src import PROJECT_SUBTITLE, PROJECT_TITLE
+import src as project_package
 from src.pipeline.evacuation_pipeline import EvacuationPipeline, PipelineResult
 from src.pipeline.manual_corrections import apply_manual_corrections
 from src.bim_processing.ifc_validation import SUPPORTED_SCHEMA_LABEL
@@ -56,6 +56,20 @@ from src.utils.model_transparency import (
     ACADEMIC_USE_NOTICE,
     screening_index_semantics,
     standard_assumption_registry,
+)
+
+# Streamlit Cloud can keep the already-imported package object during a hot
+# redeploy. Fall back to the approved title when that object predates the
+# metadata constants added to src/__init__.py.
+PROJECT_TITLE = getattr(
+    project_package,
+    "PROJECT_TITLE",
+    "AI-Driven Generation of Evacuation Scenarios from Building Information Models",
+)
+PROJECT_SUBTITLE = getattr(
+    project_package,
+    "PROJECT_SUBTITLE",
+    "AI-Assisted Research Prototype: Deterministic IFC/Graph Analysis + NLP Evidence Retrieval",
 )
 
 # ==============================================================================

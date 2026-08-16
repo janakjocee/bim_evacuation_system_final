@@ -4,6 +4,8 @@ from pathlib import Path
 
 from streamlit.testing.v1 import AppTest
 
+import src
+
 
 def test_deployed_pages_are_self_contained_inside_src():
     repo_root = Path(__file__).resolve().parents[1]
@@ -26,3 +28,16 @@ def test_legacy_page_entrypoints_delegate_without_errors():
     ):
         app = AppTest.from_file(str(page), default_timeout=30).run(timeout=30)
         assert not app.exception, [exception.value for exception in app.exception]
+
+
+def test_main_page_survives_stale_streamlit_cloud_package(monkeypatch):
+    """A hot-deployed worker may retain src from before metadata was added."""
+    monkeypatch.delattr(src, "PROJECT_TITLE")
+    monkeypatch.delattr(src, "PROJECT_SUBTITLE")
+
+    page = Path(__file__).resolve().parents[1] / "src/ui/streamlit_app.py"
+    app = AppTest.from_file(str(page), default_timeout=30).run(timeout=30)
+
+    assert not app.exception, [exception.value for exception in app.exception]
+    markup = "\n".join(str(element.value) for element in app.markdown)
+    assert "AI-Driven Generation of Evacuation Scenarios" in markup
