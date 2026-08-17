@@ -73,8 +73,8 @@ def test_analysis_ui_acknowledges_click_before_loading_pipeline():
 
     assert "on_click=queue_analysis_request" in source
     assert 'analysis_ui_state = "processing"' in source
-    assert 'st.status("Analysis request received"' in process_source
-    assert process_source.index('st.status("Analysis request received"') < process_source.index(
+    assert "Analysis request received · reference {run_id}" in process_source
+    assert process_source.index("Analysis request received · reference {run_id}") < process_source.index(
         "from src.pipeline.evacuation_pipeline import EvacuationPipeline"
     )
     assert "analysis-state--{control['variant']}" in source
@@ -192,9 +192,20 @@ def test_uploader_supports_compressed_ifc_and_regulation_provenance():
 
     assert "type=['ifc', 'ifczip']" in source
     assert "from src.utils.helpers import RiskLevel, ComplianceStatus, sha256_file" not in source
-    assert "hashlib.sha256(regulation_file.getbuffer()).hexdigest()" in source
+    assert '"sha256": stored_regulation.sha256' in source
+    assert "persist_uploaded_file" in source
+    assert "MAX_REGULATION_UPLOAD_BYTES" in source
     assert "inside an IFCZIP are limited to 200 MB" in source
     assert "512 MB" not in source
     assert "Regulation source provenance" in source
+
+
+def test_regulation_ui_separates_applied_deferred_and_unsupported_rules():
+    source = (Path(__file__).resolve().parents[1] / "src/ui/streamlit_app.py").read_text()
+
+    assert "Applied Uploaded Thresholds" in source
+    assert "Deferred for Context" in source
+    assert "Extracted but awaiting applicability evidence" in source
+    assert "context_deferred_rules" in source
     assert "user_declared_not_legally_validated" in source
     assert "does not determine legal applicability" in source
