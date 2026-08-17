@@ -95,8 +95,11 @@ connectivity or from geometry-derived screening.
 
 The submission terminology, score directions, assumptions and validation
 boundary are consolidated in [`docs/submission_claim_boundary.md`](docs/submission_claim_boundary.md).
-The final executable evidence is summarized in
-[`docs/submission_readiness_20260816.md`](docs/submission_readiness_20260816.md).
+The current executable, security, compatibility and deployment evidence is
+summarized in
+[`docs/final_audit_20260817.md`](docs/final_audit_20260817.md). The earlier
+[`docs/submission_readiness_20260816.md`](docs/submission_readiness_20260816.md)
+is retained as a dated historical snapshot.
 The new controlled, ML, retrieval and scenario results are summarized in
 [`docs/research_evaluation_results_20260816.md`](docs/research_evaluation_results_20260816.md).
 
@@ -292,12 +295,18 @@ The practical feature benchmark and researched future-work boundary is documente
 docs/practical_benchmark.md
 ```
 
-The final 8 August release-hardening pass, 23-file compatibility matrix,
-regulation evidence, executable UI tests and viva/review talking points are
-documented in:
+The historical 8 August release-hardening pass and 23-path compatibility
+snapshot are documented in:
 
 ```text
 docs/final_completion_report.md
+```
+
+The current 17 August verification supersedes historical test totals and local
+folder counts while retaining those reports for traceability:
+
+```text
+docs/final_audit_20260817.md
 ```
 
 The proposal, marking-scheme and final-report claim audit is documented in:

@@ -1,8 +1,9 @@
 # Local IFC Validation Matrix
 
 > Historical 28 June matrix. See
-> [`submission_readiness_20260816.md`](submission_readiness_20260816.md) for the
-> current 23-file rerun and 103-test submission evidence.
+> [`final_audit_20260817.md`](final_audit_20260817.md) for the current executable
+> verification and an explanation of how the historical 23-path evidence differs
+> from the seven entries currently present in the local public-file folder.
 
 Validation date: 28 June 2026
 
