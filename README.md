@@ -238,8 +238,29 @@ and errors.
 Generate the full practical compatibility matrix from local test IFCs:
 
 ```bash
+python scripts/recover_public_ifc_fixtures.py --output-dir data/test_ifc
 python scripts/batch_ifc_diagnostics.py --input data/test_ifc --output outputs/ifc_diagnostics
 ```
+
+The recovery command downloads three public buildingSMART community fixtures
+that are intentionally excluded from Git, then verifies their pinned byte count,
+SHA-256 digest, HTTPS source host and IFC STEP header before an atomic rename.
+An unrelated local file is never overwritten unless `--overwrite` is supplied.
+
+### Deployment safeguards
+
+- IFC/IFCZIP uploads are capped at 200 MiB; regulation documents are capped at
+  25 MiB and extracted text is bounded.
+- Uploads are streamed to a per-run temporary workspace, hashed, atomically
+  persisted and removed after processing.
+- Conditional regulation values remain deferred unless the checker can evaluate
+  their applicability context; extracted does not automatically mean applied.
+- User-facing failures include an opaque run reference while technical traces
+  remain in server logs.
+- The Docker image runs as a non-root user. The production Compose service uses
+  a read-only root filesystem, dropped capabilities and a bounded `/tmp` tmpfs.
+- CI enforces 80% source coverage, medium/high Bandit scanning and a runtime
+  dependency vulnerability audit.
 
 This writes:
 
