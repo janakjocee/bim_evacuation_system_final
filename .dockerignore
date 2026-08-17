@@ -1,6 +1,7 @@
 # Git
 .git
 .gitignore
+.github
 
 # Python
 __pycache__
@@ -55,6 +56,13 @@ htmlcov/
 
 # Documentation
 docs/_build/
+
+# Local development and evidence artifacts
+attachments/
+notebooks/
+evaluation/
+*.pdf
+*.docx
 
 # OS
 .DS_Store
