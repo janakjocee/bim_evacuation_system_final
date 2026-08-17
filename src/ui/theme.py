@@ -7,6 +7,11 @@ import streamlit as st
 PRIMARY = "#0B5F6B"
 PRIMARY_STRONG = "#084C57"
 ACCENT = "#175CD3"
+# Safety colours are used semantically: red for danger/failure, amber for
+# caution, blue for active processing, and green for safe/ready conditions.
+FIRE_RED = "#B42318"
+CAUTION_AMBER = "#B54708"
+ESCAPE_GREEN = "#147A50"
 RISK_COLORS = {
     "low": "#147A50",
     "medium": "#8A4B08",
@@ -43,6 +48,10 @@ APP_CSS = """
         --app-status-pass: #147A50;
         --app-status-fail: #B42318;
         --app-status-warn: #8A4B08;
+        --app-fire-red: #B42318;
+        --app-caution: #B54708;
+        --app-escape-green: #147A50;
+        --app-processing-blue: #175CD3;
         --app-shadow: 0 10px 30px rgba(16, 42, 67, .08);
         --app-shadow-hover: 0 16px 40px rgba(16, 42, 67, .14);
     }
@@ -52,15 +61,20 @@ APP_CSS = """
         background: var(--app-background);
         color: var(--app-text);
     }
+    .stApp *,
+    .stApp *::before,
+    .stApp *::after {
+        box-sizing: border-box;
+    }
     [data-testid="stAppViewContainer"] > .main {
         background-image:
             radial-gradient(circle at 92% 0%, rgba(11, 95, 107, .07), transparent 22rem),
             radial-gradient(circle at 5% 35%, rgba(23, 92, 211, .045), transparent 26rem);
     }
     .block-container {
+        width: min(100%, 1480px);
         max-width: 1480px;
-        padding-top: 1.75rem;
-        padding-bottom: 4rem;
+        padding: clamp(1rem, 2vw, 1.75rem) clamp(.85rem, 2vw, 2rem) 4rem;
     }
     .stApp p,
     .stApp li,
@@ -87,6 +101,9 @@ APP_CSS = """
         background:
             linear-gradient(135deg, color-mix(in srgb, var(--app-brand) 9%, var(--app-panel-strong)), var(--app-panel-strong) 68%);
         box-shadow: var(--app-shadow);
+    }
+    .st-key-app-header [data-testid="stHorizontalBlock"] {
+        align-items: stretch;
     }
     .app-hero::after {
         content: "";
@@ -281,6 +298,21 @@ APP_CSS = """
         border-color: var(--app-brand-strong) !important;
         background: var(--app-brand-strong) !important;
     }
+    .st-key-analysis-action-ready [data-testid="stBaseButton-primary"] {
+        border-color: var(--app-escape-green) !important;
+        background: var(--app-escape-green) !important;
+        box-shadow: 0 7px 18px color-mix(in srgb, var(--app-escape-green) 24%, transparent);
+    }
+    .st-key-analysis-action-ready [data-testid="stBaseButton-primary"]:hover {
+        border-color: color-mix(in srgb, var(--app-escape-green) 78%, #000000) !important;
+        background: color-mix(in srgb, var(--app-escape-green) 86%, #000000) !important;
+    }
+    .st-key-analysis-action-processing button:disabled {
+        border-color: var(--app-processing-blue) !important;
+        background: var(--app-processing-blue) !important;
+        color: #ffffff !important;
+        opacity: 1 !important;
+    }
     :where(button, a, input, textarea, [role="tab"], [role="checkbox"], [role="radio"]):focus-visible {
         outline: 3px solid color-mix(in srgb, #2E90FA 75%, var(--app-background));
         outline-offset: 2px;
@@ -314,7 +346,101 @@ APP_CSS = """
         border: 1.5px dashed color-mix(in srgb, var(--app-brand) 62%, var(--app-border));
         border-radius: 14px;
         background: color-mix(in srgb, var(--app-brand) 6%, var(--app-panel-strong));
+        transition: border-color .15s ease, background-color .15s ease, box-shadow .15s ease;
     }
+    [data-testid="stFileUploaderDropzone"]:hover,
+    [data-testid="stFileUploaderDropzone"]:focus-within {
+        border-color: var(--app-brand);
+        background: color-mix(in srgb, var(--app-brand) 10%, var(--app-panel-strong));
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-brand) 14%, transparent);
+    }
+    [data-testid="stFileUploaderDropzone"] small {
+        color: var(--app-muted) !important;
+    }
+    .upload-receipt {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: .65rem;
+        align-items: center;
+        margin: .55rem 0 .15rem;
+        padding: .7rem .75rem;
+        border: 1px solid color-mix(in srgb, var(--upload-accent) 42%, var(--app-border));
+        border-left: 4px solid var(--upload-accent);
+        border-radius: 11px;
+        background: color-mix(in srgb, var(--upload-accent) 8%, var(--app-panel-strong));
+    }
+    .upload-receipt--ready { --upload-accent: var(--app-escape-green); }
+    .upload-receipt--evidence { --upload-accent: var(--app-processing-blue); }
+    .upload-receipt__mark {
+        display: grid;
+        width: 1.65rem;
+        height: 1.65rem;
+        place-items: center;
+        border-radius: 50%;
+        background: var(--upload-accent);
+        color: #ffffff;
+        font-size: .78rem;
+        font-weight: 900;
+    }
+    .upload-receipt strong,
+    .upload-receipt small {
+        display: block;
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+    .upload-receipt strong { color: var(--app-heading); font-size: .82rem; }
+    .upload-receipt small { margin-top: .08rem; color: var(--app-muted); font-size: .72rem; }
+
+    .analysis-state {
+        --analysis-accent: var(--app-caution);
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: .7rem;
+        align-items: start;
+        margin: .45rem 0 .7rem;
+        padding: .78rem;
+        border: 1px solid color-mix(in srgb, var(--analysis-accent) 45%, var(--app-border));
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--analysis-accent) 9%, var(--app-panel-strong));
+    }
+    .analysis-state--waiting { --analysis-accent: var(--app-caution); }
+    .analysis-state--ready,
+    .analysis-state--complete { --analysis-accent: var(--app-escape-green); }
+    .analysis-state--processing { --analysis-accent: var(--app-processing-blue); }
+    .analysis-state--error { --analysis-accent: var(--app-fire-red); }
+    .analysis-state__indicator {
+        width: .78rem;
+        height: .78rem;
+        margin-top: .22rem;
+        border: 3px solid var(--analysis-accent);
+        border-radius: 50%;
+        background: var(--app-panel-strong);
+    }
+    .analysis-state--ready .analysis-state__indicator,
+    .analysis-state--complete .analysis-state__indicator {
+        background: var(--analysis-accent);
+        box-shadow: 0 0 0 4px color-mix(in srgb, var(--analysis-accent) 14%, transparent);
+    }
+    .analysis-state--processing .analysis-state__indicator {
+        border-top-color: transparent;
+        animation: analysis-spin .8s linear infinite;
+    }
+    .analysis-state--error .analysis-state__indicator {
+        background: var(--analysis-accent);
+    }
+    .analysis-state strong {
+        display: block;
+        color: var(--app-heading);
+        font-size: .84rem;
+        line-height: 1.3;
+    }
+    .analysis-state p {
+        margin: .15rem 0 0;
+        color: var(--app-muted) !important;
+        font-size: .75rem;
+        line-height: 1.4;
+    }
+    @keyframes analysis-spin { to { transform: rotate(360deg); } }
 
     [data-testid="stMetric"] {
         min-height: 106px;
@@ -429,13 +555,30 @@ APP_CSS = """
         .workflow-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .hero-author { margin-top: .35rem; }
     }
+    @media (max-width: 900px) {
+        .st-key-app-header [data-testid="stHorizontalBlock"] {
+            flex-direction: column;
+        }
+        .st-key-app-header [data-testid="column"] {
+            width: 100% !important;
+            flex: 1 1 auto !important;
+        }
+        .stTabs [data-baseweb="tab"] {
+            min-height: 2.35rem;
+            padding: .48rem .7rem;
+            font-size: .82rem;
+        }
+    }
     @media (max-width: 700px) {
-        .block-container { padding: 1rem .85rem 3rem; }
+        .block-container { width: 100%; padding: 1rem .7rem 3rem; }
         .app-hero, .hero-author, .welcome-hero { border-radius: 14px; }
+        .app-hero { padding: 1.1rem; }
+        .main-title { font-size: clamp(1.45rem, 7vw, 1.85rem); }
         .workflow-grid { grid-template-columns: 1fr; }
         .workflow-step { min-height: auto; }
         .stTabs [data-baseweb="tab"] { padding: .5rem .72rem; font-size: .82rem; }
         .scenario-card, .scenario-detail-card { padding: .9rem; }
+        [data-testid="stMetricValue"] { font-size: 1.55rem; }
     }
     @media (prefers-reduced-motion: reduce) {
         *, *::before, *::after {

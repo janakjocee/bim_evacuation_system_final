@@ -3,6 +3,8 @@
 from pathlib import Path
 
 from src.ui.accessibility import palette_contrast_report
+from src.ui.streamlit_app import analysis_control_state
+from src.ui.theme import APP_CSS
 
 
 def test_scenario_details_use_stable_inspection_workspace():
@@ -46,6 +48,51 @@ def test_custom_motion_respects_reduced_motion_preference():
 
     assert "@media (prefers-reduced-motion: reduce)" in source
     assert "transition-duration: .01ms !important" in source
+
+
+def test_analysis_control_has_clear_waiting_ready_processing_and_retry_states():
+    waiting = analysis_control_state(False, "ready")
+    ready = analysis_control_state(True, "ready")
+    processing = analysis_control_state(True, "processing")
+    complete = analysis_control_state(True, "complete")
+    error = analysis_control_state(True, "error")
+
+    assert waiting["disabled"] is True
+    assert waiting["button_label"] == "Upload IFC to enable analysis"
+    assert ready["disabled"] is False
+    assert ready["variant"] == "ready"
+    assert processing["disabled"] is True
+    assert processing["button_label"] == "Analysis in progress..."
+    assert complete["button_label"] == "Run Analysis Again"
+    assert error["button_label"] == "Retry Analysis"
+
+
+def test_analysis_ui_acknowledges_click_before_loading_pipeline():
+    source = (Path(__file__).resolve().parents[1] / "src/ui/streamlit_app.py").read_text()
+    process_source = source[source.index("def process_files"):source.index("def render_dashboard")]
+
+    assert "on_click=queue_analysis_request" in source
+    assert 'analysis_ui_state = "processing"' in source
+    assert 'st.status("Analysis request received"' in process_source
+    assert process_source.index('st.status("Analysis request received"') < process_source.index(
+        "from src.pipeline.evacuation_pipeline import EvacuationPipeline"
+    )
+    assert "analysis-state--{control['variant']}" in source
+    assert 'aria-live="polite"' in source
+    assert "st.rerun()" in source[source.index("def main"):]
+
+
+def test_theme_uses_semantic_safety_states_and_compact_responsive_layout():
+    source = (Path(__file__).resolve().parents[1] / "src/ui/theme.py").read_text()
+
+    assert "--app-fire-red: #B42318" in source
+    assert "--app-caution: #B54708" in source
+    assert "--app-escape-green: #147A50" in source
+    assert ".analysis-state--processing" in source
+    assert ".st-key-analysis-action-ready" in source
+    assert ".st-key-app-header" in source
+    assert "width: min(100%, 1480px)" in source
+    assert APP_CSS.count("{") == APP_CSS.count("}")
 
 
 def test_submission_theme_is_shared_by_every_streamlit_entrypoint():
