@@ -107,6 +107,24 @@ def test_ifczip_runs_the_same_real_ifc_pipeline(tmp_path):
     assert discover_ifcs([str(tmp_path)]) == [ifc_path.resolve(), archive_path.resolve()]
 
 
+def test_practical_verifier_reports_context_deferred_regulation_rules(tmp_path):
+    ifc_path = build_controlled_ifc(tmp_path / "controlled.ifc")
+    regulations = tmp_path / "regulations.txt"
+    regulations.write_text(
+        "2.1 Travel distance must not exceed 30 metres.\n"
+        "2.2 The minimum exit width needed for 240 people is 1200mm.\n",
+        encoding="utf-8",
+    )
+
+    report = verify(ifc_path, regulations, tmp_path / "verification", max_scenarios=2)
+
+    assert report["regulations"]["active_uploaded_threshold_count"] == 1
+    assert report["regulations"]["context_deferred_rule_count"] == 1
+    deferred = report["regulations"]["context_deferred_rules"][0]
+    assert deferred["metric"] == "min_exit_width"
+    assert deferred["condition"] == "occupants_context:240"
+
+
 def test_ifczip_uncompressed_payload_uses_streamlit_200_mb_limit():
     assert MAX_IFCZIP_UNCOMPRESSED_BYTES == 200 * 1024 * 1024
 

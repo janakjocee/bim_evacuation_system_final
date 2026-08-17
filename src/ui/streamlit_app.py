@@ -18,11 +18,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import streamlit as st
 import pandas as pd
 import copy
-import hashlib
 import html
 import json
 import plotly.express as px
 import plotly.graph_objects as go
+import secrets
 import tempfile
 import time
 from typing import List, Dict, Any, Optional
@@ -40,6 +40,15 @@ from src.ui.ui_components import (
 )
 from src.ui.visualization_3d import create_ifc_3d_figure, create_ifc_plan_figure
 from src.ui.export_helpers import build_scenarios_csv, build_scenarios_xml, safe_uploaded_filename
+from src.ui.upload_security import (
+    IFC_SUFFIXES,
+    MAX_IFC_UPLOAD_BYTES,
+    MAX_REGULATION_UPLOAD_BYTES,
+    REGULATION_SUFFIXES,
+    UploadValidationError,
+    persist_uploaded_file,
+    validate_upload_metadata,
+)
 from src.evaluation.expert_review import RATING_FIELDS, build_preliminary_domain_review
 from src.evaluation.space_classification import (
     build_blinded_label_review_pack,
@@ -108,6 +117,7 @@ def init_session_state():
         'analysis_status_message': 'Upload an IFC or IFCZIP model to enable analysis.',
         'analysis_request_pending': False,
         'uploaded_ifc_token': None,
+        'last_run_id': None,
     }
     
     for key, value in defaults.items():
@@ -117,8 +127,20 @@ def init_session_state():
 init_session_state()
 
 
-def analysis_control_state(has_ifc: bool, state: str) -> Dict[str, Any]:
+def analysis_control_state(
+    has_ifc: bool,
+    state: str,
+    blocked_reason: Optional[str] = None,
+) -> Dict[str, Any]:
     """Return the accessible run-control presentation for the current state."""
+    if blocked_reason:
+        return {
+            "variant": "error",
+            "title": "Upload cannot be processed",
+            "message": blocked_reason,
+            "button_label": "Resolve Upload Issue",
+            "disabled": True,
+        }
     if not has_ifc:
         return {
             "variant": "waiting",
@@ -189,6 +211,20 @@ def _format_upload_size(uploaded_file) -> str:
     if size < 1024 * 1024:
         return f"{size / 1024:.1f} KB"
     return f"{size / (1024 * 1024):.1f} MB"
+
+
+def _upload_validation_message(uploaded_file, allowed_suffixes, max_bytes) -> Optional[str]:
+    if uploaded_file is None:
+        return None
+    try:
+        validate_upload_metadata(
+            uploaded_file,
+            allowed_suffixes=allowed_suffixes,
+            max_bytes=max_bytes,
+        )
+    except UploadValidationError as exc:
+        return str(exc)
+    return None
 
 
 def create_selected_route_figure(result, scenario):
@@ -340,6 +376,7 @@ def build_complete_export_payload(result):
     return {
         "export_version": "submission-evidence-v2",
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "analysis_run_id": st.session_state.get("last_run_id"),
         "academic_use_notice": ACADEMIC_USE_NOTICE,
         "score_semantics": screening_index_semantics(),
         "assumption_registry": standard_assumption_registry(),
@@ -441,6 +478,11 @@ def render_sidebar():
             ),
             label_visibility="collapsed"
         )
+        ifc_upload_error = _upload_validation_message(
+            ifc_file,
+            IFC_SUFFIXES,
+            MAX_IFC_UPLOAD_BYTES,
+        )
         
         ifc_token = _uploaded_file_token(ifc_file)
         if ifc_token != st.session_state.uploaded_ifc_token:
@@ -456,7 +498,9 @@ def render_sidebar():
                 else "Upload an IFC or IFCZIP model to enable analysis."
             )
 
-        if ifc_file:
+        if ifc_upload_error:
+            st.error(ifc_upload_error)
+        elif ifc_file:
             st.markdown(
                 f"""
                 <div class="upload-receipt upload-receipt--ready" role="status">
@@ -480,8 +524,15 @@ def render_sidebar():
             help="Building safety regulations (TXT, MD, PDF or DOCX, e.g., Approved Document B)",
             label_visibility="collapsed"
         )
+        regulation_upload_error = _upload_validation_message(
+            regulation_file,
+            REGULATION_SUFFIXES,
+            MAX_REGULATION_UPLOAD_BYTES,
+        )
         
-        if regulation_file:
+        if regulation_upload_error:
+            st.error(regulation_upload_error)
+        elif regulation_file:
             st.markdown(
                 f"""
                 <div class="upload-receipt upload-receipt--evidence" role="status">
@@ -535,7 +586,12 @@ def render_sidebar():
         # Process Button
         st.markdown("### 4. Run Analysis")
         
-        control = analysis_control_state(ifc_file is not None, st.session_state.analysis_ui_state)
+        upload_blocked_reason = ifc_upload_error or regulation_upload_error
+        control = analysis_control_state(
+            ifc_file is not None,
+            st.session_state.analysis_ui_state,
+            upload_blocked_reason,
+        )
         status_message = st.session_state.get("analysis_status_message") or control["message"]
         if control["variant"] in {"waiting", "ready", "processing"}:
             status_message = control["message"]
@@ -568,6 +624,20 @@ def render_sidebar():
                 "Both the uploaded file and the IFC model inside an IFCZIP are limited to 200 MB. "
                 "Larger models require local testing or a deployment with measured memory capacity."
             )
+
+        with st.expander("Deployment and data handling"):
+            st.caption(
+                "IFC/IFCZIP uploads are limited to 200 MB. Regulation uploads are limited "
+                "to 25 MB, extracted regulation text is bounded, and compressed IFC/DOCX "
+                "containers are checked for unsafe expansion."
+            )
+            st.caption(
+                "Uploads are streamed into a per-run temporary directory and deleted when "
+                "the run finishes. Results and review records are session-scoped unless the "
+                "user explicitly downloads an evidence export."
+            )
+            if st.session_state.get("last_run_id"):
+                st.code(f"Latest run reference: {st.session_state.last_run_id}")
         
         st.markdown("---")
         
@@ -575,9 +645,15 @@ def render_sidebar():
         st.markdown("### System Status")
         
         status_items = [
-            ("IFC Parser", "✅ Ready" if ifc_file else "⏳ Waiting"),
+            (
+                "IFC Parser",
+                "Blocked" if ifc_upload_error else "✅ Ready" if ifc_file else "⏳ Waiting",
+            ),
             ("NLP Engine", "✅ Ready"),
-            ("Evidence Retrieval", "✅ TF-IDF ready" if enable_rag else "⏹️ Disabled"),
+            (
+                "Evidence Retrieval",
+                "Blocked" if regulation_upload_error else "✅ TF-IDF ready" if enable_rag else "⏹️ Disabled",
+            ),
             ("Graph Builder", "✅ Ready"),
         ]
         
@@ -600,23 +676,30 @@ def render_sidebar():
 # FILE PROCESSING
 # ==============================================================================
 def save_uploaded_file(uploaded_file, directory: str) -> str:
-    """Save an upload under a collision-safe local name and return its path."""
-    save_dir = Path(directory)
-    save_dir.mkdir(parents=True, exist_ok=True)
-    payload = uploaded_file.getbuffer()
-    digest = hashlib.sha256(payload).hexdigest()[:12]
-    safe_name = safe_uploaded_filename(uploaded_file.name)
-    file_path = save_dir / f"{digest}_{safe_name}"
-    with open(file_path, "wb") as f:
-        f.write(payload)
-    return str(file_path)
+    """Backward-compatible streaming upload persistence helper."""
+    suffix = Path(str(getattr(uploaded_file, "name", ""))).suffix.lower()
+    regulation_upload = suffix in REGULATION_SUFFIXES
+    saved = persist_uploaded_file(
+        uploaded_file,
+        directory,
+        allowed_suffixes=REGULATION_SUFFIXES if regulation_upload else IFC_SUFFIXES,
+        max_bytes=MAX_REGULATION_UPLOAD_BYTES if regulation_upload else MAX_IFC_UPLOAD_BYTES,
+    )
+    return saved.path
 
 def process_files(ifc_file, regulation_file, regulation_metadata, max_scenarios, enable_rag):
     """Process uploaded files through the pipeline."""
     started_at = time.perf_counter()
+    run_id = secrets.token_hex(6)
+    st.session_state.last_run_id = run_id
     st.session_state.analysis_ui_state = "processing"
-    status_panel = st.status("Analysis request received", expanded=True, state="running")
+    status_panel = st.status(
+        f"Analysis request received · reference {run_id}",
+        expanded=True,
+        state="running",
+    )
     progress_bar = st.progress(2, text="Preparing analysis workspace...")
+    logger.info(f"Analysis run {run_id} started")
 
     try:
         status_panel.write("Loading the IFC analysis engine...")
@@ -624,22 +707,34 @@ def process_files(ifc_file, regulation_file, regulation_metadata, max_scenarios,
 
         st.session_state.rag_enabled = enable_rag
         regulation_document = {}
-        temp_root = Path("./data/temp")
+        temp_root = Path(tempfile.gettempdir()) / "bim_evacuation_uploads"
         temp_root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="analysis_", dir=temp_root) as upload_dir:
             progress_bar.progress(10, text="Securing the uploaded IFC model...")
-            ifc_path = save_uploaded_file(ifc_file, upload_dir)
+            stored_ifc = persist_uploaded_file(
+                ifc_file,
+                upload_dir,
+                allowed_suffixes=IFC_SUFFIXES,
+                max_bytes=MAX_IFC_UPLOAD_BYTES,
+            )
+            ifc_path = stored_ifc.path
 
             regulation_text = None
             if regulation_file:
                 status_panel.write("Extracting text and provenance from the regulation document...")
                 progress_bar.progress(20, text="Reading regulation evidence...")
-                regulation_path = save_uploaded_file(regulation_file, upload_dir)
+                stored_regulation = persist_uploaded_file(
+                    regulation_file,
+                    upload_dir,
+                    allowed_suffixes=REGULATION_SUFFIXES,
+                    max_bytes=MAX_REGULATION_UPLOAD_BYTES,
+                )
+                regulation_path = stored_regulation.path
                 regulation_text = extract_regulation_text(regulation_path, regulation_file.name)
                 st.session_state['regulation_text'] = regulation_text
                 regulation_document = {
                     "name": safe_uploaded_filename(regulation_file.name, "regulation_document"),
-                    "sha256": hashlib.sha256(regulation_file.getbuffer()).hexdigest(),
+                    "sha256": stored_regulation.sha256,
                     "file_type": Path(regulation_file.name).suffix.lower().lstrip("."),
                     **(regulation_metadata or {}),
                 }
@@ -670,7 +765,8 @@ def process_files(ifc_file, regulation_file, regulation_metadata, max_scenarios,
         if result.success:
             st.session_state.analysis_ui_state = "complete"
             st.session_state.analysis_status_message = (
-                f"Generated {len(result.scenarios)} scenarios in {elapsed:.1f} seconds."
+                f"Generated {len(result.scenarios)} scenarios in {elapsed:.1f} seconds. "
+                f"Reference: {run_id}."
             )
             status_panel.update(
                 label=f"Analysis complete · {len(result.scenarios)} scenarios generated",
@@ -682,6 +778,10 @@ def process_files(ifc_file, regulation_file, regulation_metadata, max_scenarios,
             st.session_state.analysis_status_message = "The model was processed, but no usable scenarios were generated."
             status_panel.update(label="Analysis finished with issues", state="error", expanded=True)
         progress_bar.progress(100, text="Analysis complete")
+        logger.info(
+            f"Analysis run {run_id} completed in {elapsed:.2f}s with "
+            f"{len(result.scenarios)} scenario(s)"
+        )
 
         if result.source_mode == "geometry_derived":
             st.success(
@@ -721,15 +821,26 @@ def process_files(ifc_file, regulation_file, regulation_metadata, max_scenarios,
                     f"({result.readiness['model_readiness_score']}/100)"
                 )
         
-    except Exception as e:
+    except (UploadValidationError, RegulationDocumentError) as exc:
         progress_bar.empty()
         st.session_state.processing_done = False
         st.session_state.analysis_ui_state = "error"
-        st.session_state.analysis_status_message = "Processing failed. Review the error in the workspace and retry."
-        status_panel.update(label="Analysis failed", state="error", expanded=True)
+        st.session_state.analysis_status_message = (
+            f"The upload could not be processed: {exc} Reference: {run_id}."
+        )
+        status_panel.update(label=f"Upload rejected · reference {run_id}", state="error", expanded=True)
+        status_panel.write(str(exc))
+        logger.warning(f"Analysis run {run_id} rejected: {exc}")
+    except Exception:
+        progress_bar.empty()
+        st.session_state.processing_done = False
+        st.session_state.analysis_ui_state = "error"
+        st.session_state.analysis_status_message = (
+            f"Processing failed. Retry the analysis or use the run reference when reporting the issue: {run_id}."
+        )
+        status_panel.update(label=f"Analysis failed · reference {run_id}", state="error", expanded=True)
         status_panel.write("The request was received, but the analysis pipeline could not complete.")
-        st.error(f"Processing error: {str(e)}")
-        logger.exception("Streamlit analysis failed")
+        logger.exception(f"Analysis run {run_id} failed")
     finally:
         st.session_state.analysis_request_pending = False
 
@@ -1265,10 +1376,11 @@ def render_regulation_intelligence(result):
         cols[0].metric("Extracted Clauses", getattr(result, "regulation_clause_count", 0))
         cols[1].metric("Numeric Rules", getattr(result, "regulation_rule_count", 0))
         cols[2].metric("Applied Uploaded Thresholds", application.get("active_uploaded_threshold_count", 0))
-        cols[3].metric("Unsupported Rules", application.get("unsupported_rule_count", 0))
+        cols[3].metric("Deferred for Context", application.get("context_deferred_rule_count", 0))
         st.caption(
             f"Supported uploaded candidates: {application.get('supported_uploaded_rule_candidate_count', application.get('uploaded_rule_count', 0))}. "
-            "Conditional candidates use a conservative screening value and remain subject to expert applicability review."
+            f"Unsupported candidates: {application.get('unsupported_rule_count', 0)}. "
+            "A conditional candidate is not activated unless this prototype can evaluate its applicability context."
         )
 
         active_rows = application.get("active_thresholds", [])
@@ -1279,6 +1391,11 @@ def render_regulation_intelligence(result):
         if unsupported_rows:
             with st.expander("Extracted but not currently enforceable", expanded=False):
                 st.dataframe(pd.DataFrame(unsupported_rows), height=220, width='stretch')
+
+        deferred_rows = application.get("context_deferred_rules", [])
+        if deferred_rows:
+            with st.expander("Extracted but awaiting applicability evidence", expanded=False):
+                st.dataframe(pd.DataFrame(deferred_rows), height=220, width='stretch')
     else:
         st.info("No pipeline result is available yet.")
     

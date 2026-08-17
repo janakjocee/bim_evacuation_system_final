@@ -101,6 +101,7 @@ def _write_markdown(report: dict[str, Any], path: Path) -> None:
         f"- Extracted structured rules: `{regulations['extracted_rule_count']}`",
         f"- Supported rule candidates: `{regulations['supported_candidate_count']}`",
         f"- Active uploaded thresholds: `{regulations['active_uploaded_threshold_count']}`",
+        f"- Context-deferred rules: `{regulations['context_deferred_rule_count']}`",
         f"- Explicitly unsupported rules: `{regulations['unsupported_rule_count']}`",
         "",
         "## Runtime Requirements",
@@ -211,6 +212,7 @@ def verify(ifc_path: Path, regulation_path: Path | None, output_dir: Path, max_s
         regulation_gate,
         f"clauses={result.regulation_clause_count}; extracted_rules={result.regulation_rule_count}; "
         f"active_uploaded_thresholds={application.get('active_uploaded_threshold_count', 0)}; "
+        f"context_deferred={application.get('context_deferred_rule_count', 0)}; "
         f"unsupported={application.get('unsupported_rule_count', 0)}",
     )
     _gate(
@@ -287,8 +289,10 @@ def verify(ifc_path: Path, regulation_path: Path | None, output_dir: Path, max_s
             "extracted_rule_count": result.regulation_rule_count,
             "supported_candidate_count": application.get("supported_uploaded_rule_candidate_count", 0),
             "active_uploaded_threshold_count": application.get("active_uploaded_threshold_count", 0),
+            "context_deferred_rule_count": application.get("context_deferred_rule_count", 0),
             "unsupported_rule_count": application.get("unsupported_rule_count", 0),
             "active_thresholds": application.get("active_thresholds", []),
+            "context_deferred_rules": application.get("context_deferred_rules", []),
             "unsupported_rules": application.get("unsupported_rules", []),
         },
         "exports": exported,

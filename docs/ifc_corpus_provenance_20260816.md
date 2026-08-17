@@ -1,6 +1,6 @@
 # IFC Corpus Provenance Manifest
 
-Audit date: 16 August 2026
+Audit date: 16 August 2026; fixture recovery verified 17 August 2026
 
 This manifest records the 16 SHA-256-unique payloads in the 23-path
 compatibility run. IFC payloads remain excluded from git because of their size;
@@ -27,18 +27,23 @@ formal IFC validation.
 | `official_Duplex_Rooms_And_Spaces.ifc` | `3cd577ecff9daf91632789a408070251a431b198de7be47f64e01c7fda1be92b` | [Duplex rooms and spaces source](https://github.com/buildingsmart-community/Community-Sample-Test-Files/blob/main/IFC%202.3.0.1%20%28IFC%202x3%29/Duplex%20Apartment/Duplex_M_20111024_ROOMS_AND_SPACES.ifc), CC BY 4.0 | Exact Git LFS object recovered and hash verified |
 | `official_Clinic_Architectural.ifc` | `2ac970ce065ecac4e0c9e5f453a257169e90d0067f419b7e33533a64ef837880` | [buildingSMART community Clinic sample](https://github.com/buildingsmart-community/Community-Sample-Test-Files/tree/main/IFC%202.3.0.1%20%28IFC%202x3%29/Medical-Dental%20Clinic), CC BY 4.0 | Exact Git LFS object recovered and hash verified |
 
-## Source Pointers, Not IFC Models
+## Historical Source Pointers, Now Resolved Locally
 
-These files are valid Git LFS pointer text but are not IFC model contents. They
-must remain classified as failed inputs. Their intended source and expected
-object hashes are nevertheless traceable to the CC BY 4.0 buildingSMART
-community archive.
+The first local-folder audit found valid Git LFS pointer text rather than IFC
+model contents at these paths. Those historical inputs were correctly
+classified as failed. The pinned public payloads have since been recovered by
+`scripts/recover_public_ifc_fixtures.py`; exact size, SHA-256, trusted HTTPS host
+and IFC STEP header checks now pass for all three.
 
-| Local pointer | Pointer SHA-256 | Expected IFC object SHA-256 | Intended source |
+| Historical local pointer | Pointer SHA-256 | Recovered IFC object SHA-256 | Intended source |
 |---|---|---|---|
 | `01_IFC2X3_Duplex_A_20110907.ifc` | `612251d72fd888e50b5b8aa83a5ba32d41cb8d35663ae92bbdc7ad3cfe8ca8a7` | `b347a2c8aa8fff6db896a4417a9c50c22ac0ccd7c5cfc22b99b8d29336c606ed` | Duplex source above |
 | `02_IFC2X3_Duplex_Rooms_And_Spaces.ifc` | `bec9d5c00ff061cb0da77cee2eef657c100d0a670904d3209531bf2c2c584fa7` | `3cd577ecff9daf91632789a408070251a431b198de7be47f64e01c7fda1be92b` | [Duplex rooms and spaces](https://github.com/buildingsmart-community/Community-Sample-Test-Files/blob/main/IFC%202.3.0.1%20%28IFC%202x3%29/Duplex%20Apartment/Duplex_M_20111024_ROOMS_AND_SPACES.ifc) |
 | `03_IFC2X3_Clinic_Architectural.ifc` | `e592f013aa0d8903c20bb48c8355f131f96411df3704b93e62a9423a40d21109` | `2ac970ce065ecac4e0c9e5f453a257169e90d0067f419b7e33533a64ef837880` | [buildingSMART community Clinic sample](https://github.com/buildingsmart-community/Community-Sample-Test-Files/tree/main/IFC%202.3.0.1%20%28IFC%202x3%29/Medical-Dental%20Clinic) |
+
+The post-recovery seven-file diagnostic contains zero payload failures and seven
+partial engineering results. The remaining partial labels describe missing or
+inferred model evidence; they are not download or IFC-opening failures.
 
 ## Provenance Not Yet Verified
 
