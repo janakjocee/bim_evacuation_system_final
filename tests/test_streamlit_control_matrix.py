@@ -39,6 +39,12 @@ def test_main_app_control_matrix_and_icon_labels():
     app.session_state["selected_scenario_id"] = scenario.scenario_id
     app.run(timeout=30)
     _assert_clean(app)
+    run_control = _button(app, "Upload IFC to enable analysis")
+    assert run_control.disabled is True
+    assert any(
+        "analysis-state--waiting" in getattr(markdown, "value", "")
+        for markdown in app.markdown
+    )
 
     expected_tabs = {
         "📊 Dashboard", "🏢 BIM Insights", "📜 Regulations", "🚨 Scenarios",

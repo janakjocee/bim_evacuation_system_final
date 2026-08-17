@@ -70,6 +70,8 @@ PROJECT_SUBTITLE = getattr(
     "AI-Assisted Research Prototype: Deterministic IFC/Graph Analysis + NLP Evidence Retrieval",
 )
 
+logger = get_logger(__name__)
+
 # ==============================================================================
 # PAGE CONFIGURATION
 # ==============================================================================
@@ -102,6 +104,10 @@ def init_session_state():
         'domain_review_records': [],
         'accessibility_audit_records': [],
         'space_label_review_validation': None,
+        'analysis_ui_state': 'waiting',
+        'analysis_status_message': 'Upload an IFC or IFCZIP model to enable analysis.',
+        'analysis_request_pending': False,
+        'uploaded_ifc_token': None,
     }
     
     for key, value in defaults.items():
@@ -109,6 +115,80 @@ def init_session_state():
             st.session_state[key] = value
 
 init_session_state()
+
+
+def analysis_control_state(has_ifc: bool, state: str) -> Dict[str, Any]:
+    """Return the accessible run-control presentation for the current state."""
+    if not has_ifc:
+        return {
+            "variant": "waiting",
+            "title": "Waiting for BIM model",
+            "message": "Upload an IFC or IFCZIP file to enable scenario generation.",
+            "button_label": "Upload IFC to enable analysis",
+            "disabled": True,
+        }
+
+    states = {
+        "ready": {
+            "variant": "ready",
+            "title": "Ready to analyse",
+            "message": "The BIM upload is available. Select the button below to start.",
+            "button_label": "Generate Screening Scenarios",
+            "disabled": False,
+        },
+        "processing": {
+            "variant": "processing",
+            "title": "Analysis request received",
+            "message": "The model is being parsed and screened. Keep this page open.",
+            "button_label": "Analysis in progress...",
+            "disabled": True,
+        },
+        "complete": {
+            "variant": "complete",
+            "title": "Latest analysis complete",
+            "message": "Results are available in the workspace. You can run the model again.",
+            "button_label": "Run Analysis Again",
+            "disabled": False,
+        },
+        "error": {
+            "variant": "error",
+            "title": "Analysis needs attention",
+            "message": "Review the error shown in the workspace, then retry when ready.",
+            "button_label": "Retry Analysis",
+            "disabled": False,
+        },
+    }
+    return states.get(state, states["ready"])
+
+
+def queue_analysis_request() -> None:
+    """Acknowledge the click before the pipeline begins its expensive work."""
+    st.session_state.analysis_request_pending = True
+    st.session_state.analysis_ui_state = "processing"
+    st.session_state.analysis_status_message = "Request received; preparing the analysis pipeline."
+
+
+def _uploaded_file_token(uploaded_file) -> Optional[str]:
+    """Create a lightweight identity token without re-hashing a large upload."""
+    if uploaded_file is None:
+        return None
+    return ":".join(
+        str(value)
+        for value in (
+            getattr(uploaded_file, "file_id", ""),
+            getattr(uploaded_file, "name", "uploaded"),
+            getattr(uploaded_file, "size", "unknown"),
+        )
+    )
+
+
+def _format_upload_size(uploaded_file) -> str:
+    size = getattr(uploaded_file, "size", None)
+    if not isinstance(size, (int, float)):
+        return "size unavailable"
+    if size < 1024 * 1024:
+        return f"{size / 1024:.1f} KB"
+    return f"{size / (1024 * 1024):.1f} MB"
 
 
 def create_selected_route_figure(result, scenario):
@@ -311,26 +391,27 @@ def build_complete_export_payload(result):
 # ==============================================================================
 def render_header():
     """Render professional application header."""
-    col1, col2 = st.columns([3, 1])
-    
-    with col1:
-        st.markdown(f"""
-        <div class="app-hero">
-            <span class="app-kicker">University of Greenwich · MSc Data Science</span>
-            <h1 class="main-title">{PROJECT_TITLE}</h1>
-            <p class="sub-title">{PROJECT_SUBTITLE}</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown(f"""
-        <div class="hero-author">
-            <span class="author-label">Research prototype</span>
-            <strong>Janak Raj Joshi</strong>
-            <a href="mailto:janakjocee@gmail.com">janakjocee@gmail.com</a><br>
-            <a href="https://github.com/janakjocee/bim_evacuation_system_final" target="_blank">GitHub Repository</a>
-        </div>
-        """, unsafe_allow_html=True)
+    with st.container(key="app-header"):
+        col1, col2 = st.columns([3, 1])
+
+        with col1:
+            st.markdown(f"""
+            <div class="app-hero">
+                <span class="app-kicker">University of Greenwich · MSc Data Science</span>
+                <h1 class="main-title">{PROJECT_TITLE}</h1>
+                <p class="sub-title">{PROJECT_SUBTITLE}</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with col2:
+            st.markdown(f"""
+            <div class="hero-author">
+                <span class="author-label">Research prototype</span>
+                <strong>Janak Raj Joshi</strong>
+                <a href="mailto:janakjocee@gmail.com">janakjocee@gmail.com</a><br>
+                <a href="https://github.com/janakjocee/bim_evacuation_system_final" target="_blank">GitHub Repository</a>
+            </div>
+            """, unsafe_allow_html=True)
     
     # Disclaimer
     st.info("""
@@ -361,8 +442,31 @@ def render_sidebar():
             label_visibility="collapsed"
         )
         
+        ifc_token = _uploaded_file_token(ifc_file)
+        if ifc_token != st.session_state.uploaded_ifc_token:
+            st.session_state.uploaded_ifc_token = ifc_token
+            st.session_state.analysis_request_pending = False
+            st.session_state.analysis_ui_state = "ready" if ifc_file else "waiting"
+            st.session_state.processing_done = False
+            st.session_state.pipeline_result = None
+            st.session_state.baseline_pipeline_result = None
+            st.session_state.analysis_status_message = (
+                "The BIM upload is available. Select the button below to start."
+                if ifc_file
+                else "Upload an IFC or IFCZIP model to enable analysis."
+            )
+
         if ifc_file:
-            st.success(f"✓ {ifc_file.name}")
+            st.markdown(
+                f"""
+                <div class="upload-receipt upload-receipt--ready" role="status">
+                    <span class="upload-receipt__mark" aria-hidden="true">&#10003;</span>
+                    <span><strong>{html.escape(ifc_file.name)}</strong>
+                    <small>{_format_upload_size(ifc_file)} · BIM model ready</small></span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
         
         st.markdown("---")
         
@@ -378,7 +482,16 @@ def render_sidebar():
         )
         
         if regulation_file:
-            st.success(f"✓ {regulation_file.name}")
+            st.markdown(
+                f"""
+                <div class="upload-receipt upload-receipt--evidence" role="status">
+                    <span class="upload-receipt__mark" aria-hidden="true">&#10003;</span>
+                    <span><strong>{html.escape(regulation_file.name)}</strong>
+                    <small>{_format_upload_size(regulation_file)} · evidence source attached</small></span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
         with st.expander("Regulation source provenance"):
             st.caption(
@@ -422,16 +535,28 @@ def render_sidebar():
         # Process Button
         st.markdown("### 4. Run Analysis")
         
-        process_disabled = ifc_file is None
-        process_button = st.button(
-            "🚀 Generate Screening Scenarios",
-            type="primary",
-            width='stretch',
-            disabled=process_disabled
+        control = analysis_control_state(ifc_file is not None, st.session_state.analysis_ui_state)
+        status_message = st.session_state.get("analysis_status_message") or control["message"]
+        if control["variant"] in {"waiting", "ready", "processing"}:
+            status_message = control["message"]
+        st.markdown(
+            f"""
+            <div class="analysis-state analysis-state--{control['variant']}" role="status" aria-live="polite">
+                <span class="analysis-state__indicator" aria-hidden="true"></span>
+                <span><strong>{control['title']}</strong><p>{html.escape(status_message)}</p></span>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
-        
-        if process_disabled:
-            st.warning("⚠️ Upload an IFC file to begin")
+        with st.container(key=f"analysis-action-{control['variant']}"):
+            st.button(
+                control["button_label"],
+                key="run-analysis",
+                type="primary",
+                width='stretch',
+                disabled=control["disabled"],
+                on_click=queue_analysis_request,
+            )
 
         with st.expander("IFC version support"):
             st.write(f"Documented schema targets: **{SUPPORTED_SCHEMA_LABEL}**.")
@@ -468,7 +593,8 @@ def render_sidebar():
             "edition": regulation_edition.strip(),
             "metadata_scope": "user_declared_not_legally_validated",
         }
-        return ifc_file, regulation_file, regulation_metadata, max_scenarios, enable_rag, process_button
+        analysis_requested = bool(st.session_state.analysis_request_pending)
+        return ifc_file, regulation_file, regulation_metadata, max_scenarios, enable_rag, analysis_requested
 
 # ==============================================================================
 # FILE PROCESSING
@@ -487,22 +613,27 @@ def save_uploaded_file(uploaded_file, directory: str) -> str:
 
 def process_files(ifc_file, regulation_file, regulation_metadata, max_scenarios, enable_rag):
     """Process uploaded files through the pipeline."""
-    from src.pipeline.evacuation_pipeline import EvacuationPipeline
+    started_at = time.perf_counter()
+    st.session_state.analysis_ui_state = "processing"
+    status_panel = st.status("Analysis request received", expanded=True, state="running")
+    progress_bar = st.progress(2, text="Preparing analysis workspace...")
 
-    progress_bar = st.progress(0, text="Initializing pipeline...")
-    
     try:
+        status_panel.write("Loading the IFC analysis engine...")
+        from src.pipeline.evacuation_pipeline import EvacuationPipeline
+
         st.session_state.rag_enabled = enable_rag
         regulation_document = {}
         temp_root = Path("./data/temp")
         temp_root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="analysis_", dir=temp_root) as upload_dir:
-            progress_bar.progress(10, text="Loading IFC model...")
+            progress_bar.progress(10, text="Securing the uploaded IFC model...")
             ifc_path = save_uploaded_file(ifc_file, upload_dir)
 
             regulation_text = None
             if regulation_file:
-                progress_bar.progress(20, text="Loading regulations...")
+                status_panel.write("Extracting text and provenance from the regulation document...")
+                progress_bar.progress(20, text="Reading regulation evidence...")
                 regulation_path = save_uploaded_file(regulation_file, upload_dir)
                 regulation_text = extract_regulation_text(regulation_path, regulation_file.name)
                 st.session_state['regulation_text'] = regulation_text
@@ -513,12 +644,9 @@ def process_files(ifc_file, regulation_file, regulation_metadata, max_scenarios,
                     **(regulation_metadata or {}),
                 }
 
-            progress_bar.progress(30, text="Parsing BIM model...")
+            status_panel.write("Parsing IFC entities and geometry from the uploaded model...")
+            progress_bar.progress(30, text="Parsing BIM model and building the route graph...")
             pipeline = EvacuationPipeline()
-
-            progress_bar.progress(50, text="Extracting features...")
-            progress_bar.progress(70, text="Building spatial graph...")
-            progress_bar.progress(85, text="Generating scenarios...")
 
             result = pipeline.run(
                 ifc_path,
@@ -529,10 +657,8 @@ def process_files(ifc_file, regulation_file, regulation_metadata, max_scenarios,
         result.source_file_name = safe_uploaded_filename(ifc_file.name, "uploaded.ifc")
         result.regulation_document = regulation_document
         
-        progress_bar.progress(100, text="Complete!")
-        time.sleep(0.5)
-        progress_bar.empty()
-        
+        progress_bar.progress(92, text="Finalising traceable scenario evidence...")
+
         # Store result
         st.session_state.pipeline_result = result
         st.session_state.baseline_pipeline_result = copy.deepcopy(result)
@@ -540,6 +666,23 @@ def process_files(ifc_file, regulation_file, regulation_metadata, max_scenarios,
         st.session_state.selected_scenario_id = result.scenarios[0].scenario_id if result.scenarios else None
         st.session_state.manual_corrections = None
         
+        elapsed = time.perf_counter() - started_at
+        if result.success:
+            st.session_state.analysis_ui_state = "complete"
+            st.session_state.analysis_status_message = (
+                f"Generated {len(result.scenarios)} scenarios in {elapsed:.1f} seconds."
+            )
+            status_panel.update(
+                label=f"Analysis complete · {len(result.scenarios)} scenarios generated",
+                state="complete",
+                expanded=False,
+            )
+        else:
+            st.session_state.analysis_ui_state = "error"
+            st.session_state.analysis_status_message = "The model was processed, but no usable scenarios were generated."
+            status_panel.update(label="Analysis finished with issues", state="error", expanded=True)
+        progress_bar.progress(100, text="Analysis complete")
+
         if result.source_mode == "geometry_derived":
             st.success(
                 f"✅ Geometry screening complete! Generated **{len(result.scenarios)}** exploratory route scenarios."
@@ -580,9 +723,15 @@ def process_files(ifc_file, regulation_file, regulation_metadata, max_scenarios,
         
     except Exception as e:
         progress_bar.empty()
-        st.error(f"❌ Processing Error: {str(e)}")
-        import traceback
-        st.error(traceback.format_exc())
+        st.session_state.processing_done = False
+        st.session_state.analysis_ui_state = "error"
+        st.session_state.analysis_status_message = "Processing failed. Review the error in the workspace and retry."
+        status_panel.update(label="Analysis failed", state="error", expanded=True)
+        status_panel.write("The request was received, but the analysis pipeline could not complete.")
+        st.error(f"Processing error: {str(e)}")
+        logger.exception("Streamlit analysis failed")
+    finally:
+        st.session_state.analysis_request_pending = False
 
 # ==============================================================================
 # TAB 1: PROJECT OVERVIEW DASHBOARD
@@ -2115,11 +2264,12 @@ def main():
         regulation_metadata,
         max_scenarios,
         enable_rag,
-        process_button,
+        analysis_requested,
     ) = render_sidebar()
     
     # Process if button clicked
-    if process_button and ifc_file:
+    if analysis_requested and ifc_file:
+        st.session_state.analysis_request_pending = False
         process_files(
             ifc_file,
             regulation_file,
@@ -2127,6 +2277,12 @@ def main():
             max_scenarios,
             enable_rag,
         )
+        st.rerun()
+
+    if st.session_state.analysis_ui_state == "complete" and st.session_state.processing_done:
+        st.success(f"Analysis complete. {st.session_state.analysis_status_message}")
+    elif st.session_state.analysis_ui_state == "error":
+        st.error(st.session_state.analysis_status_message)
     
     # Main content area with tabs
     if st.session_state.processing_done and st.session_state.pipeline_result:
