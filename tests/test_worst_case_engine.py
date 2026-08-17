@@ -19,6 +19,8 @@ def test_worst_case_demo_dataset_loads():
     assert len(dataset["connections"]) >= 10
     assert len(dataset["hazard_scenarios"]) >= 4
     assert dataset["dataset_kind"] == "demonstration_only"
+    assert dataset["provenance"]["source_type"] == "bundled_synthetic_academic_demo"
+    assert dataset["provenance"]["ifc_derived"] is False
     assert dataset_summary(dataset)["hazard_scenarios"] >= 4
 
 
