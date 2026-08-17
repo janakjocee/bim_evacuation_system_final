@@ -123,7 +123,7 @@ class ScenarioGenerator:
         rag_engine: Any = None,
     ) -> None:
         """Set regulations from parsed clauses."""
-        if rules:
+        if rules is not None:
             self.compliance_checker.update_regulation_rules(rules)
         else:
             self.compliance_checker.update_regulations(clauses)

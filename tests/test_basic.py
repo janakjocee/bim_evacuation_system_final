@@ -492,9 +492,36 @@ def test_non_evacuation_distances_and_specialist_stairs_are_not_activated():
     checker.update_regulation_rules(parser.rules)
     summary = checker.get_rule_application_summary()
     assert summary["unsupported_rule_count"] == 2
+    assert summary["context_deferred_rule_count"] == 1
     assert checker.regulations["max_travel_distance"] == checker.default_regulations["max_travel_distance"]
     assert checker.regulations["min_stair_width"] == checker.default_regulations["min_stair_width"]
-    assert checker.regulations["min_exit_width"] == 1.2
+    assert checker.regulations["min_exit_width"] == checker.default_regulations["min_exit_width"]
+    deferred = summary["context_deferred_rules"][0]
+    assert deferred["metric"] == "min_exit_width"
+    assert deferred["condition"] == "occupants_context:240"
+
+
+def test_updating_structured_rules_resets_previous_uploaded_thresholds():
+    checker = ComplianceChecker()
+    checker.update_regulation_rules([
+        RegulationRule(
+            rule_id="FIRST",
+            source_section="1",
+            source_text="Travel distance must not exceed 30 metres.",
+            applies_to="route",
+            condition="general",
+            metric="max_travel_distance",
+            operator="<=",
+            value=30.0,
+            unit="m",
+        )
+    ])
+    assert checker.regulations["max_travel_distance"] == 30.0
+
+    checker.update_regulation_rules([])
+
+    assert checker.regulations["max_travel_distance"] == checker.default_regulations["max_travel_distance"]
+    assert checker.get_rule_application_summary()["active_uploaded_threshold_count"] == 0
 
 
 def test_route_check_uses_single_and_alternative_escape_thresholds():

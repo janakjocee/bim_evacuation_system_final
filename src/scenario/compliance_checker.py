@@ -41,6 +41,7 @@ class ComplianceChecker:
         self.rule_sources: Dict[str, RegulationRule] = {}
         self.rule_candidates: Dict[str, List[RegulationRule]] = {}
         self.unsupported_rules: List[RegulationRule] = []
+        self.context_deferred_rules: List[RegulationRule] = []
         self.evidence_provider: Optional[Callable[[str, int], List[Any]]] = None
     
     def _load_default_regulations(self) -> Dict[str, Any]:
@@ -62,6 +63,11 @@ class ComplianceChecker:
         Args:
             clauses: Parsed regulation clauses
         """
+        self.regulations = dict(self.default_regulations)
+        self.rule_sources = {}
+        self.rule_candidates = {}
+        self.unsupported_rules = []
+        self.context_deferred_rules = []
         applied = 0
         for clause in clauses:
             if clause.value is not None:
@@ -92,8 +98,11 @@ class ComplianceChecker:
         Structured rules are preferred over legacy clauses because they preserve
         multiple measurements from the same paragraph and carry source evidence.
         """
+        self.regulations = dict(self.default_regulations)
+        self.rule_sources = {}
         applied = 0
         self.unsupported_rules = []
+        self.context_deferred_rules = []
         self.rule_candidates = {}
         grouped_rules: Dict[str, List[RegulationRule]] = {}
         for rule in rules:
@@ -104,16 +113,32 @@ class ComplianceChecker:
                 self.unsupported_rules.append(rule)
 
         for key, candidates in grouped_rules.items():
-            if key.startswith("max_"):
-                selected = min(candidates, key=lambda item: (item.value, -item.confidence))
-            else:
-                selected = max(candidates, key=lambda item: (item.value, item.confidence))
+            applicable = [rule for rule in candidates if self._can_evaluate_condition(rule.condition)]
+            self.context_deferred_rules.extend(
+                rule for rule in candidates if not self._can_evaluate_condition(rule.condition)
+            )
             self.rule_candidates[key] = candidates
+            if not applicable:
+                continue
+            if key.startswith("max_"):
+                selected = min(applicable, key=lambda item: (item.value, -item.confidence))
+            else:
+                selected = max(applicable, key=lambda item: (item.value, item.confidence))
             self.regulations[key] = selected.value
             self.rule_sources[key] = selected
             applied += 1
 
         logger.info(f"Updated regulations with {len(rules)} structured rules; applied {applied} constraints")
+
+    @staticmethod
+    def _can_evaluate_condition(condition: str) -> bool:
+        """Return whether the checker has enough runtime context for a rule condition."""
+        return condition in {
+            "general",
+            "final_exit",
+            "single_direction_escape",
+            "alternative_escape",
+        }
 
     def set_evidence_provider(self, provider: Callable[[str, int], List[Any]]) -> None:
         """Set retrieval provider used to ground compliance checks in uploaded text."""
@@ -150,6 +175,9 @@ class ComplianceChecker:
             rule = self.rule_sources.get(key)
             candidates = self.rule_candidates.get(key, [])
             conditional_candidates = [item for item in candidates if item.condition != "general"]
+            deferred_candidates = [
+                item for item in candidates if not self._can_evaluate_condition(item.condition)
+            ]
             active_thresholds.append({
                 "rule_key": key,
                 "value": value,
@@ -160,9 +188,12 @@ class ComplianceChecker:
                 "source_text": rule.source_text[:300] if rule else "",
                 "candidate_count": len(candidates),
                 "conditional_candidate_count": len(conditional_candidates),
+                "deferred_candidate_count": len(deferred_candidates),
                 "selection_strategy": (
-                    "conservative screening candidate; confirm conditional applicability"
-                    if conditional_candidates
+                    "configured default; uploaded candidates deferred pending applicability context"
+                    if not rule and deferred_candidates
+                    else "conservative context-evaluable uploaded candidate"
+                    if rule and conditional_candidates
                     else "conservative uploaded candidate"
                     if candidates
                     else "configured default"
@@ -181,6 +212,7 @@ class ComplianceChecker:
             "extracted_uploaded_rule_count": supported_candidates + len(self.unsupported_rules),
             "default_threshold_count": sum(1 for item in active_thresholds if item["source"] == "default_config"),
             "unsupported_rule_count": len(self.unsupported_rules),
+            "context_deferred_rule_count": len(self.context_deferred_rules),
             "active_thresholds": active_thresholds,
             "unsupported_rules": [
                 {
@@ -193,6 +225,22 @@ class ComplianceChecker:
                     "reason": "Extracted, but this prototype does not currently enforce that metric.",
                 }
                 for rule in self.unsupported_rules
+            ],
+            "context_deferred_rules": [
+                {
+                    "rule_id": rule.rule_id,
+                    "metric": rule.metric,
+                    "operator": rule.operator,
+                    "value": rule.value,
+                    "unit": rule.unit,
+                    "condition": rule.condition,
+                    "source_text": rule.source_text[:300],
+                    "reason": (
+                        "Extracted as a supported metric, but not activated because the "
+                        "required applicability context is not verified by this prototype."
+                    ),
+                }
+                for rule in self.context_deferred_rules
             ],
         }
 
