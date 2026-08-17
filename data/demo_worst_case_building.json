@@ -2,7 +2,12 @@
   "building_id": "DEMO_WORST_CASE_001",
   "building_name": "Demo Academic Building - Fire-Origin ASET/RSET Scenario Dataset",
   "dataset_kind": "demonstration_only",
-  "provenance": "Bundled synthetic academic demonstration dataset. It is not extracted from an uploaded IFC file.",
+  "provenance": {
+    "source_type": "bundled_synthetic_academic_demo",
+    "source_file": "data/demo_worst_case_building.json",
+    "ifc_derived": false,
+    "validation_boundary": "This dataset is provided for repeatable academic demonstration and is not evidence extracted from an uploaded IFC model."
+  },
   "version": "1.0.0",
   "description": "Single-floor teaching building dataset for fire-origin-based worst-case evacuation screening. The dataset supports graph-based smoke spread approximation, t-squared fire growth and ASET/RSET-inspired decision support. It is not a certified fire simulation model.",
   "storeys": [
