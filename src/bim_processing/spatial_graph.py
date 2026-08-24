@@ -378,17 +378,32 @@ class SpatialGraphBuilder:
             if not self.find_paths_to_exits(space_id):
                 spaces_without_exit_route.append(space_id)
 
-        topology_confidence = 1.0
+        total_spaces = max(len(space_ids), 1)
+        total_doors = max(len(door_ids), 1)
+        total_edges = verified_edges + inferred_edges
+        routed_space_ratio = max(0.0, 1.0 - (len(spaces_without_exit_route) / total_spaces))
+        connected_space_ratio = max(0.0, 1.0 - (len(disconnected_spaces) / total_spaces))
+        connected_door_ratio = max(0.0, 1.0 - (len(doors_without_spaces) / total_doors))
+        evidence_ratio = (
+            verified_edges / total_edges
+            if total_edges
+            else 0.0
+        )
+
+        topology_confidence = (
+            (routed_space_ratio * 0.45)
+            + (connected_space_ratio * 0.30)
+            + (connected_door_ratio * 0.10)
+            + (evidence_ratio * 0.15)
+        )
         if self.building.extraction_mode == "geometry_derived":
-            topology_confidence = 0.35
+            topology_confidence = min(topology_confidence * 0.55, 0.55)
         elif self.building.extraction_mode == "semantic_spaces_inferred_topology":
-            topology_confidence = 0.55
-        elif inferred_edges:
-            topology_confidence = 0.7
-        if disconnected_spaces or spaces_without_exit_route:
-            topology_confidence = min(topology_confidence, 0.4)
+            topology_confidence = min(topology_confidence * 0.75, 0.75)
+
         if not self.exit_nodes:
             topology_confidence = 0.0
+        topology_confidence = max(0.0, min(topology_confidence, 1.0))
 
         return {
             "verified_edges_count": verified_edges,
@@ -397,5 +412,9 @@ class SpatialGraphBuilder:
             "doors_without_connected_spaces": doors_without_spaces,
             "stairs_without_connected_spaces": stairs_without_spaces,
             "spaces_without_exit_route": sorted(spaces_without_exit_route),
+            "routed_space_ratio": round(routed_space_ratio, 2),
+            "connected_space_ratio": round(connected_space_ratio, 2),
+            "connected_door_ratio": round(connected_door_ratio, 2),
+            "edge_evidence_ratio": round(evidence_ratio, 2),
             "graph_confidence_score": round(topology_confidence, 2),
         }

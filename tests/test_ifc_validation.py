@@ -254,6 +254,35 @@ def test_graph_preserves_per_space_connection_provenance():
     assert graph.graph["S2"]["D1"]["inferred"] is True
 
 
+def test_graph_confidence_scales_with_partial_connectivity():
+    building = BuildingData(id="B1", name="Partially Connected")
+    building.spaces = {
+        "S1": SpaceData(id="S1", name="Connected 1", area=10),
+        "S2": SpaceData(id="S2", name="Connected 2", area=10),
+        "S3": SpaceData(id="S3", name="Disconnected", area=10),
+    }
+    exit_door = DoorData(
+        id="E1",
+        name="Exit",
+        width=1.2,
+        height=2.1,
+        location=Point3D(),
+        is_exit=True,
+        connected_spaces=["S1", "S2"],
+        connection_source="IfcRelSpaceBoundary",
+    )
+    building.doors = {"E1": exit_door}
+    building.exits = {"E1": exit_door}
+
+    graph = SpatialGraphBuilder(building)
+    assert graph.build()
+    stats = graph.get_graph_stats()
+
+    assert stats["spaces_without_exit_route"] == ["S3"]
+    assert stats["connected_space_ratio"] == 0.67
+    assert stats["graph_confidence_score"] > 0.4
+
+
 def test_parser_adds_bounded_supplement_for_disconnected_space():
     parser = IFCParser()
     building = BuildingData(id="B1", name="Boundary omission")
