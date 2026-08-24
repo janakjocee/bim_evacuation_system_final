@@ -1,5 +1,5 @@
 # BIM Evacuation System - production container
-FROM python:3.10-slim-bookworm
+FROM python:3.14-slim-bookworm
 
 ARG APP_UID=10001
 ARG APP_GID=10001
