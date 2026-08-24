@@ -75,6 +75,8 @@ def validate_ifc_model(ifc_model: Any = None, extracted_data: Optional[Dict[str,
     missing_fire_properties = bool(extracted_data.get("missing_material_fuel_fire_properties", True))
     graph_connected = bool(extracted_data.get("graph_connectivity_complete", False))
     graph_confidence = float(extracted_data.get("graph_confidence_score", 1.0 if graph_connected else 0.0))
+    semantic_space_count = int(extracted_data.get("semantic_space_count", counts["space_count"]))
+    semantic_door_count = int(extracted_data.get("semantic_door_count", counts["door_count"]))
 
     warnings: List[str] = []
     critical_issues: List[str] = []
@@ -115,6 +117,22 @@ def validate_ifc_model(ifc_model: Any = None, extracted_data: Optional[Dict[str,
         )
     if inferred_exit_count:
         warnings.append(f"{inferred_exit_count} egress point(s) are inferred and require manual confirmation.")
+
+    if analysis_mode == "geometry_derived":
+        analysis_mode_category = "geometry-derived"
+    elif (
+        analysis_mode == "semantic_spaces_inferred_topology"
+        or inferred_edge_count > 0
+        or inferred_exit_count > 0
+    ):
+        analysis_mode_category = "semantic-with-inference"
+    else:
+        analysis_mode_category = "semantic-verified"
+
+    confidence_gate_applied = False
+    if analysis_mode_category != "semantic-verified" and graph_confidence > 0.65:
+        graph_confidence = 0.65
+        confidence_gate_applied = True
 
     processing_score = 100
     processing_score -= 40 if analysis_space_count == 0 else 0
@@ -177,6 +195,7 @@ def validate_ifc_model(ifc_model: Any = None, extracted_data: Optional[Dict[str,
         "missing_material_fuel_fire_properties": missing_fire_properties,
         "graph_connectivity_complete": graph_connected,
         "analysis_mode": analysis_mode,
+        "analysis_mode_category": analysis_mode_category,
         "analysis_scope": analysis_scope,
         "analysis_space_count": analysis_space_count,
         "analysis_door_count": analysis_door_count,
@@ -184,6 +203,9 @@ def validate_ifc_model(ifc_model: Any = None, extracted_data: Optional[Dict[str,
         "inferred_edge_count": inferred_edge_count,
         "inferred_exit_count": inferred_exit_count,
         "graph_confidence_score": round(graph_confidence, 2),
+        "confidence_gate_applied": confidence_gate_applied,
+        "semantic_space_count": semantic_space_count,
+        "semantic_door_count": semantic_door_count,
         "processing_readiness_score": processing_score,
         "engineering_evidence_score": score,
         "model_readiness_score": score,

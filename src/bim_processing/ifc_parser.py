@@ -98,6 +98,7 @@ class BuildingData:
     geometry_elements_available: int = 0
     geometry_elements_used: int = 0
     data_quality_flags: List[str] = field(default_factory=list)
+    parser_diagnostics: Dict[str, Any] = field(default_factory=dict)
 
 
 class IFCParser:
@@ -110,9 +111,26 @@ class IFCParser:
         self.building = None
         self.length_unit_scale = 1.0
         self.area_unit_scale = 1.0
+        self._diagnostic_counters: Dict[str, int] = {}
         
         if not IFC_AVAILABLE:
             logger.error("IfcOpenShell not available. Uploaded IFC files cannot be parsed.")
+
+    def _reset_diagnostics(self) -> None:
+        self._diagnostic_counters = {
+            "geometry_errors": 0,
+            "placement_errors": 0,
+            "space_extract_errors": 0,
+            "door_extract_errors": 0,
+            "stair_extract_errors": 0,
+            "unit_scale_fallbacks": 0,
+            "missing_space_geometry": 0,
+            "missing_door_connectivity": 0,
+            "missing_exit_candidates": 0,
+        }
+
+    def _note_diagnostic(self, category: str, increment: int = 1) -> None:
+        self._diagnostic_counters[category] = self._diagnostic_counters.get(category, 0) + increment
     
     def parse(self, file_path: str) -> Optional[BuildingData]:
         """
@@ -126,6 +144,7 @@ class IFCParser:
         """
         try:
             logger.info(f"Parsing IFC file: {file_path}")
+            self._reset_diagnostics()
             
             if not IFC_AVAILABLE:
                 logger.error("IfcOpenShell not available; cannot parse the uploaded IFC")
@@ -142,12 +161,14 @@ class IFCParser:
                 )
             except Exception:
                 self.length_unit_scale = 1.0
+                self._note_diagnostic("unit_scale_fallbacks")
             try:
                 self.area_unit_scale = float(
                     ifcopenshell.util.unit.calculate_unit_scale(self.ifc_file, "AREAUNIT")
                 )
             except Exception:
                 self.area_unit_scale = self.length_unit_scale ** 2
+                self._note_diagnostic("unit_scale_fallbacks")
             
             # Extract building
             building = self._extract_building()
@@ -189,6 +210,18 @@ class IFCParser:
             logger.info(f"  Doors: {len(building.doors)}")
             logger.info(f"  Stairs: {len(building.stairs)}")
             logger.info(f"  Exits: {len(building.exits)}")
+            building.parser_diagnostics = dict(self._diagnostic_counters)
+            if building.spaces:
+                building.parser_diagnostics["missing_space_geometry"] = sum(
+                    1 for space in building.spaces.values() if not space.bounding_box
+                )
+            if building.doors:
+                building.parser_diagnostics["missing_door_connectivity"] = sum(
+                    1 for door in building.doors.values() if not door.connected_spaces
+                )
+            building.parser_diagnostics["missing_exit_candidates"] = max(
+                0, len(building.doors) - len(building.exits)
+            )
             
             return building
             
@@ -240,6 +273,7 @@ class IFCParser:
                 building.spaces[space.id] = space
             except Exception as e:
                 logger.warning(f"Error extracting space {ifc_space.GlobalId}: {e}")
+                self._note_diagnostic("space_extract_errors")
     
     def _extract_doors(self, building: BuildingData) -> None:
         """Extract doors from IFC."""
@@ -266,6 +300,7 @@ class IFCParser:
                 building.doors[door.id] = door
             except Exception as e:
                 logger.warning(f"Error extracting door {ifc_door.GlobalId}: {e}")
+                self._note_diagnostic("door_extract_errors")
     
     def _extract_stairs(self, building: BuildingData) -> None:
         """Extract stairs from IFC."""
@@ -327,6 +362,7 @@ class IFCParser:
                 building.stairs[stair.id] = stair
             except Exception as e:
                 logger.warning(f"Error extracting stair {ifc_stair.GlobalId}: {e}")
+                self._note_diagnostic("stair_extract_errors")
     
     def _identify_exits(self, building: BuildingData) -> None:
         """Identify exit doors."""
@@ -652,7 +688,7 @@ class IFCParser:
                     z=float(matrix[2, 3]) * self.length_unit_scale,
                 )
         except Exception:
-            pass
+            self._note_diagnostic("placement_errors")
         return Point3D()
 
     def _get_bounding_box(self, element) -> Optional[Tuple[Point3D, Point3D]]:
@@ -668,6 +704,7 @@ class IFCParser:
             xs, ys, zs = zip(*points)
             return Point3D(min(xs), min(ys), min(zs)), Point3D(max(xs), max(ys), max(zs))
         except Exception:
+            self._note_diagnostic("geometry_errors")
             return None
     
     def _extract_geometry_topology(self, building: BuildingData) -> None:
@@ -699,38 +736,20 @@ class IFCParser:
             return
 
         building.geometry_elements_available = len(candidates)
-        candidates = self._evenly_sample(candidates, 60)
+        sample_limit = self._adaptive_geometry_sample_limit(len(candidates))
+        sampled_candidates = self._evenly_sample(candidates, sample_limit)
         building.geometry_source_types = source_types
 
-        settings = ifcopenshell.geom.settings()
-        settings.set(settings.USE_WORLD_COORDS, True)
-        geometry_rows = []
+        geometry_rows = self._collect_geometry_rows(sampled_candidates)
 
-        for element in candidates:
-            try:
-                shape = ifcopenshell.geom.create_shape(settings, element)
-                verts = shape.geometry.verts
-                points = list(zip(verts[0::3], verts[1::3], verts[2::3]))
-                if not points:
-                    continue
-                xs = [point[0] for point in points]
-                ys = [point[1] for point in points]
-                zs = [point[2] for point in points]
-                minimum = Point3D(min(xs), min(ys), min(zs))
-                maximum = Point3D(max(xs), max(ys), max(zs))
-                center = Point3D(
-                    (minimum.x + maximum.x) / 2,
-                    (minimum.y + maximum.y) / 2,
-                    (minimum.z + maximum.z) / 2,
-                )
-                properties = self._get_properties(element)
-                element_number = properties.get("13:Elem nr")
-                element_type = element.is_a()
-                name = element_number or element.Name or f"{element_type} {element.GlobalId[:8]}"
-                area = max(1.0, (maximum.x - minimum.x) * (maximum.y - minimum.y))
-                geometry_rows.append((element, name, area, center, minimum, maximum))
-            except Exception as exc:
-                logger.warning(f"Could not derive geometry for {element.GlobalId}: {exc}")
+        # Adaptive refinement pass: if coarse pass extracted too little geometry,
+        # expand coverage while staying bounded for large IFCs.
+        if len(geometry_rows) < min(18, max(6, sample_limit // 3)) and len(candidates) > sample_limit:
+            refined_limit = min(len(candidates), max(sample_limit * 2, 80))
+            refined_candidates = self._evenly_sample(candidates, refined_limit)
+            seen_ids = {row[0].GlobalId for row in geometry_rows}
+            extra_candidates = [element for element in refined_candidates if element.GlobalId not in seen_ids]
+            geometry_rows.extend(self._collect_geometry_rows(extra_candidates))
 
         if len(geometry_rows) < 2:
             return
@@ -768,6 +787,47 @@ class IFCParser:
             f"{len(building.spaces)} elements, "
             f"{len(building.doors)} inferred connections, {len(building.exits)} inferred exits"
         )
+
+    def _adaptive_geometry_sample_limit(self, candidate_count: int) -> int:
+        configured = int(self.config.get("bim.defaults.geometry_sample_limit", 60))
+        configured = max(20, configured)
+        if candidate_count <= configured:
+            return candidate_count
+        if candidate_count <= configured * 2:
+            return configured
+        return min(max(configured, int(math.sqrt(candidate_count) * 10)), 180)
+
+    def _collect_geometry_rows(self, elements: List[Any]) -> List[Tuple[Any, str, float, Point3D, Point3D, Point3D]]:
+        settings = ifcopenshell.geom.settings()
+        settings.set(settings.USE_WORLD_COORDS, True)
+        rows = []
+        for element in elements:
+            try:
+                shape = ifcopenshell.geom.create_shape(settings, element)
+                verts = shape.geometry.verts
+                points = list(zip(verts[0::3], verts[1::3], verts[2::3]))
+                if not points:
+                    continue
+                xs = [point[0] for point in points]
+                ys = [point[1] for point in points]
+                zs = [point[2] for point in points]
+                minimum = Point3D(min(xs), min(ys), min(zs))
+                maximum = Point3D(max(xs), max(ys), max(zs))
+                center = Point3D(
+                    (minimum.x + maximum.x) / 2,
+                    (minimum.y + maximum.y) / 2,
+                    (minimum.z + maximum.z) / 2,
+                )
+                properties = self._get_properties(element)
+                element_number = properties.get("13:Elem nr")
+                element_type = element.is_a()
+                name = element_number or element.Name or f"{element_type} {element.GlobalId[:8]}"
+                area = max(1.0, (maximum.x - minimum.x) * (maximum.y - minimum.y))
+                rows.append((element, name, area, center, minimum, maximum))
+            except Exception as exc:
+                self._note_diagnostic("geometry_errors")
+                logger.warning(f"Could not derive geometry for {element.GlobalId}: {exc}")
+        return rows
 
     def _infer_space_topology(self, building: BuildingData) -> None:
         """Infer route links for IFCs that include spaces but omit door semantics."""
