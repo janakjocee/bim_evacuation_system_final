@@ -21,7 +21,7 @@ blis==1.3.3
 cymem==2.0.13
 preshed==3.0.13
 murmurhash==1.0.15
-thinc==9.1.1
+thinc==8.3.12
 spacy==3.8.15
 https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
 
