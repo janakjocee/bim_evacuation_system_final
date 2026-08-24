@@ -20,9 +20,11 @@ import pandas as pd
 import copy
 import html
 import json
+import os
 import plotly.express as px
 import plotly.graph_objects as go
 import secrets
+import subprocess
 import tempfile
 import time
 from typing import List, Dict, Any, Optional
@@ -78,6 +80,40 @@ PROJECT_SUBTITLE = getattr(
     "PROJECT_SUBTITLE",
     "AI-Assisted Research Prototype: Deterministic IFC/Graph Analysis + NLP Evidence Retrieval",
 )
+PROJECT_VERSION = getattr(project_package, "__version__", "unknown")
+
+
+def _resolve_deployment_revision() -> str:
+    """Resolve the current deployed revision identifier."""
+    for key in (
+        "STREAMLIT_GIT_COMMIT_HASH",
+        "GITHUB_SHA",
+        "COMMIT_SHA",
+        "RENDER_GIT_COMMIT",
+        "VERCEL_GIT_COMMIT_SHA",
+    ):
+        value = os.getenv(key, "").strip()
+        if value:
+            return value[:7]
+
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=1,
+        )
+        if completed.returncode == 0:
+            sha = completed.stdout.strip()
+            if sha:
+                return sha
+    except Exception:
+        pass
+    return "unknown"
+
+
+DEPLOYMENT_REVISION = _resolve_deployment_revision()
 
 logger = get_logger(__name__)
 
@@ -439,6 +475,9 @@ def render_header():
                 <p class="sub-title">{PROJECT_SUBTITLE}</p>
             </div>
             """, unsafe_allow_html=True)
+            st.caption(
+                f"Deployed build: v{PROJECT_VERSION} · revision {DEPLOYMENT_REVISION}"
+            )
 
         with col2:
             st.markdown(f"""
