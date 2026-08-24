@@ -1,8 +1,8 @@
 -r requirements.txt
 
 # Test-only PDF fixture generation; the application reads PDFs with pypdf.
-reportlab>=4.2.0,<5
+reportlab>=5.0.1,<6
 pytest>=9.1.1,<10
-pytest-cov>=7.0.0,<8
-bandit>=1.8.6,<2
-pip-audit>=2.9.0,<3
+pytest-cov>=7.1.0,<8
+bandit>=1.9.4,<2
+pip-audit>=2.10.1,<3
