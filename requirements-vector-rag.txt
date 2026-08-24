@@ -2,6 +2,6 @@
 # evidence retrieval unless config/settings.yaml sets rag.vector_enabled=true.
 -r requirements.txt
 
-sentence-transformers>=5.7.0,<6
+sentence-transformers>=6.0.0,<7
 torch>=2.13.0,<3
 faiss-cpu>=1.15.0,<2
