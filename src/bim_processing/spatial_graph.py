@@ -378,17 +378,63 @@ class SpatialGraphBuilder:
             if not self.find_paths_to_exits(space_id):
                 spaces_without_exit_route.append(space_id)
 
-        topology_confidence = 1.0
+        total_edges = max(verified_edges + inferred_edges, 1)
+        verified_edge_ratio = verified_edges / total_edges
+        route_completeness = 1.0
+        if space_ids:
+            route_completeness = max(0.0, 1.0 - (len(spaces_without_exit_route) / len(space_ids)))
+
+        assumed_door_widths = sum(
+            1 for door in self.building.doors.values() if door.assumptions.get("width")
+        )
+        assumed_space_areas = sum(
+            1 for space in self.building.spaces.values() if space.assumptions.get("area")
+        )
+        assumption_denominator = max(1, len(self.building.doors) + len(self.building.spaces))
+        assumption_burden = min(1.0, (assumed_door_widths + assumed_space_areas) / assumption_denominator)
+
+        verified_exits = sum(
+            1
+            for door in self.building.exits.values()
+            if not str(door.connection_source).startswith("inferred")
+            and "exit_detection" not in door.assumptions
+            and "topology" not in door.assumptions
+        )
+        exit_verification_quality = verified_exits / max(1, len(self.building.exits))
+
+        weighted_score = (
+            0.40 * verified_edge_ratio
+            + 0.25 * exit_verification_quality
+            + 0.25 * route_completeness
+            + 0.10 * (1.0 - assumption_burden)
+        )
+
         if self.building.extraction_mode == "geometry_derived":
-            topology_confidence = 0.35
-        elif self.building.extraction_mode == "semantic_spaces_inferred_topology":
-            topology_confidence = 0.55
-        elif inferred_edges:
-            topology_confidence = 0.7
+            mode_cap = 0.45
+        elif self.building.extraction_mode == "semantic_spaces_inferred_topology" or inferred_edges:
+            mode_cap = 0.72
+        else:
+            mode_cap = 1.0
+
         if disconnected_spaces or spaces_without_exit_route:
-            topology_confidence = min(topology_confidence, 0.4)
+            mode_cap = min(mode_cap, 0.55)
         if not self.exit_nodes:
-            topology_confidence = 0.0
+            mode_cap = 0.0
+
+        topology_confidence = round(min(weighted_score, mode_cap), 2)
+        recommendations: List[str] = []
+        if self.building.extraction_mode == "geometry_derived":
+            recommendations.append("Upload an architectural IFC with IfcSpace and IfcDoor semantics for verified routing.")
+        if not self.building.doors:
+            recommendations.append("Missing IfcDoor entities: confirm door exports and map connectivity manually.")
+        if inferred_edges > verified_edges:
+            recommendations.append("Most connectivity is inferred: review and confirm door-space links manually.")
+        if self.building.exits and verified_exits < len(self.building.exits):
+            recommendations.append("Confirm inferred exits manually to increase exit verification quality.")
+        if spaces_without_exit_route:
+            recommendations.append("Resolve spaces without exit route via IFC fixes or manual connectivity corrections.")
+        if assumption_burden > 0.2:
+            recommendations.append("Reduce assumed widths/areas by enriching IFC quantities or manual review.")
 
         return {
             "verified_edges_count": verified_edges,
@@ -397,5 +443,14 @@ class SpatialGraphBuilder:
             "doors_without_connected_spaces": doors_without_spaces,
             "stairs_without_connected_spaces": stairs_without_spaces,
             "spaces_without_exit_route": sorted(spaces_without_exit_route),
-            "graph_confidence_score": round(topology_confidence, 2),
+            "graph_confidence_score": topology_confidence,
+            "graph_confidence_breakdown": {
+                "verified_edge_ratio": round(verified_edge_ratio, 2),
+                "exit_verification_quality": round(exit_verification_quality, 2),
+                "route_completeness": round(route_completeness, 2),
+                "assumption_burden": round(assumption_burden, 2),
+                "weighted_score": round(weighted_score, 2),
+                "mode_cap": round(mode_cap, 2),
+            },
+            "graph_confidence_recommendations": recommendations,
         }

@@ -110,7 +110,9 @@ class EvacuationPipeline:
             self.ifc_parser.ifc_file,
             extracted_data={
                 "space_count": semantic_rooms,
+                "semantic_space_count": semantic_rooms,
                 "door_count": model_count("IfcDoor"),
+                "semantic_door_count": model_count("IfcDoor"),
                 "stair_count": model_count("IfcStair"),
                 "buildingstorey_count": model_count("IfcBuildingStorey"),
                 "possible_exits_count": len(building.exits),
